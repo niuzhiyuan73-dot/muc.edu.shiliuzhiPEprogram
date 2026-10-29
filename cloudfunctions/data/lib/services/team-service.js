@@ -162,8 +162,10 @@ function virtualCollegeTeam(ctx, dir, collegeId, memberCount = 0) {
  * 给「报名」用：新库里院队还没落库时，报名不能因为「球队不存在」被挡回去——
  * 编号本身就是「它该存在」的凭证。学院编号从目录反查，补建仍是幂等的那一条。
  */
-async function resolveCollegeTeam(teamId, ctx) {
-  const dir = await buildDirectory(ctx);
+async function resolveCollegeTeam(teamId, ctx, readyDir) {
+  // 调用方手里已经有目录时直接复用：`getTeam` 在同一请求内先读了一次，
+  // 不为「补建院队」再读一遍整校名册（2026-10-29 第十一轮审计 P3-11）。
+  const dir = readyDir || await buildDirectory(ctx);
   const collegeId = collegeIdOfTeamId(dir, teamId, ctx);
   if (!collegeId) return { ok: false, message: '学院代表队不存在' };
   const team = await ensureCollegeTeam(ctx, collegeId, dir);
@@ -289,8 +291,17 @@ async function listTeams(payload = {}, ctx) {
       return teamView(team, { dir, actorId: ctx.actorId, manage, membership, memberCount });
     })
     .filter(view => !mineOnly || view.isMine || view.isCaptain)
-    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hans-CN'))
-    .slice(0, TEAM_LIST_LIMIT);
+    .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hans-CN'));
+
+  // 【分页契约】（2026-10-29 第十一轮审计 P2-8）
+  // 从前直接 `slice(0, 100)`：第 101 支球队静默消失，返回体里也没有 hasMore/total，
+  // 页面连「还有更多」都无从判断。这里按 offset 切片并回传三者，与赛事/名录的
+  // 口径一致（offset + nextOffset，而不是再造一套 cursor）。
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0
+    ? Math.min(payload.limit, TEAM_LIST_LIMIT) : TEAM_LIST_LIMIT;
+  const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
+  const total = rows.length;
+  const page = rows.slice(offset, offset + limit);
 
   // 我的球队：本院用户自动含本院院队（无需加入），排在自由球队之前。
   // 组队列表本身仍不列院队——那会把自由组队淹掉；但「我的球队」里少了院队，
@@ -304,8 +315,9 @@ async function listTeams(payload = {}, ctx) {
       const collegeTeam = virtualCollegeTeam(ctx, dir, myCollegeId, count);
       const hitKeyword = Boolean(collegeTeam)
         && (!keyword || String(collegeTeam.name).toLowerCase().includes(keyword));
-      if (collegeTeam && hitKeyword) {
-        rows.unshift({
+      // 院队是虚拟行：只在第一页插到最前面，否则会跟着每一页重复出现
+      if (collegeTeam && hitKeyword && offset === 0) {
+        page.unshift({
           ...teamView(collegeTeam, {
             dir, actorId: ctx.actorId, manage: canManageTeam(ctx, collegeTeam, ctx.actorId),
             membership: null, memberCount: count,
@@ -318,7 +330,14 @@ async function listTeams(payload = {}, ctx) {
     }
   }
 
-  return ok({ ok: true, teams: rows, canManage: manage, message: '' });
+  return ok({
+    ok: true, teams: page, canManage: manage,
+    // total 只数真实球队；院队是虚拟行（一个学院一支、没有落库记录），不计入
+    total,
+    hasMore: offset + page.length < total,
+    nextOffset: offset + page.length,
+    message: '',
+  });
 }
 
 /**
@@ -335,7 +354,7 @@ async function getTeam(payload = {}, ctx) {
   // 院队是惰性预置的：编号能对上学院目录就先补建再读。
   // 少了这一步，「我的球队」里点进院队会先被 getTeam 报「球队不存在」。
   if (!team) {
-    const ensured = await resolveCollegeTeam(payload.teamId, ctx);
+    const ensured = await resolveCollegeTeam(payload.teamId, ctx, dir);
     if (ensured.ok) team = ensured.team;
   }
   if (!team) return ok(refused('球队不存在，或不在本协会'));

@@ -64,7 +64,7 @@ const { liveScoreOf } = require('./live-score.js');
 const { advanceSchoolEvent } = require('./school-event-service.js');
 // 学院赛小场生效后的收尾：把结果写回大场、必要时排出下一轮（M2-c2）。
 const { advanceCollegeAfterLeg } = require('./school-college-advance.js');
-const { isListMatch, listFilter } = require('./match-list-query.js');
+const { isListMatch, listFilter, encodeMatchCursor, decodeMatchCursor } = require('./match-list-query.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -293,14 +293,25 @@ async function listSchoolMatches(payload = {}, ctx) {
   const limit = Number.isInteger(payload.limit) && payload.limit >= 0
     ? Math.min(payload.limit, MATCH_LIST_MAX) : MATCH_LIST_LIMIT;
   const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
-  const cursor = payload.cursor === undefined || payload.cursor === null ? null : payload.cursor;
-  if (cursor && (typeof cursor !== 'object' || Array.isArray(cursor) ||
-      typeof cursor.id !== 'string' || !cursor.id || cursor.id.length > 512 ||
-      typeof cursor.matchTime !== 'string' || cursor.matchTime.length > 32 ||
-      !Number.isFinite(Date.parse(cursor.matchTime)) || new Date(cursor.matchTime).toISOString() !== cursor.matchTime)) {
-    return ok(refused('比赛分页游标无效'));
+  // 【游标统一成不透明字符串】（2026-10-29 第十一轮审计 P2-7）
+  // 入参同时接受字符串（新口径，客户端原样回传）与 `{matchTime, id}` 对象
+  // （内部调用 / 旧客户端），返回只有字符串。两套类型并存是上一版的问题：
+  // 同名同义的 nextCursor 在比赛这一路是对象、其余列表是字符串，任何统一封装
+  // 都会踩到 `[object Object]`。
+  let cursor = null;
+  const rawCursor = payload.cursor;
+  if (rawCursor !== undefined && rawCursor !== null && rawCursor !== '') {
+    const decoded = typeof rawCursor === 'string' ? decodeMatchCursor(rawCursor) : rawCursor;
+    if (!decoded || typeof decoded !== 'object' || Array.isArray(decoded)
+        || typeof decoded.id !== 'string' || !decoded.id || decoded.id.length > 512
+        || typeof decoded.matchTime !== 'string' || decoded.matchTime.length > 32
+        || !Number.isFinite(Date.parse(decoded.matchTime))
+        || new Date(decoded.matchTime).toISOString() !== decoded.matchTime) {
+      return ok(refused('比赛分页游标无效'));
+    }
+    cursor = { matchTime: decoded.matchTime, id: decoded.id };
   }
-  if (cursor !== null && (!cursor || offset > 0)) return ok(refused('比赛分页游标无效'));
+  if (cursor && offset > 0) return ok(refused('比赛分页游标无效'));
   const page = await ctx.repo.forScope(ctx).matches.listPage({
     filter: listFilter(payload), limit, offset, cursor,
   });
@@ -330,7 +341,9 @@ async function listSchoolMatches(payload = {}, ctx) {
   const last = page.rows[page.rows.length - 1];
   return ok({ ok: true, canManage: canManageAssociationSpace(ctx), matches,
     total: page.total, hasMore: page.hasMore, pendingCount: page.pendingCount,
-    nextCursor: page.hasMore && last ? { matchTime: last.matchTime, id: last._id } : null, message: '' });
+    // 空串 = 没有下一页（与公告 / 成员 / 分组 / 训练同一口径）。
+    nextCursor: page.hasMore && last ? encodeMatchCursor({ matchTime: last.matchTime, id: last._id }) : '',
+    message: '' });
 }
 
 /** 赛季分界点 → ISO 串（`listSince` 的入参）。无分界点返回 ''，表示不限时间。 */

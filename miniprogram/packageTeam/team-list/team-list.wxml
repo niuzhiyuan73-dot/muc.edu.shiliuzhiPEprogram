@@ -58,6 +58,9 @@
       </view>
       <view class="team-arrow">›</view>
     </view>
+    <view wx:if="{{hasMore || loadingMore}}" class="hint" bindtap="onMore">
+      {{loadingMore ? '加载中…' : '加载更多（已显示 ' + teams.length + ' / ' + total + ' 支）'}}
+    </view>
   </view>
 
   <view class="fab" bindtap="onOpenCreate">＋ 建队</view>

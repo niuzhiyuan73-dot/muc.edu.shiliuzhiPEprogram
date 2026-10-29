@@ -61,6 +61,57 @@ const LIMITS = Object.freeze({ read: 8, write: 3 });
 const DAILY_LIMITS = Object.freeze({ read: 4000, write: 1500 });
 
 /**
+ * 单次请求的「读成本点」（2026-10-29 第十一轮审计 P1-2）。
+ *
+ * 【为什么按天计次不够】日预算原本每次请求 +1，隐含假设「一次请求约 8 次读」
+ * （4000 × 8 ≈ 3.2 万，占 5 万配额 64%）。但这个假设对最贵的那几个接口差了
+ * 两个数量级：`listSchoolMembers` 平铺要读整校名册再批读全部账号（2000 人的
+ * 学校约 2000 条文档 ≈ 20 次 RPC），`getSchoolRanking` / `listTeams` 也是整表读。
+ * 也就是说，最该被拦的请求恰好是闸门最挡不住的——12 次就能打空全校日配额。
+ *
+ * 【为什么用「点」而不是直接数读取条数】入口拿不到本次请求的真实读条数
+ * （要等读完之后才知道）。按动作给一个量级估值，足以把「重接口 × 高频」这条
+ * 路径压下来；成本值偏保守（宁小勿大），避免误伤正常用户。
+ *
+ * 键是动作名；不在表里的一律 1 点（绝大多数读接口只点读几份文档）。
+ */
+const ACTION_READ_COST = Object.freeze({
+  // 整校名册 + 全部账号：平铺模式最贵；countOnly / page 分支在 readCostOf 里降回 1
+  listSchoolMembers: 40,
+  // 榜单 / 积分 / 名册类全表读
+  getSchoolRanking: 30,
+  getSchoolMemberStats: 30,
+  // 球队列表：teams + teamMembers 两份整表
+  listTeams: 30,
+  // 录分入口要读全校名册目录
+  getSchoolMatchEntryContext: 20,
+  getMySportsDashboard: 20,
+  // 赛事 / 比赛 / 训练列表：整表读后内存筛选
+  listSchoolEvents: 10,
+  listCollegeEvents: 10,
+  listSchoolMatches: 10,
+  listTrainings: 10,
+});
+
+/**
+ * 这一次请求该记几个成本点。
+ *
+ * `listSchoolMembers` 有两条便宜分支（只数 / 只取一页），它们各只花一次聚合或
+ * 一次分页读；按动作一刀切会让首页概况被自己的成本表误伤，所以在这里降级。
+ *
+ * @param {string} action
+ * @param {Object} [payload]
+ * @returns {number} ≥ 1 的整数
+ */
+function readCostOf(action, payload) {
+  const base = ACTION_READ_COST[action];
+  if (!base) return 1;
+  if (action === 'listSchoolMembers' && payload
+    && (payload.countOnly === true || payload.page === true)) return 1;
+  return base;
+}
+
+/**
  * 轮询动作：不计入日预算。
  *
  * 【为什么豁免】这类接口每 2 秒一拍，看一场一小时的比赛就是 1800 次请求；
@@ -148,7 +199,7 @@ function sweepDaily(day) {
  * @param {boolean} anon 是否匿名桶（额度更严）
  * @returns {null|{message:string, kind:string, limit:number, scope:string}}
  */
-function guardDaily(key, kind, action, nowMs, anon) {
+function guardDaily(key, kind, action, nowMs, anon, cost = 1) {
   if (POLL_ACTIONS.has(action)) return null;
   const day = dayOf(nowMs);
   const limit = (anon ? ANON_DAILY_LIMITS : DAILY_LIMITS)[kind];
@@ -158,7 +209,8 @@ function guardDaily(key, kind, action, nowMs, anon) {
     row = { day, read: 0, write: 0 };
     daily.set(key, row);
   }
-  row[kind] += 1;
+  // 写动作恒为 1：它们的成本在事务预算里另有约束，且写比读稀有得多。
+  row[kind] += kind === 'read' ? Math.max(1, Math.floor(cost) || 1) : 1;
   if (row[kind] > limit) {
     return {
       message: kind === 'write'
@@ -188,6 +240,10 @@ function guardRate(openId, action, nowMs = Date.now(), meta = {}) {
   if (disabled()) return null;
 
   const kind = kindOf(action);
+  // 成本点只作用于日预算（秒级仍按「次」控频率）；调用方不传就按动作表算。
+  const cost = kind === 'read'
+    ? (Number.isFinite(meta.cost) && meta.cost > 0 ? meta.cost : readCostOf(action, meta.payload))
+    : 1;
   const nowSec = Math.floor(nowMs / WINDOW_MS);
   // 没有 OPENID ⇒ 按来源（CLIENTIP）分桶，拿不到 IP 时退回全站共享桶。
   const anon = !openId;
@@ -215,7 +271,7 @@ function guardRate(openId, action, nowMs = Date.now(), meta = {}) {
       limit,
     };
   }
-  return guardDaily(key, kind, action, nowMs, anon);
+  return guardDaily(key, kind, action, nowMs, anon, cost);
 }
 
 /** 仅供测试：清空计数，避免用例之间互相影响。 */
@@ -226,6 +282,6 @@ function resetRateLimit() {
 }
 
 module.exports = {
-  guardRate, resetRateLimit, kindOf,
+  guardRate, resetRateLimit, kindOf, readCostOf, ACTION_READ_COST,
   LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS, POLL_ACTIONS, dayOf,
 };

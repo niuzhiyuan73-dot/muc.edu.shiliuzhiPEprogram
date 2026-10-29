@@ -356,7 +356,9 @@ async function listSchoolEvents(payload = {}, ctx) {
     const ta = Date.parse(a.startTime) || 0;
     const tb = Date.parse(b.startTime) || 0;
     if (tb !== ta) return ascending ? ta - tb : tb - ta;
-    return a._id < b._id ? -1 : 1;
+    // 相等时返回 0：`a < b ? -1 : 1` 在自比时也给 1，不是合法的比较器
+    // （2026-10-29 第十一轮审计 P3-15）。_id 本应唯一，但数据异常时不该乱序。
+    return a._id === b._id ? 0 : (a._id < b._id ? -1 : 1);
   });
   const limit = Number.isInteger(payload.limit) && payload.limit > 0
     ? Math.min(payload.limit, EVENT_LIST_MAX) : EVENT_LIST_LIMIT;

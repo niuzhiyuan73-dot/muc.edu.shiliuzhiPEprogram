@@ -27,6 +27,7 @@ const { schoolMemberKey, SCHOOL_MEMBER_STATUS } = require('../utils/school.js');
 const { MEET_SCORE_TYPE, getTemplate, HEAT_MODE } = require('./meet-event-catalog.js');
 const { buildMeetContext, freshMeetContext } = require('./meet-context.js');
 const { meetReadable, canManageMeet, isChiefJudge } = require('./meet-permission.js');
+const { loadColleges } = require('./college-directory.js');
 
 const {
   touchEvent, liveMeet, scheduleRevisionOf, unchangedScheduleRevision,
@@ -37,6 +38,9 @@ const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? t
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
 
 const ROUND_LABEL = Object.freeze({ final: '决赛', heat: '预赛', rr: '循环赛' });
+
+/** 裁判候选单页上限：与运动会其余分页接口同一档（20/50 系），不设「一次给完」。 */
+const JUDGE_CANDIDATE_MAX = 100;
 /** 赛制轮次用 `r1`、`r2`… 表示；`rf` 不单独存在，最后一轮仍记作 `r<总轮数>`。 */
 const BRACKET_ROUND = /^[rg][1-9]$/;
 const SESSION_STATUS = Object.freeze({ SCHEDULED: 'scheduled', RUNNING: 'running', FINISHED: 'finished' });
@@ -788,6 +792,13 @@ async function getMyMeetJudgeTasks(payload = {}, ctx) {
  *
  * 页面不该让管理员手输 userId：那既容易错，也绕过了「在册」判断。
  * 这里只列本校在册且账号有效的成员，姓名一并给出。
+ *
+ * 【读法】（2026-10-29 第十一轮审计 P2-5）
+ * 原先是「全校名册整表 + 每名成员一次 `users.getById`」，2000 人的学校就是
+ * 2000 次点读，而 `offset` 切在全部读完之后——翻页一点也省不下来。改成
+ * `users.listByIds`（每 100 一批）后是 20 次；学院目录走 `loadColleges` 的
+ * 60 秒缓存（它是字典，业务代码零写入点）。`limit` 也从 payload 取并夹上限，
+ * 不再写死 100 而把调用方的分页参数静默丢掉。
  */
 async function listMeetJudgeCandidates(payload = {}, ctx) {
   if (!meetReadable(ctx) || !ctx.meetId) return refused('请先登录');
@@ -796,14 +807,14 @@ async function listMeetJudgeCandidates(payload = {}, ctx) {
   const keyword = String(payload.keyword || '').trim();
   const members = await ctx.repo.schoolMembers.listBySchool(ctx.schoolId);
   const active = members.filter((doc) => doc.status === SCHOOL_MEMBER_STATUS.ACTIVE);
+  const users = active.length
+    ? await ctx.repo.users.listByIds(active.map(member => member.userId))
+    : [];
+  const userById = new Map(users.map(user => [user._id, user]));
+  const colleges = new Map((await loadColleges(ctx)).map(row => [row.collegeId, row]));
   const items = [];
-  const users = new Map();
-  for (let i = 0; i < active.length; i += 20) {
-    await Promise.all(active.slice(i, i + 20).map(async member => users.set(member.userId, await ctx.repo.users.getById(member.userId))));
-  }
-  const colleges = new Map((await ctx.repo.colleges.listBySchool(ctx.schoolId)).map(row => [row.collegeId, row]));
   for (const member of active) {
-    const user = users.get(member.userId);
+    const user = userById.get(member.userId);
     if (!user || user.platformStatus !== 'active' || user.primarySchoolId !== ctx.schoolId) continue;
     // 账号上的姓名是 nickName / realName，不是 name。只读 name 会让所有人
     // 都显示「未命名」——管理员根本无从挑选。
@@ -822,7 +833,11 @@ async function listMeetJudgeCandidates(payload = {}, ctx) {
   items.sort((a, b) => String(a.collegeName).localeCompare(String(b.collegeName))
     || String(a.name).localeCompare(String(b.name)));
   const offset = Math.max(0, Math.trunc(Number(payload.offset) || 0));
-  return ok({ items: items.slice(offset, offset + 100), total: items.length, hasMore: offset + 100 < items.length });
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0
+    ? Math.min(payload.limit, JUDGE_CANDIDATE_MAX) : JUDGE_CANDIDATE_MAX;
+  const page = items.slice(offset, offset + limit);
+  return ok({ items: page, total: items.length, hasMore: offset + page.length < items.length,
+    nextOffset: offset + page.length });
 }
 
 module.exports = {

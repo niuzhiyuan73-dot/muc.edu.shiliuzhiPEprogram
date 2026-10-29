@@ -247,7 +247,8 @@ Component({
           // 不该记住上次翻到第几屏
           renderLimit: RENDER_STEP,
           visibleRecords: records.slice(0, RENDER_STEP),
-          visibleHasMore: records.length > RENDER_STEP,
+          // 服务端还有下一页时也要露出「加载更多」，否则 100 条之后到此为止
+          visibleHasMore: records.length > RENDER_STEP || Boolean(view.nextCursor),
         });
         this.syncLiveWatch();
       } catch (error) {
@@ -304,17 +305,47 @@ Component({
 
     /**
      * 放出下一屏记录。
-     * 只扩大渲染窗口，不动 view.records——数据早在内存里了，这里省的是
-     * 「一次铺多少 DOM」，不是「一次取多少数据」。
+     * 本地窗口没放完时只扩大渲染窗口（省的是 DOM，不是请求）；本地放完但服务端
+     * 还有下一页时，按 nextCursor 续读（2026-10-29 第十一轮审计 P2-7）。
+     *
+     * 【为什么要有第二步】上一步只解决「一次别铺太多 DOM」，而服务端第一页原本
+     * 固定 100 条、`hasMore` 无人消费——第 101 场起静默消失。现在把游标接上，
+     * 「加载更多」到底时继续向服务端要。
      */
-    onShowMore() {
+    async onShowMore() {
       const all = (this.data.view && this.data.view.records) || [];
       const limit = this.data.renderLimit + RENDER_STEP;
+      const nextCursor = (this.data.view && this.data.view.nextCursor) || '';
+      if (limit >= all.length && nextCursor) {
+        if (this.moreLoading) return undefined;
+        this.moreLoading = true;
+        try {
+          // 复用上一页的上下文：续页不该再为「姓名映射」把全校名录读一遍
+          const view = await loadSchoolMatchView(this.api, this.currentTab, {
+            cursor: nextCursor, context: this.data.view && this.data.view.context,
+          });
+          const merged = [...all, ...(view.records || [])];
+          this.setData({
+            'view.records': merged,
+            'view.nextCursor': view.nextCursor || '',
+            'view.hasMore': Boolean(view.hasMore),
+            renderLimit: limit,
+            visibleRecords: merged.slice(0, limit),
+            visibleHasMore: merged.length > limit || Boolean(view.nextCursor),
+          });
+        } catch (error) {
+          this.showToast(error.message || '加载更多失败，请重试');
+        } finally {
+          this.moreLoading = false;
+        }
+        return undefined;
+      }
       this.setData({
         renderLimit: limit,
         visibleRecords: all.slice(0, limit),
-        visibleHasMore: all.length > limit,
+        visibleHasMore: all.length > limit || Boolean(nextCursor),
       });
+      return undefined;
     },
 
     /* ---------- 标签与入口 ---------- */

@@ -2,14 +2,19 @@ const { COLLECTIONS } = require('../repository.js');
 const { normalizeKeyword, decodeCursor, encodeCursor, sortKey } = require('../../lib/services/association-member.js');
 const { directorySortText } = require('../../lib/services/account-directory.js');
 
-/** Database-side join and pagination. Only the current page leaves the database. */
-async function readMemberPage(db, command, scope, query = {}) {
+/**
+ * 「本校在册会员 + 账号」的聚合查询骨架，分页与计数共用。
+ *
+ * 【为什么抽出来】会员总数（首页概况、身份页名录）与分页列表必须是同一套过滤：
+ * 学籍 active × 账号 active × 账号归属本校 × 可选学院 × 可选关键词。先前总数走
+ * `countByStatus`（只看学籍状态），与列表行数对不上——首页显示 1200 人，名录却
+ * 只翻得到 1150 条（2026-10-29 第十一轮审计 P2-9）。
+ */
+function memberQuery(db, command, scope, query = {}) {
   const $ = command.aggregate;
   const keyword = normalizeKeyword(query.keyword);
-  const limit = Math.max(1, Math.min(Number(query.limit) || 20, 50));
   const cursor = decodeCursor(query.cursor);
   const after = cursor && [cursor[0], directorySortText(cursor[1]), directorySortText(cursor[2]), cursor[3]];
-  const rowsOf = result => result.list || result.data || [];
   const base = () => db.collection(COLLECTIONS.schoolMembers).aggregate()
     .match({ schoolId: scope.schoolId, status: 'active',
       ...(typeof query.collegeId === 'string' && query.collegeId ? { collegeId: query.collegeId } : {}) })
@@ -36,6 +41,15 @@ async function readMemberPage(db, command, scope, query = {}) {
   if (after) page = page.match({ $or: [{ invalid: 1 }, ...fields.map((field, index) => Object.fromEntries([
     ...fields.slice(0, index).map((earlier, i) => [earlier, after[i]]), [field, { $gt: after[index] }],
   ]))] });
+  return { page, keyword };
+}
+
+const rowsOf = result => result.list || result.data || [];
+
+/** Database-side join and pagination. Only the current page leaves the database. */
+async function readMemberPage(db, command, scope, query = {}) {
+  const limit = Math.max(1, Math.min(Number(query.limit) || 20, 50));
+  const { page, keyword } = memberQuery(db, command, scope, query);
   const rows = rowsOf(await page.sort({ invalid: -1, prefixRank: 1, sortNick: 1, sortReal: 1, userId: 1 })
     .limit(limit + 1).project({ _id: 0, invalid: 1, userId: 1, nickName: 1, realName: 1, avatarUrl: 1, collegeId: 1 }).end());
   if (rows.some(row => row.invalid)) throw new Error('会员搜索字段未回填，请先完成账号目录迁移');
@@ -44,4 +58,17 @@ async function readMemberPage(db, command, scope, query = {}) {
   return { members, hasMore, keyword,
     nextCursor: hasMore ? encodeCursor(sortKey(members[members.length - 1], keyword)) : '' };
 }
-module.exports = { readMemberPage };
+
+/**
+ * 同一套过滤条件下的**总数**（聚合计数，不把文档读出来）。
+ *
+ * 与 `readMemberPage` 逐字同一段 match —— 这是「首页会员数 = 名录可翻到的行数」
+ * 的前提。游标在计数里一律忽略：它只决定从哪一行开始翻。
+ */
+async function readMemberCount(db, command, scope, query = {}) {
+  const { page } = memberQuery(db, command, scope, { ...query, cursor: '' });
+  const rows = rowsOf(await page.count('total').end());
+  return Number(rows.length ? rows[0].total : 0) || 0;
+}
+
+module.exports = { readMemberPage, readMemberCount };

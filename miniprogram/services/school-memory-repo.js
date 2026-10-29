@@ -4,7 +4,7 @@ const { MEET_COLLECTIONS, meetScope } = require('../utils/meet-scope.js');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 const { memoryMatchPage } = require('./match-list-query');
 const { attachTeamReads, fieldValues } = require('./scoped-team-reads.js');
-const { memoryDirectoryPage } = require('./account-directory.js');
+const { memoryDirectoryPage, memoryDirectoryCount } = require('./account-directory.js');
 const { memoryPersonalPage } = require('./personal-sports-query.js');
 const { attachOverviewReads, memoryOverviewIO } = require('./school-overview-reads.js');
 /**
@@ -278,6 +278,11 @@ function createSchoolMemoryRepo(seed = {}) {
       result.schoolMembers.listDirectoryPage = async options => {
         if (inTx) throw new Error('事务内不允许查询会员目录');
         return memoryDirectoryPage([...getState().schoolMembers.values()], [...getState().users.values()], scope, options);
+      };
+      // 与 listDirectoryPage 同一套过滤的计数（2026-10-29 第十一轮审计 P2-9）。
+      result.schoolMembers.countDirectory = async options => {
+        if (inTx) throw new Error('事务内不允许查询会员目录');
+        return memoryDirectoryCount([...getState().schoolMembers.values()], [...getState().users.values()], scope, options);
       };
       if (!inTx) result.transaction = fn => repo.transaction(tx => fn(tx.forScope(scope)));
       return result;

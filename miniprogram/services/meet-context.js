@@ -60,7 +60,10 @@ async function buildMeetContext({
     actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null,
   ]);
   if (!school || school.schoolId !== schoolId || school.status !== 'active') {
-    throw new Error('学校不存在或已停用');
+    // 与 school-context 同一口径：带 code，由入口转成业务拒绝（第十一轮 P2-6）
+    const err = new Error('学校不存在或已停用');
+    err.code = 'SCHOOL_INACTIVE';
+    throw err;
   }
 
   const [member, role, meet] = actor

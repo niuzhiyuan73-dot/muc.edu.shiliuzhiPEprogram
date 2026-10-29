@@ -34,10 +34,20 @@ async function buildSchoolContext({
     repo.schoolAssociations.getById(schoolAssociationKey(target)),
     actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null,
   ]);
-  if (!school || school.schoolId !== target.schoolId || school.status !== 'active') throw new Error('学校不存在或已停用');
+  // 【业务状态要带 code，别当基础设施故障】（2026-10-29 第十一轮审计 P2-6）
+  // 这两句 throw 发生在处理器之前，入口只把它兜成「服务异常，请稍后再试」，
+  // 而模拟端页面拿到的是原文案——同一个失败两种说法，且「没启用协会」这种
+  // 配置问题被伪装成故障。带 code 之后入口按业务拒绝返回（见 school-request）。
+  if (!school || school.schoolId !== target.schoolId || school.status !== 'active') {
+    const err = new Error('学校不存在或已停用');
+    err.code = 'SCHOOL_INACTIVE';
+    throw err;
+  }
   if (!schoolAssociation || schoolAssociation.schoolId !== target.schoolId ||
       schoolAssociation.association !== target.association || schoolAssociation.status !== 'active') {
-    throw new Error('该校尚未启用此协会');
+    const err = new Error('该校尚未启用此协会');
+    err.code = 'ASSOCIATION_DISABLED';
+    throw err;
   }
   const [member, role, membership] = actor ? await Promise.all([
     repo.schoolMembers.getById(schoolMemberKey(actor._id, target.schoolId)),

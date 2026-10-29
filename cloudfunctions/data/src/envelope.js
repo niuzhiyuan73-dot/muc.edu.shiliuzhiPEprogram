@@ -2,7 +2,7 @@
  * 云函数回包信封
  * ============================================================
  * 【两层 ok 的区别，别搞混】
- * 前端 services/cloud.js 只看顶层 ok：不是 true 就 throw。所以
+ * 前端 services/school-cloud.js 的 requestFor 只看顶层 ok：不是 true 就 throw。所以
  *   顶层 ok:false  = 基础设施故障（未知操作、参数坏了、数据库报错）
  *   顶层 ok:true   = 请求被正常处理了，业务成败看 data 里面的 ok
  *

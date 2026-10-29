@@ -429,6 +429,13 @@ function buildScoped(repo, io, inTx, options) {
     if (inTx) throw new Error('事务内不允许查询会员目录');
     return io.memberPage(scope, options);
   };
+  // 与 listDirectoryPage 同一套过滤的聚合计数（2026-10-29 第十一轮审计 P2-9）。
+  // 首页概况只要「本校会员数」；先前的替代做法是拉一整份名录再数长度。
+  if (result.schoolMembers) result.schoolMembers.countDirectory = options => {
+    if (inTx) throw new Error('事务内不允许查询会员目录');
+    if (!io.memberCount) throw new Error('会员目录计数适配器未接入');
+    return io.memberCount(scope, options);
+  };
   return result;}
 
 function attachSchoolRepository(repo, io, inTx) {

@@ -23,7 +23,7 @@
 const { COLLECTIONS } = require('../repository.js');
 const { attachSchoolRepository } = require('../school-repository.js');
 const { readPersonalSportsPage } = require('./personal-sports-page.js');
-const { readMemberPage } = require('./member-page.js');
+const { readMemberPage, readMemberCount } = require('./member-page.js');
 const { matchListWhere } = require('../../lib/services/match-list-query.js');
 const { MATCH_STATUS } = require('../../lib/utils/constants.js');
 
@@ -635,6 +635,12 @@ function buildCollections(scope, inTx, cmd) {
     memberPage: (schoolScope, options) => {
       if (inTx) throw new Error('事务内不允许查询会员目录');
       return readMemberPage(scope, cmd, schoolScope, options);
+    },
+    // 与 memberPage 同一套过滤的聚合计数（2026-10-29 第十一轮审计 P2-9）：
+    // 首页只要一个「本校会员数」，不该把整份名录读出来再数长度。
+    memberCount: (schoolScope, options) => {
+      if (inTx) throw new Error('事务内不允许查询会员目录');
+      return readMemberCount(scope, cmd, schoolScope, options);
     },
     matchPage: (schoolScope, options) => {
       if (inTx) throw new Error('事务内不允许条件读取（matches），请改用 getById');

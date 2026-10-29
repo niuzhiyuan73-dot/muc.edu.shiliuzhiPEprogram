@@ -52,7 +52,13 @@ async function loadColleges(ctx, repoOverride) {
   const hit = perRepo.get(schoolId);
   if (hit && hit.expiresAt > Date.now()) return hit.docs;
 
-  const docs = await repo.forScope(ctx).colleges.list();
+  // 【运动会上下文没有 association】
+  // `forScope` 要求 schoolId + association，而运动会是学校级栏目（请求里不带协会）。
+  // 学院目录本来就只按学校归属，所以没有协会时改走按校列举；两边读的是同一批文档，
+  // 缓存键仍只有 schoolId，不会串味（2026-10-29 第十一轮审计 P2-5）。
+  const docs = ctx && ctx.association
+    ? await repo.forScope(ctx).colleges.list()
+    : await repo.colleges.listBySchool(schoolId);
   const rows = Array.isArray(docs) ? docs : [];
   perRepo.set(schoolId, { docs: rows, expiresAt: Date.now() + TTL_MS });
   if (perRepo.size > MAX_SCHOOLS) perRepo.clear();

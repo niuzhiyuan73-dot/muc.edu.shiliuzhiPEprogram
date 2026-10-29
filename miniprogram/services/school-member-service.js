@@ -57,6 +57,15 @@ async function listSchoolMembers(payload = {}, ctx) {
   }
   const scoped = ctx.repo.forScope(ctx);
   const filterCollegeId = typeof payload.collegeId === 'string' && payload.collegeId ? payload.collegeId : '';
+  // 【只数不取】（2026-10-29 第十一轮审计 P2-3/P2-9）
+  // 首页概况只要一个「本校会员数」，原先也走平铺分支：读完全部学籍 + 批读全部账号
+  // 再返回 N 行 JSON，只为 `members.length`。这里换成同一套过滤的聚合计数，
+  // 一次 RPC 返回数字，口径与分页/平铺逐字一致（都走目录过滤）。
+  if (payload.countOnly === true) {
+    const total = await scoped.schoolMembers.countDirectory({ collegeId: filterCollegeId,
+      keyword: payload.keyword });
+    return ok({ ok: true, members: [], total: Number(total) || 0, message: '' });
+  }
   // 选人弹层按需取页；保留旧调用方的平铺返回契约。
   if (payload.page === true) {
     const page = await scoped.schoolMembers.listDirectoryPage({ collegeId: filterCollegeId,

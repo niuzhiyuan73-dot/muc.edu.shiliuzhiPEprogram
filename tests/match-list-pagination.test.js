@@ -179,3 +179,37 @@ test('游标入参和混用 offset 被拒绝，访客不查询台账；事务两
     await assert.rejects(memory.transaction(tx => tx.forScope(SCOPE).matches.listPage({ limit: 1 })), /事务内/);
   }
 });
+
+/**
+ * 游标类型统一（2026-10-29 第十一轮审计 P2-7）
+ * ============================================================
+ * 这里原本返回 `{matchTime, id}` 对象，而公告 / 成员 / 分组 / 训练的 nextCursor
+ * 都是不透明字符串——同名同义两种类型，任何「把游标原样回传」的封装都会在比赛
+ * 这一路踩成 `[object Object]`。现在统一为 `matchTime|id` 字符串：
+ *   · 能原样回传续读，两页不重不漏；
+ *   · 非法串必须被拒，而不是静默退回第一页（那会让「翻不动」看起来像「到底了」）。
+ */
+test('比赛游标是不透明字符串：可原样回传续读，非法串被拒', async () => {
+  const seed = createSchoolDemoSeed();
+  seed.matches = ['a', 'b', 'c', 'd', 'e'].map(id => match(id));
+  const repo = createSchoolMemoryRepo(seed);
+  const ctx = await buildSchoolContext({ repo, actorId: 'demo_muc_admin', scope: SCOPE });
+
+  const first = (await listSchoolMatches({ limit: 2 }, ctx)).data;
+  assert.equal(first.hasMore, true);
+  assert.equal(typeof first.nextCursor, 'string', '游标必须是字符串，不能是对象');
+  assert.ok(first.nextCursor.length > 0);
+  assert.ok(first.nextCursor.includes('|'), '编码形如 matchTime|id');
+
+  const second = (await listSchoolMatches({ limit: 2, cursor: first.nextCursor }, ctx)).data;
+  assert.equal(second.ok, true, '字符串游标应当被接受');
+  const ids = [...first.matches, ...second.matches].map(row => row.matchId);
+  assert.equal(new Set(ids).size, ids.length, '两页之间不重复');
+
+  // 非法串：段数不对 / 编码坏掉 / 空段
+  for (const bad of ['not-a-cursor', `${first.nextCursor}|x`, 'abc|']) {
+    assert.equal((await listSchoolMatches({ cursor: bad }, ctx)).data.ok, false, `非法游标必须拒绝：${bad}`);
+  }
+  // 对象游标仍然接受（内部调用与旧客户端）
+  assert.equal((await listSchoolMatches({ limit: 2, cursor: { matchTime: TIME, id: 'a' } }, ctx)).data.ok, true);
+});

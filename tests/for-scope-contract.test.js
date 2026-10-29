@@ -101,7 +101,9 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     if (key === 'schoolMembers') {
       // listByStatus / countByStatus / listByStudentId（2026-10-26 第四轮审查 P-2/P-3/P-7）：
       // 名册分页、待审计数、学号判重的下推读，替掉「整校读回来再过滤」。
-      expected = [...expected, 'listDirectoryPage', 'listByStatus', 'countByStatus', 'listByStudentId'];
+      // countDirectory（2026-10-29 第十一轮审计 P2-9）：与 listDirectoryPage 同一套
+      // 过滤的聚合计数，供首页概况与身份页总数使用，替掉「拉全量再数长度」。
+      expected = [...expected, 'listDirectoryPage', 'countDirectory', 'listByStatus', 'countByStatus', 'listByStudentId'];
     }
     if (key === 'teams' || key === 'teamEvents') expected = [...expected, 'listByIds'];
     if (key === 'teamMembers') expected = [...expected, 'listByUser', 'listByTeams'];

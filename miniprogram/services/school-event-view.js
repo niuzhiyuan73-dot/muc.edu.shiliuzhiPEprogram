@@ -41,6 +41,12 @@ const space = require('./association-space.js');
 const { buildEventRow } = require('./event.js');
 const { actualSeedCount, manualPlayersNeeded } = require('./draw.js');
 const { derivePlacements } = require('./format-plan.js');
+
+/**
+ * `limit: Infinity`（取齐）最多翻几页。每页在服务端都是一次全表读 + 全量排序，
+ * 所以取齐必须有天花板，不能跟着数据量一路翻下去（2026-10-29 第十一轮审计 P2-4）。
+ */
+const INFINITE_FETCH_PAGES = 5;
 const {
   asArray,
   buildSignupRows,
@@ -507,22 +513,33 @@ async function loadSchoolEventListView(options = {}) {
   if (!dto || !dto.ok) throw new Error((dto && dto.message) || '赛事列表读取失败');
   const summaries = [...asArray(dto.events)];
   let cursor = 0;
-  while (limit === Infinity && dto.hasMore) {
+  // 【取齐必须有硬上限】（2026-10-29 第十一轮审计 P2-4）
+  // 服务端 `listSchoolEvents` 是「整表读 + 内存排序 + 切片」，每翻一页就重复一次
+  // 全表读。原先是 `while (hasMore)` 一直翻到底，赛事一多就是把云函数往超时上推。
+  // 生产路径已经没有调用方传 Infinity（赛事面板改用服务端的 totalAll），这里保留
+  // 兼容但压到最多 5 页：真要用「取齐」，应当先在服务端做带条件的下推。
+  let pages = 1;
+  while (limit === Infinity && dto.hasMore && pages < INFINITE_FETCH_PAGES) {
     if (!(dto.nextOffset > cursor)) throw new Error('赛事列表分页没有前进');
     cursor = dto.nextOffset;
     dto = await api.listSchoolEvents({ ...filters, limit: 50, offset: cursor });
     if (!dto || !dto.ok) throw new Error((dto && dto.message) || '赛事列表读取失败');
     summaries.push(...asArray(dto.events));
+    pages += 1;
   }
 
   const canManage = Boolean(dto && dto.canManage);
   const events = summaries.map(summary => buildListRow(summary, { actorId, canManage, association }));
   const filteredTotal = Number(dto && dto.total);
+  // totalAll 是「不带状态筛选」的赛事总量（服务端在过滤前算好）：首页/面板要的是
+  // 「本协会一共几场」，不能靠把列表取齐再数长度——那会按页重复整表读。
+  const overallTotal = Number(dto && dto.totalAll);
   return {
     events,
     hasEvents: events.length > 0,
     eventsEmptyNote: Object.keys(filters).length > 0 ? '没有符合条件的赛事，试试清除筛选' : '还没有赛事，等管理员发布一场吧',
     eventTotal: Number.isFinite(filteredTotal) && filteredTotal >= 0 ? filteredTotal : events.length,
+    eventTotalAll: Number.isFinite(overallTotal) && overallTotal >= 0 ? overallTotal : events.length,
     nextOffset: Number(dto && dto.nextOffset) || (offset + events.length),
     hasMoreEvents: Boolean(dto && dto.hasMore),
     canPublish: canManage,

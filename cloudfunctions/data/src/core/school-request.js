@@ -106,7 +106,9 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
   // 在册账号的循环就能打空全校每日读配额（见 rate-limit.js 的说明）。
   // clientIp 只用于**匿名**分桶：匿名请求没有 OPENID 可分，过去全站共用一个桶，
   // 一个来源打满就让所有新用户卡在选校页（2026-10-27 第八轮审查 P1-5）。
-  const limited = guardRate(openId, event.action, now.getTime(), { clientIp });
+  // payload 一并传入，供日预算按「读成本点」计：同一动作的便宜分支（如
+  // listSchoolMembers 的 countOnly）不该按重分支扣额度（第十一轮审计 P1-2）。
+  const limited = guardRate(openId, event.action, now.getTime(), { clientIp, payload: event.payload });
   if (limited) return fail(limited.message);
 
   // 【身份上下文缓存】（2026-10-23 H-10）读动作的上下文缓存 5 秒；写动作不缓存，
@@ -141,6 +143,18 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
     const ctx = await buildSchoolContext({ repo, openId, now, action: event.action,
       scope: { schoolId: event.schoolId, association: event.association } });
     return acceptResult(await handlers[event.action](event.payload || {}, ctx));
+  } catch (err) {
+    // 【上下文里抛出的业务状态，别落成「服务异常」】（2026-10-29 第十一轮审计 P2-6）
+    // `buildSchoolContext` / `buildMeetContext` 在「学校已停用」「该校没启用这个协会」
+    // 时会 throw。它们发生在处理器之前，原先一路冒到云函数入口的 catch，被统一改写成
+    // 「服务异常，请稍后再试」——同一件事在模拟端显示的是可读文案，在云端变成故障，
+    // 而且这类配置问题在日志里与数据库故障长得一样。
+    // 现在按业务拒绝返回：三个域的门面拿到 `{ok:false, message}`，运动会门面按既定口径
+    // 抛成可读异常；真正的数据库/代码故障仍冒到入口（那里的日志与兜底文案不变）。
+    if (err && (err.code === 'SCHOOL_INACTIVE' || err.code === 'ASSOCIATION_DISABLED')) {
+      return ok({ ok: false, message: err.message });
+    }
+    throw err;
   } finally {
     if (!readOnly) {
       // 纯比赛类写只失效本范围（见 SCOPE_ONLY_INVALIDATION）；其余全清。

@@ -203,7 +203,11 @@ async function loadSchoolHomeView(options = {}) {
     try {
       const [season, members] = await Promise.all([
         api.getSchoolSeason(),
-        api.listSchoolMembers({}),
+        // 【只取数字】（2026-10-29 第十一轮审计 P2-3）
+        // 概况里只需要「本校会员数」。原先调平铺名录：读完全部学籍 + 批读全部账号，
+        // 2000 人的学校就是 2000 条文档 + 20 批 RPC，只为 members.length。
+        // countOnly 走同一套目录过滤的聚合计数，一次 RPC 返回数字。
+        api.listSchoolMembers({ countOnly: true }),
       ]);
       seasonText = `第 ${Number((season && season.season && season.seasonNumber) || 1)} 赛季`;
       memberCount = Number((members && members.total) || 0);

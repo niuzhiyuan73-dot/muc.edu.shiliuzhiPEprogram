@@ -50,7 +50,9 @@ node .workbuddy/skills/shilzi-doc-sync/scripts/doc-truth.js
 客户端固定发：`{ protocolVersion: 2, schoolId, association, action, payload }`。
 
 - `protocolVersion !== 2` 一律拒绝（协议 1 已完全下线）。
-- 成功走 `ok(data)`、失败走 `fail(code, message)`（`src/envelope.js`），**不要抛裸异常**。
+- 成功走 `ok(data)`、失败走 `fail(message)`（`src/envelope.js`；**只有 message，没有 code 参数**），**不要抛裸异常**。
+  需要按类型区分时给 `Error` 挂 `err.code`（如 `SCHOOL_INACTIVE` / `READ_CAP_EXCEEDED`），
+  由入口决定转成业务拒绝还是顶层故障；业务拒绝一律放 `data.ok=false`。
 - 业务拒绝用业务文案（「还有 N 场未发布」），技术错误才用通用文案。
 - 写操作尽量带 `requestId`（幂等）；已有主记录的更新用记录自身 ID 即可。
 
@@ -107,7 +109,8 @@ npm run check:cloud-sync
 
 - 禁止「整表读 + 内存过滤」写新查询；下推成带条件的仓储方法。
 - 新查询要能在 `docs/数据库索引清单.md` 找到对应索引；没有就补清单条目并在部署说明里点名。
-- 列表接口必须返 `hasMore`；分页游标与 `_.in` 不能混用（`_id > lastId` 与 `_id in (...)` 冲突，`cursorCond` 会抛错）。
+- 列表接口必须返 `hasMore` + 下一页游标（`nextOffset` 或 `nextCursor`，**游标一律用不透明字符串**，不要回对象）；分页游标与 `_.in` 不能混用（`_id > lastId` 与 `_id in (...)` 冲突，`cursorCond` 会抛错）。
+- 日预算按「读成本点」计（`core/rate-limit.js` 的 `ACTION_READ_COST`）：新增整表读型 action 要登记成本，否则最贵的接口与点读一个文档同价。
 - 聚合能算的别读文档：名次用 `count` / `countAbove`，不要捞全表在应用层排名。
 
 ## 八、限流与幂等

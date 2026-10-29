@@ -34,6 +34,11 @@ Page({
     keyword: '',
     /** 当前账号能不能审核建队（协会负责人及以上） */
     canManage: false,
+    /** 分页：一页 20 支，到底了才不再请求（2026-10-29 第十一轮审计 P2-8） */
+    hasMore: false,
+    nextOffset: 0,
+    total: 0,
+    loadingMore: false,
     /** 建队表单 */
     creating: false,
     newName: '',
@@ -51,23 +56,63 @@ Page({
     return this.refresh();
   },
 
+  /** 一页多少支。服务端单页上限 100，这里取 20 让首屏更快、「更多」有得可点 */
+  pageSize: 20,
+
   /** 取列表。失败时给一句人话，不把异常抛到页面上 */
   async refresh() {
-    this.setData({ loading: true, error: '' });
+    this.setData({ loading: true, error: '', loadingMore: false });
     try {
       const result = await space.forScope(this.scope).listTeams({
         keyword: this.data.keyword,
         mine: this.data.mineOnly,
+        limit: this.pageSize,
+        offset: 0,
       });
       if (!result.ok) {
         this.setData({ loading: false, error: result.message || '球队列表加载失败' });
         return undefined;
       }
-      this.setData({ loading: false, teams: result.teams || [], canManage: result.canManage === true });
+      this.setData({
+        loading: false, teams: result.teams || [], canManage: result.canManage === true,
+        hasMore: result.hasMore === true, nextOffset: result.nextOffset || 0, total: result.total || 0,
+      });
       return undefined;
     } catch (err) {
       console.error('[team-list] 加载失败', err);
       this.setData({ loading: false, error: '球队列表加载失败，请稍后重试' });
+      return undefined;
+    }
+  },
+
+  /**
+   * 续读下一页。
+   * 服务端的上限是 100 支，超出的部分从前静默消失；现在用 hasMore + nextOffset 补齐。
+   */
+  async onMore() {
+    if (this.data.loading || this.data.loadingMore || !this.data.hasMore) return undefined;
+    this.setData({ loadingMore: true });
+    try {
+      const result = await space.forScope(this.scope).listTeams({
+        keyword: this.data.keyword,
+        mine: this.data.mineOnly,
+        limit: this.pageSize,
+        offset: this.data.nextOffset,
+      });
+      if (!result.ok) {
+        this.setData({ loadingMore: false, notice: result.message || '加载更多失败', noticeError: true });
+        return undefined;
+      }
+      const seen = new Set(this.data.teams.map(row => row.teamId));
+      const merged = [...this.data.teams, ...(result.teams || []).filter(row => !seen.has(row.teamId))];
+      this.setData({
+        loadingMore: false, teams: merged,
+        hasMore: result.hasMore === true, nextOffset: result.nextOffset || merged.length, total: result.total || merged.length,
+      });
+      return undefined;
+    } catch (err) {
+      console.error('[team-list] 加载更多失败', err);
+      this.setData({ loadingMore: false, notice: '加载更多失败，请稍后重试', noticeError: true });
       return undefined;
     }
   },

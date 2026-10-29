@@ -167,7 +167,7 @@
         100 场早就都在 view.records 里了，这里省的是首屏铺多少 DOM。
       -->
       <view wx:if="{{visibleHasMore}}" class="more-btn" bindtap="onShowMore">
-        加载更多（已显示 {{visibleRecords.length}} / {{view.records.length}} 场）
+        加载更多（已显示 {{visibleRecords.length}} / {{view.total || view.records.length}} 场）
       </view>
     </view>
 

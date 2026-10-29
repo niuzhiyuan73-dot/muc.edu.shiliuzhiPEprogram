@@ -622,7 +622,11 @@ function createSchoolHandlers({ claimKey }) {
       loadColleges(ctx),
       scoped.schoolRoles.listByIds(rows.map(row => schoolRoleKey(row.userId, ctx.schoolId))),
       scoped.memberships.listByIds(rows.map(row => schoolMembershipKey(row.userId, ctx))),
-      scoped.schoolMembers.countByStatus(SCHOOL_MEMBER_STATUS.ACTIVE),
+      // 【口径统一】（2026-10-29 第十一轮审计 P2-9）
+      // 从前这里是 countByStatus：只数「学籍 active」，不排除账号停用 / 已转校的人，
+      // 于是同一所学校在首页显示 1200 人、在本页显示 1215 人。改成与名录分页同一套
+      // 目录过滤（countDirectory）后，两处数字一致，且仍是一次聚合 RPC。
+      scoped.schoolMembers.countDirectory({}),
     ]);
     const collegeNameById = new Map(colleges.map(row => [row.collegeId, row.name]));
     const collegeName = id => collegeNameById.get(id) || '';
