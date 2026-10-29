@@ -46,9 +46,19 @@ function memberRow(user, member, collegeName) {
   };
 }
 
+/** 一次按编号批读的上限：只服务「把这一页/这一场涉及的人换成姓名」，不是选人候选。 */
+const MEMBER_IDS_MAX = 200;
+
 /**
- * 本校在册会员名录。默认平铺；`page:true` 按关键词与游标取页。
- * @param {Object} [payload] { collegeId?, page?, keyword?, cursor?, limit? }
+ * 本校在册会员名录。默认平铺；`page:true` 按关键词与游标取页；
+ * `userIds` 只取这些人；`countOnly` 只回数字。
+ *
+ * 【为什么要有 userIds 模式】（2026-10-29 第十二轮审计）
+ * 赛事详情、大场详情、实时计分、学院赛名单这些页面只做一件事：把手上那几十个
+ * userId 换成姓名。它们原先调平铺模式，等于为了几十个人读全校名录 + 全部账号。
+ * 批读模式只发 2~3 次 RPC（学籍 / 账号 / 学院目录缓存）。
+ *
+ * @param {Object} [payload] { collegeId?, page?, keyword?, cursor?, limit?, userIds?, countOnly? }
  * @param {Object} ctx
  */
 async function listSchoolMembers(payload = {}, ctx) {
@@ -65,6 +75,33 @@ async function listSchoolMembers(payload = {}, ctx) {
     const total = await scoped.schoolMembers.countDirectory({ collegeId: filterCollegeId,
       keyword: payload.keyword });
     return ok({ ok: true, members: [], total: Number(total) || 0, message: '' });
+  }
+  // 按编号批读：只取这几个人（页面已经有名单，只是缺姓名）
+  if (Array.isArray(payload.userIds) && payload.userIds.length > 0) {
+    const ids = [...new Set(payload.userIds
+      .filter(id => typeof id === 'string' && id.trim())
+      .map(id => id.trim()))];
+    if (ids.length > MEMBER_IDS_MAX) {
+      return ok({ ok: false, members: [], total: 0,
+        message: `一次最多读取 ${MEMBER_IDS_MAX} 名会员` });
+    }
+    const [rows, users, colleges] = await Promise.all([
+      scoped.schoolMembers.listByIds(ids.map(id => schoolMemberKey(id, ctx.schoolId))),
+      ctx.repo.users.listByIds(ids),
+      loadColleges(ctx),
+    ]);
+    const userById = new Map(users.map(user => [user._id, user]));
+    const nameByCollegeId = new Map(colleges.map(item => [item.collegeId, item.name]));
+    const members = [];
+    for (const row of rows) {
+      if (!row || row.status !== SCHOOL_MEMBER_STATUS.ACTIVE) continue;
+      if (filterCollegeId && row.collegeId !== filterCollegeId) continue;
+      const user = userById.get(row.userId);
+      if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) continue;
+      members.push(memberRow(user, row, id => nameByCollegeId.get(id) || ''));
+    }
+    members.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+    return ok({ ok: true, members, total: members.length, message: '' });
   }
   // 选人弹层按需取页；保留旧调用方的平铺返回契约。
   if (payload.page === true) {

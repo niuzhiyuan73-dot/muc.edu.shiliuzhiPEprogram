@@ -394,17 +394,22 @@ async function loadCollegeEventDetailView(eventId, options = {}) {
     };
   }
 
-  const [entriesDto, tiesDto, membersDto] = await Promise.all([
+  const [entriesDto, tiesDto] = await Promise.all([
     api.listCollegeEntries({ eventId: resolved.id }),
     api.listCollegeTies({ eventId: resolved.id }),
-    api.listSchoolMembers({}),
   ]);
 
   const canManage = Boolean(eventDto.canManage);
   const { nameById } = collegeMaps(eventDto.colleges);
   const entries = asArray(entriesDto && entriesDto.entries);
   const tieRows = asArray(tiesDto && tiesDto.ties);
-  const members = membersOf(membersDto && membersDto.members);
+  // 【只批读裁判，不读全校名录】（2026-10-29 第十二轮审计）
+  // 这一页用到名录的只有「大场裁判叫什么」。原先读整校名录 + 全部账号（2000 人
+  // 就是 40 次 RPC）只为几个人，现在按编号批读。
+  const refereeIds = [...new Set(tieRows.map(row => row.referee).filter(id => typeof id === 'string' && id))];
+  const members = refereeIds.length
+    ? membersOf((await api.listSchoolMembers({ userIds: refereeIds })).members)
+    : [];
   const memberById = new Map(members.map(member => [member._id, member]));
 
   const isSignup = event.status === COLLEGE_EVENT_STATUS.SIGNUP;
@@ -550,11 +555,10 @@ async function loadCollegeLineupView(tieId, options = {}) {
   const resolvedTieId = row ? row.tieId : (tieCandidates[0] || '');
   const resolvedEventId = row ? row.eventId : eventId;
 
-  const [eventDto, entriesDto, lineupsDto, membersDto] = await Promise.all([
+  const [eventDto, entriesDto, lineupsDto] = await Promise.all([
     resolvedEventId ? api.getCollegeEvent({ eventId: resolvedEventId }) : Promise.resolve(null),
     resolvedEventId ? api.listCollegeEntries({ eventId: resolvedEventId }) : Promise.resolve(null),
     resolvedEventId ? api.listCollegeLineups({ eventId: resolvedEventId }) : Promise.resolve(null),
-    api.listSchoolMembers({}),
   ]);
 
   const event = okOf(eventDto) ? eventDto.event : null;
@@ -569,15 +573,18 @@ async function loadCollegeLineupView(tieId, options = {}) {
 
   const entry = asArray(entriesDto && entriesDto.entries).find(item => item.college === college) || null;
   const lineups = asArray(lineupsDto && lineupsDto.lineups);
-  const members = membersOf(membersDto && membersDto.members);
-  const byId = new Map(members.map(member => [member._id, member]));
-
   const tie = toLegacyTie(row);
   const defaults = defaultLineupEntries({ tie, college, lineups: lineups.map(toCarryLineup) });
   const defaultMap = new Map(
     asArray(defaults.entries).map(item => [Number(item.legNo), asArray(item.players).map(String)])
   );
   const roster = entry ? asArray(entry.memberIds) : [];
+  // 【只批读本队名单，不读全校名录】（2026-10-29 第十二轮审计）
+  // 排阵下拉列的就是这一队的人；原先为这几十个人读整校名录 + 全部账号。
+  const members = roster.length
+    ? membersOf((await api.listSchoolMembers({ userIds: roster })).members)
+    : [];
+  const byId = new Map(members.map(member => [member._id, member]));
   // 「我交没交过」按**解析后的**大场编号比对：路由原值在未解码环境里对不上
   const existing = lineups.find(item => item.tieId === resolvedTieId && item.college === college) || null;
 
@@ -705,13 +712,18 @@ async function loadCollegeMatchView(matchId, options = {}) {
   const tie = toLegacyTie(tieRow);
   const canManage = Boolean(tiesDto && tiesDto.canManage);
 
-  const [eventDto, membersDto] = await Promise.all([
-    eventId ? api.getCollegeEvent({ eventId }) : Promise.resolve(null),
-    api.listSchoolMembers({}),
-  ]);
+  const eventDto = eventId ? await api.getCollegeEvent({ eventId }) : null;
   const event = okOf(eventDto) ? eventDto.event : null;
 
-  const members = membersOf(membersDto && membersDto.members);
+  // 【只批读这一场涉及的人】（2026-10-29 第十二轮审计）
+  // 小场详情要把双方与裁判的编号换成姓名；原先为此读整校名录 + 全部账号。
+  const personIds = [...new Set([
+    ...asArray(record.teamA), ...asArray(record.teamB),
+    typeof record.referee === 'string' ? record.referee : '',
+  ].map(String).filter(Boolean))];
+  const members = personIds.length
+    ? membersOf((await api.listSchoolMembers({ userIds: personIds })).members)
+    : [];
   const byId = new Map(members.map(member => [member._id, member]));
   const nameOfId = id => {
     const member = byId.get(id);

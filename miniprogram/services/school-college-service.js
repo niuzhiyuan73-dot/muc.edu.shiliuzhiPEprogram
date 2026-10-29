@@ -235,53 +235,81 @@ async function listCollegeEvents(payload = {}, ctx) {
   const dir = await buildCollegeDirectory(ctx);
   const actor = legacyActorOf(ctx, dir);
   const canManage = canManageCollegeEvent(actor);
+  // 审核权与发布权同一门槛（仅管理员），与具体哪一场无关，算一次即可。提交名单权
+  // 按场判：学院负责人在报名中为真——列表据此把「提交名单」入口指到名单页
+  // （与旧栈列表行同一口径，见 events-view.buildCollegeEventListRows）。
+  const canReview = canManageCollegeEvent(actor);
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0
+    ? Math.min(payload.limit, EVENT_LIST_MAX) : EVENT_LIST_LIMIT;
+  const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
+  const status = typeof payload.status === 'number' ? payload.status : null;
+  const keyword = typeof payload.keyword === 'string' ? payload.keyword.trim().slice(0, 40).toLowerCase() : '';
+  const year = Number.isInteger(Number(payload.year)) && String(payload.year).trim() !== '' ? Number(payload.year) : null;
 
+  const buildRow = doc => ({
+    ...buildCollegeEventRow(doc, { actor }),
+    canReview,
+    canSubmit: !canReview && canSubmitCollegeEntry(doc, actor),
+  });
+
+  // ── 主路径下推：范围 + 状态 + 排序 + 分页交给数据库 ─────────────────────
+  // 排序与 `sortCollegeEvents` 同口径：置顶 → 状态（报名中 0 < 待开赛 1 < 进行中 2
+  // < 已结束 3，正好是数值升序）→ 开赛时间升序 → 编号升序。
+  // 关键词要匹配 title/location（无可用索引）、年份要按东八区换算 publishTime，
+  // 这两条仍回退内存，数据量是「本协会学院赛数」（2026-10-29 第十二轮审计）。
+  if (!keyword && !year) {
+    const page = await ctx.repo.forScope(ctx).collegeEvents.listPage({
+      statuses: status === null ? null : [status],
+      order: [
+        { field: 'pinned', direction: 'desc' },
+        { field: 'status', direction: 'asc' },
+        { field: 'startTime', direction: 'asc' },
+        { field: '_id', direction: 'asc' },
+      ],
+      limit,
+      offset,
+    });
+    return ok({
+      ok: true, canManage,
+      total: page.total,
+      hasMore: page.hasMore,
+      nextOffset: offset + page.rows.length,
+      events: page.rows.filter(isCollegeEventDoc).map(buildRow),
+      message: '',
+    });
+  }
+
+  // ── 回退：关键词 / 年份在内存里筛 ───────────────────────────────────────
   let rows = (await ctx.repo.forScope(ctx).collegeEvents.list()).filter(isCollegeEventDoc);
-  if (typeof payload.status === 'number') rows = rows.filter(row => row.status === payload.status);
+  if (status !== null) rows = rows.filter(row => row.status === status);
   // 关键词：按赛事名称 / 场地匹配，空串等于不筛选。
   //
   // 【为什么在服务端匹配，而不是页面拿到哪页就筛哪页】
   // 列表是分页的（一次 50 条）。前端只筛当前页，等于「搜到的只是这一页里的命中」，
   // 要一直点「加载更多」才可能翻到目标——那不是搜索，是碰运气。
   // 放在分页之前过滤，total / hasMore 也跟着变成筛选后的口径，翻页才连贯。
-  const keyword = typeof payload.keyword === 'string' ? payload.keyword.trim().slice(0, 40).toLowerCase() : '';
   if (keyword) {
     rows = rows.filter(row => [row.title, row.location]
       .some(value => String(value || '').toLowerCase().includes(keyword)));
   }
   // 石榴籽杯按「发起时间」归档：同一年发起的赛事归在一起，不设届次。
   // 用 publishTime 而不是 startTime——一场比赛可以提前很久发布、也可以跨年开赛。
-  if (payload.year) {
-    const year = Number(payload.year);
-    if (Number.isInteger(year)) {
-      rows = rows.filter(row => {
-        // 年份按东八区判（displayYearOf），不能用 getFullYear()：云函数跑在
-        // UTC，跨年前后 8 小时内发起的赛事会被归到上一年，与本地结果不一致。
-        return displayYearOf(row.publishTime || row.updatedAt) === year;
-      });
-    }
+  if (year !== null) {
+    rows = rows.filter(row => {
+      // 年份按东八区判（displayYearOf），不能用 getFullYear()：云函数跑在
+      // UTC，跨年前后 8 小时内发起的赛事会被归到上一年，与本地结果不一致。
+      return displayYearOf(row.publishTime || row.updatedAt) === year;
+    });
   }
 
   const sorted = sortCollegeEvents(rows);
-  const limit = Number.isInteger(payload.limit) && payload.limit > 0
-    ? Math.min(payload.limit, EVENT_LIST_MAX) : EVENT_LIST_LIMIT;
-  const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
   const page = sorted.slice(offset, offset + limit);
-
-  // 审核权与发布权同一门槛（仅管理员），与具体哪一场无关，算一次即可。提交名单权
-  // 按场判：学院负责人在报名中为真——列表据此把「提交名单」入口指到名单页
-  // （与旧栈列表行同一口径，见 events-view.buildCollegeEventListRows）。
-  const canReview = canManageCollegeEvent(actor);
   return ok({
     ok: true, canManage,
     total: sorted.length,
     hasMore: sorted.length > offset + page.length,
     nextOffset: offset + page.length,
-    events: page.map(doc => ({
-      ...buildCollegeEventRow(doc, { actor }),
-      canReview,
-      canSubmit: !canReview && canSubmitCollegeEntry(doc, actor),
-    })),
+    events: page.map(buildRow),
     message: '',
   });
 }

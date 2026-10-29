@@ -692,7 +692,7 @@ function buildCollections(scope, inTx, cmd) {
      * @param {Array<{field:string,direction:'asc'|'desc'}>} order 排序规则（按数组顺序链式调用）
      * @param {number} limit 条数（≤ PAGE_SIZE，调用方负责夹取）
      */
-    top: async (key, where, order, limit) => {
+    top: async (key, where, order, limit, offset = 0) => {
       if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
       const size = Math.max(1, Number(limit) || 1);
       // 【超限必须报错，不能静默截断】（2026-10-26 只读审查 P2-9）
@@ -705,6 +705,10 @@ function buildCollections(scope, inTx, cmd) {
       }
       let query = col(key).where(where);
       for (const rule of (order || [])) query = query.orderBy(rule.field, rule.direction);
+      // offset 用于 offset 分页的列表（赛事 / 学院赛）；调用方负责夹取上限，
+      // 避免把巨大的 skip 传给数据库（见 matches.listPage 的同款说明）。
+      const skip = Math.max(0, Number(offset) || 0);
+      if (skip) query = query.skip(skip);
       const res = await query.limit(size).get();
       return (res && res.data) || [];
     },

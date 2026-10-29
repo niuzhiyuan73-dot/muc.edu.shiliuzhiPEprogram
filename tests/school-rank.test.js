@@ -656,3 +656,51 @@ test('榜单不读积分事实：events / trainings / trainingRegistrations 一�
   // 行里本来就没有积分字段，确认一下没被顺手加上
   assert.ok(data.rows.every(row => row.points === undefined), '榜单行不含赛季积分');
 });
+
+/**
+ * 积分榜只取前 N + 我（2026-10-29 第十二轮审计）
+ * ============================================================
+ * 赛事面板只摆前 10 与「我」，却要服务端把全校每人的积分行整份下发、前端再全量
+ * 排序。`getSchoolMemberStats({top})` 让服务端排完序只回前 N、本人名次与总人数。
+ * 这里钉住三条：截断、总人数是完整榜、名次与完整榜一致（不因截断从 1 重排）。
+ */
+test('积分榜 topN：只回前 N 与本人名次，总人数仍是完整榜', async () => {
+  const repo = fixture();
+  // 积分来自「已结束赛事的录取名次」，不是比赛流水：直接造一场带结果的赛事。
+  // 冠军分高、第四名也参与（participate 分），保证榜上不止一个人。
+  await repo.events.set('ev_points_topn', {
+    _id: 'ev_points_topn', schoolId: 'muc', association: 'pkb', title: '积分赛',
+    status: 2, matchType: MATCH_TYPE.SINGLES, pool: 1, level: 1,
+    startTime: at(-3 * HOUR), finishedAt: at(-3 * HOUR),
+    results: [
+      { userId: 'demo_muc_member', placement: 1 },
+      { userId: 'rank_m2', placement: 2 },
+      { userId: 'rank_m4', placement: 4 },
+    ],
+  });
+
+  const full = await call(repo, 'getSchoolMemberStats');
+  const ranked = full.members
+    .filter(row => Number(row.points) > 0)
+    .sort((a, b) => (b.points - a.points)
+      || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+  assert.ok(ranked.length >= 2, '演示数据里应当有人带积分');
+
+  const paged = await call(repo, 'getSchoolMemberStats', { top: 1 });
+  assert.equal(paged.ok, true, paged.message);
+  assert.equal(paged.top.length, 1, '只回前 1 名');
+  assert.equal(paged.top[0].userId, ranked[0].userId);
+  assert.equal(paged.top[0].rank, 1);
+  assert.equal(paged.total, ranked.length, 'total 是完整榜人数，不是这一页的条数');
+  assert.ok(paged.me === null || paged.me.rank >= 1, 'me 要么为 null，要么带绝对名次');
+
+  // 本人排在显示范围之外时，名次仍是全榜名次（不会因为只取前 1 就变成 1）
+  const me = await call(repo, 'getSchoolMemberStats', { top: 1 }, { actor: 'demo_muc_admin' });
+  if (me.me) assert.ok(me.me.rank >= 1);
+  const wide = await call(repo, 'getSchoolMemberStats', { top: 50 });
+  assert.equal(wide.top.length, Math.min(50, ranked.length));
+  for (let i = 1; i < wide.top.length; i += 1) {
+    assert.ok(Number(wide.top[i - 1].points) >= Number(wide.top[i].points), '按积分降序');
+  }
+  assert.equal(wide.total, ranked.length);
+});

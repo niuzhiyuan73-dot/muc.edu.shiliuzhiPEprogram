@@ -682,3 +682,58 @@ test('赛事详情只查我加入的小组，不整表读成员关系', async ()
   }
   assert.deepEqual(asked, ['demo_muc_admin'], '只按当前登录人查他加入的组');
 });
+
+/**
+ * 列表下推（2026-10-29 第十二轮审计）
+ * ============================================================
+ * `listSchoolEvents` 原先是「整表读 + 内存筛选排序切片」，每翻一页都要把本协会
+ * 全部赛事读一遍。无关键词、无年份时现在全部下推。这里把整表读改成抛错：
+ * 主路径仍要能翻页，而带关键词的那条回退路径**必须**读全表（本次不声称包含匹配
+ * 能下推——云数据库没有可用于 contains 的索引）。
+ */
+test('列表下推：无关键词时不整表读赛事，仍能翻页与拿到总量', async () => {
+  const repo = fixture();
+  await publish(repo, 'r_push_1');
+  await publish(repo, 'r_push_2');
+
+  const forScope = repo.forScope.bind(repo);
+  let listCalls = 0;
+  repo.forScope = (scope) => {
+    const surface = forScope(scope);
+    surface.events.list = () => { listCalls += 1; throw new Error('无关键词时不应整表读赛事'); };
+    return surface;
+  };
+
+  const first = await call(repo, 'listSchoolEvents', { limit: 1 });
+  assert.equal(first.ok, true, first.message);
+  assert.equal(first.events.length, 1);
+  assert.equal(listCalls, 0, '主路径不该整表读');
+  assert.ok(first.total >= 2, 'total 是过滤后条数');
+  assert.ok(first.totalAll >= first.total, 'totalAll 不小于过滤后的条数');
+  assert.equal(first.hasMore, true, '还有下一页');
+  assert.equal(first.nextOffset, 1);
+
+  const second = await call(repo, 'listSchoolEvents', { limit: 1, offset: 1 });
+  assert.equal(second.ok, true);
+  assert.equal(second.events.length, 1);
+  assert.notEqual(second.events[0].eventId, first.events[0].eventId, '两页不重复');
+
+  // 状态筛选同样下推
+  const filtered = await call(repo, 'listSchoolEvents', { status: 0, limit: 5 });
+  assert.equal(filtered.ok, true);
+  assert.equal(listCalls, 0);
+});
+
+test('列表下推：关键词搜索仍回退内存（包含匹配没有可用索引）', async () => {
+  const repo = fixture();
+  await publish(repo, 'r_push_kw');
+
+  const forScope = repo.forScope.bind(repo);
+  repo.forScope = (scope) => {
+    const surface = forScope(scope);
+    surface.events.list = () => { throw new Error('关键词回退必须整表读'); };
+    return surface;
+  };
+
+  await assert.rejects(call(repo, 'listSchoolEvents', { keyword: '春' }), /关键词回退必须整表读/);
+});

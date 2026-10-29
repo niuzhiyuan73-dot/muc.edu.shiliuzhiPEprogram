@@ -61,7 +61,9 @@ function attachOverviewReads(surface, { inTx, top, count, command: cmd }) {
 }
 
 // 内存实现与云端使用同一套查询计划；操作符只在这里解释，不引入小程序禁用 API。
-const memoryCommand = Object.fromEntries(['lt', 'neq', 'in', 'and', 'or'].map(op => [op, value => ({ op, value })]));
+const memoryCommand = Object.fromEntries(
+  ['lt', 'lte', 'gt', 'gte', 'neq', 'in', 'and', 'or'].map(op => [op, value => ({ op, value })]),
+);
 function overviewMatches(row, where) {
   if (where.op === 'and') return where.value.every(part => overviewMatches(row, part));
   if (where.op === 'or') return where.value.some(part => overviewMatches(row, part));
@@ -69,15 +71,23 @@ function overviewMatches(row, where) {
     const value = row[key];
     if (!condition || !condition.op) return value === condition;
     if (condition.op === 'in') return condition.value.includes(value);
+    // 时间/数值区间：赛事与学院赛的「按年份归档」要下推成 startTime / publishTime 的
+    // 半开区间（2026-10-29 第十二轮审计），所以这里补齐比较操作符。
     if (condition.op === 'lt') return value < condition.value;
+    if (condition.op === 'lte') return value <= condition.value;
+    if (condition.op === 'gt') return value > condition.value;
+    if (condition.op === 'gte') return value >= condition.value;
     if (condition.op === 'neq') return value !== condition.value;
     return false;
   });
 }
 function memoryOverviewIO(rows) {
   return { command: memoryCommand,
+    // 同一份操作符构造器以 `cmd` 暴露：赛事列表下推（event-list-page）按云端
+    // `io.cmd` 的接口写，两端必须拿到同样形状的东西。
+    cmd: memoryCommand,
     count: async (key, where) => rows(key).filter(row => overviewMatches(row, where)).length,
-    top: async (key, where, order, limit) => rows(key).filter(row => overviewMatches(row, where))
+    top: async (key, where, order, limit, offset = 0) => rows(key).filter(row => overviewMatches(row, where))
       .sort((a, b) => {
         for (const { field, direction } of order) {
           const av = a[field] == null ? '' : a[field];
@@ -85,7 +95,7 @@ function memoryOverviewIO(rows) {
           if (av !== bv) return (av < bv ? -1 : 1) * (direction === 'desc' ? -1 : 1);
         }
         return 0;
-      }).slice(0, limit),
+      }).slice(Math.max(0, Number(offset) || 0), Math.max(0, Number(offset) || 0) + limit),
   };
 }
 module.exports = { attachOverviewReads, memoryOverviewIO };

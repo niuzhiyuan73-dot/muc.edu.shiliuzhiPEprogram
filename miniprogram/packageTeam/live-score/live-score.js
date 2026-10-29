@@ -203,21 +203,37 @@ Page({
       // 路由编号兼容（见 utils/route-query.js）：开发者工具把 query 原样透传，
       // 未解码的 matchId 直接查会「这场比赛不存在」，这里先探测出真实编号
       this.matchId = await this.resolveMatchId(this.matchId, api);
-      const [roster, found] = await Promise.all([
-        api.listSchoolMembers({}),
-        api.getSchoolMatch({ matchId: this.matchId }),
-      ]);
+      const found = await api.getSchoolMatch({ matchId: this.matchId });
+      if (!found || !found.ok) {
+        // 读端被拒的原因有两种：没有本协会的读权限（未入会 / 账号停用），或者
+        // 比赛真的不在了。前者要提示「权限」，后者才是「不存在」——两者都用
+        // blockReason / error 两个不同的位置显示，页面才知道该不该引导入会。
+        const message = String((found && found.message) || '');
+        if (/权限|会员/.test(message)) {
+          this.setData({ loading: false, blockReason: message });
+          return;
+        }
+        this.setData({ loading: false, error: '这场比赛不存在，或已被删除' });
+        return;
+      }
+      const record = found.match;
 
+      // 【只批读这一场的人】（2026-10-29 第十二轮审计）
+      // 计分台要把双方与裁判的编号换成昵称。原先为这件事读整校名录 + 全部账号
+      // （2000 人的学校约 40 次 RPC），而实际只需要场上的这十来个人。
+      const personIds = [...new Set([
+        ...(Array.isArray(record.teamA) ? record.teamA : []),
+        ...(Array.isArray(record.teamB) ? record.teamB : []),
+        record.referee,
+      ].map(String).filter(Boolean))];
+      const roster = personIds.length
+        ? await api.listSchoolMembers({ userIds: personIds })
+        : { ok: true, members: [] };
       // 读不到名录＝本协会的读权限没有：把话说明白，别让人以为是比赛没了
       if (!roster || !roster.ok) {
         this.setData({ loading: false, blockReason: (roster && roster.message) || '没有读取本协会成员名录的权限' });
         return;
       }
-      if (!found || !found.ok) {
-        this.setData({ loading: false, error: '这场比赛不存在，或已被删除' });
-        return;
-      }
-      const record = found.match;
 
       // 编号 → 昵称，供个人赛显示队员姓名
       this.nameById = {};

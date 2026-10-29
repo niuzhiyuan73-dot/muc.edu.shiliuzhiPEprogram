@@ -52,6 +52,30 @@ function membersOf(count) {
  * @param {boolean} [options.statsOk] 积分读端是否成功
  * @param {Function} run
  */
+/**
+ * `getSchoolMemberStats` 的替身：按**新契约**（top / me / total）返回。
+ *
+ * 面板已经改成只取前 50 名（2026-10-29 第十二轮审计），替身必须同步模拟服务端
+ * 的「过滤零分 → 按积分降序、同分按编号 → 截断 → 给本人名次」。若这里偷懒直接
+ * 返回 members，测出来的就是替身自己，而不是面板。
+ */
+function statsStub(members) {
+  const ranked = members
+    .filter(row => Number(row.points) > 0)
+    .sort((a, b) => (b.points - a.points)
+      || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0))
+    .map((row, index) => ({ ...row, rank: index + 1 }));
+  return (payload = {}) => {
+    const top = Number.isInteger(payload.top) && payload.top > 0 ? Math.min(payload.top, 50) : 0;
+    return {
+      ok: true,
+      top: ranked.slice(0, top || ranked.length),
+      me: ranked.find(row => row.userId === ME) || null,
+      total: ranked.length,
+    };
+  };
+}
+
 async function withStubs(options, run) {
   const {
     members = [], events = [], season = { startTime: '2026-09-01T00:00:00Z' },
@@ -60,8 +84,8 @@ async function withStubs(options, run) {
   const origSpace = assocSpace.forScope;
   const origIdentity = identity.forSchoolIdentity;
   assocSpace.forScope = () => ({
-    getSchoolMemberStats: async () => (statsOk
-      ? { ok: true, members } : { ok: false, message: '没有读取本协会积分的权限' }),
+    getSchoolMemberStats: async (payload = {}) => (statsOk
+      ? statsStub(members)(payload) : { ok: false, message: '没有读取本协会积分的权限' }),
     getSchoolSeason: async () => (seasonOk ? { ok: true, season } : { ok: false, message: '赛季读取失败' }),
     listSchoolEvents: async () => ({ ok: true, events, canManage: true, hasMore: false }),
   });

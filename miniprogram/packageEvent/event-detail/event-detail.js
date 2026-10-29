@@ -77,6 +77,9 @@ Page(withDetailExperience({
       keyword: '',
       rows: [],
       emptyText: '',
+      /** 候选是否还有下一页（2026-10-29 第十二轮审计：列表按页取，不再拉全校名录） */
+      hasMore: false,
+      loading: false,
     },
     /** 指派提交中，防止连点 */
     refereeActing: false,
@@ -505,25 +508,50 @@ Page(withDetailExperience({
    * 取本校在册会员名录，供面板筛选。
    * 只取一次并缓存在实例上：面板可能被反复打开，名单在一次会话里不会变。
    */
-  async pickerMembers() {
-    if (!this.members) {
-      const res = await space.forScope(this.scope || this.currentScope()).listSchoolMembers({});
-      const members = (res && res.members) || [];
-      this.members = members.map((member) => ({
-        id: member.userId,
-        name: member.nickName || member.realName || member.userId,
-        realName: member.realName || '',
-      }));
-    }
-    return this.members;
+  /**
+   * 取一页候选裁判。
+   *
+   * 【为什么改成按页取】（2026-10-29 第十二轮审计）
+   * 原先是 `listSchoolMembers({})` 一次拉全校在册名录再本地筛选：2000 人的学校
+   * 就是 2000 行 JSON + 40 次 RPC，只为点开一个「指派裁判」面板。现在走分页接口
+   * （服务端已按关键词过滤），输入时带关键词重新取第一页，「加载更多」续读。
+   */
+  async loadPickerPage(keyword, append) {
+    const api = space.forScope(this.scope || this.currentScope());
+    const res = await api.listSchoolMembers({
+      page: true,
+      keyword,
+      limit: 50,
+      cursor: append ? (this.pickerCursor || '') : '',
+    });
+    const rows = ((res && res.members) || []).map((member) => ({
+      id: member.userId,
+      name: member.nickName || member.realName || member.userId,
+      realName: member.realName || '',
+    }));
+    this.pickerCursor = (res && res.nextCursor) || '';
+    return { rows, hasMore: Boolean(res && res.hasMore), ok: Boolean(res && res.ok) };
   },
 
-  /** 按关键字刷新面板列表 */
-  async applyRefereeKeyword(keyword) {
-    const members = await this.pickerMembers();
+  /** 按关键字刷新面板列表（输入有防抖，见 onInputRefereeKeyword） */
+  async applyRefereeKeyword(keyword, append = false) {
+    this.setData({ 'referee.loading': true });
+    const page = await this.loadPickerPage(keyword, append);
+    if (!page.ok) {
+      this.setData({ 'referee.loading': false, 'referee.rows': append ? this.data.referee.rows : [],
+        'referee.hasMore': false, 'referee.emptyText': '候选读取失败，请重试' });
+      return;
+    }
+    const merged = append
+      ? [...this.data.referee.rows, ...buildPickerRows(page.rows, '', this.data.referee.selectedId)]
+      : buildPickerRows(page.rows, '', this.data.referee.selectedId);
+    const seen = new Set();
+    const rows = merged.filter((row) => (seen.has(row.id) ? false : seen.add(row.id)));
     this.setData({
       'referee.keyword': keyword,
-      'referee.rows': buildPickerRows(members, keyword, this.data.referee.selectedId),
+      'referee.rows': rows,
+      'referee.hasMore': page.hasMore,
+      'referee.loading': false,
       'referee.emptyText': pickerEmptyText(keyword),
     });
   },
@@ -535,8 +563,8 @@ Page(withDetailExperience({
 
     const record = (this.data.view.bracketRows || []).find((item) => item.matchId === matchId);
     const selectedId = (record && record.referee) || '';
-    const members = await this.pickerMembers();
-    const rows = buildPickerRows(members, '', selectedId);
+    this.pickerCursor = '';
+    const page = await this.loadPickerPage('', false);
 
     this.setData({
       referee: {
@@ -545,19 +573,36 @@ Page(withDetailExperience({
         hasReferee: Boolean(record && record.hasReferee),
         selectedId,
         keyword: '',
-        rows,
+        rows: buildPickerRows(page.rows, '', selectedId),
+        hasMore: page.hasMore,
+        loading: false,
         emptyText: pickerEmptyText(''),
       },
     });
     return undefined;
   },
 
+  /** 续读下一页候选 */
+  onMoreReferee() {
+    if (this.data.referee.loading || !this.data.referee.hasMore) return undefined;
+    return this.applyRefereeKeyword(this.data.referee.keyword, true);
+  },
+
+  /** 输入防抖 250ms：分页接口按关键词回源，逐字发请求会把接口打满 */
   onInputRefereeKeyword(event) {
-    return this.applyRefereeKeyword(event.detail.value);
+    const keyword = String(event.detail.value || '').slice(0, 32);
+    this.setData({ 'referee.keyword': keyword });
+    if (this.refereeTimer) clearTimeout(this.refereeTimer);
+    this.refereeTimer = setTimeout(() => {
+      this.refereeTimer = null;
+      this.applyRefereeKeyword(keyword);
+    }, 250);
+    return undefined;
   },
 
   onCancelReferee() {
     if (this.data.refereeActing) return;
+    if (this.refereeTimer) { clearTimeout(this.refereeTimer); this.refereeTimer = null; }
     this.setData({ referee: { ...this.data.referee, open: false } });
   },
 

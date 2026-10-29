@@ -652,6 +652,35 @@ async function getSchoolMemberStats(payload = {}, ctx) {
     return ok({ ok: true, members: await statsOfMembers(ctx, [...wanted], { ratingsOnly }), message: '' });
   }
 
+  // ── 只要前 N 名 + 我自己（赛事面板的积分榜）────────────────────────────
+  // 【为什么需要这条分支】（2026-10-29 第十二轮审计）
+  // 面板只显示前 10 与「我」，原先却要服务端把全校每个会员的评级与积分整份下发，
+  // 前端再 `buildPointsRows` 全量排序。2000 人的协会就是 2000 行 JSON 过一遍网络
+  // 与一次全量排序，只为取前十。这条分支在服务端排序后只回前 N 与「我」。
+  //
+  // 排序与前端 `buildPointsRows` 逐字同口径：积分降序，同分按编号升序。前端那份
+  // 排行榜的次级判据（胜率 / 胜场 / 最近比赛）在积分榜这里拿不到（成员行不带
+  // lastMatchTime），实际不参与比较，所以这里不需要复制整套 buildLeaderboard。
+  const top = Number.isInteger(payload.top) && payload.top > 0 ? Math.min(payload.top, 50) : 0;
+  if (top > 0) {
+    const { members } = await loadScopeView(ctx, { needMatches: false });
+    // 离校不过滤：面板原先把 status 硬写成 ACTIVE 再交给 buildPointsRows，
+    // 这里保持同一口径，避免「同一个榜在面板与排行榜上人数不同」。
+    const rows = members.map(member => memberStatsRow(member))
+      .filter(row => Number(row.points) > 0)
+      .sort((a, b) => (b.points - a.points)
+        || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
+    const total = rows.length;
+    const mine = rows.findIndex(row => row.userId === ctx.actorId);
+    return ok({
+      ok: true,
+      top: rows.slice(0, top).map((row, index) => ({ ...row, rank: index + 1 })),
+      me: mine >= 0 ? { ...rows[mine], rank: mine + 1 } : null,
+      total,
+      message: '',
+    });
+  }
+
   // 成绩同榜单：评级已落库，不需要读比赛流水。
   const { members } = await loadScopeView(ctx, { needMatches: false });
   return ok({ ok: true, members: members.map(member => memberStatsRow(member)), message: '' });

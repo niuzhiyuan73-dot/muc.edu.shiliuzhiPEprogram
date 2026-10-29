@@ -414,7 +414,7 @@ function createMemoryRepo(seed = {}) {
           && Object.entries(scopeFields).every(([field, value]) => doc[field] === value));
       },
       // 条件 + 排序 + 限量（与云端 io.top 同语义）：榜单取「按 elo 前 N」用。
-      top: (key, where, order, limit) => {
+      top: (key, where, order, limit, offset = 0) => {
         const rows = list(key).filter((doc) => matchWhere(doc, where));
         rows.sort((a, b) => {
           for (const rule of (order || [])) {
@@ -423,7 +423,8 @@ function createMemoryRepo(seed = {}) {
           }
           return 0;
         });
-        return rows.slice(0, Math.max(1, Number(limit) || 1));
+        const skip = Math.max(0, Number(offset) || 0);
+        return rows.slice(skip, skip + Math.max(1, Number(limit) || 1));
       },
       // 只回数字（与云端 io.count 同语义）。
       count: (key, where) => list(key).filter((doc) => matchWhere(doc, where)).length,

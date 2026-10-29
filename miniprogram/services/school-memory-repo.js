@@ -7,6 +7,7 @@ const { attachTeamReads, fieldValues } = require('./scoped-team-reads.js');
 const { memoryDirectoryPage, memoryDirectoryCount } = require('./account-directory.js');
 const { memoryPersonalPage } = require('./personal-sports-query.js');
 const { attachOverviewReads, memoryOverviewIO } = require('./school-overview-reads.js');
+const { pageOfCollection } = require('./event-list-page.js');
 /**
  * 带 eventId 的「从属集合」：按赛事取子集用 listByEvent（条件查询 + 索引），
  * 不整表读完再内存过滤。顶层与 forScope 两处都要提供，方法面与云端
@@ -274,7 +275,16 @@ function createSchoolMemoryRepo(seed = {}) {
         byIds: async (key, ids, fields) => [...new Set(ids)].map(id => getState()[key].get(id))
           .filter(doc => doc && Object.entries(fields).every(([field, value]) => doc[field] === value)).map(clone),
       });
-      attachOverviewReads(result, { inTx, ...memoryOverviewIO(key => [...getState()[key].values()].map(clone)) });
+      const overview = memoryOverviewIO(key => [...getState()[key].values()].map(clone));
+      attachOverviewReads(result, { inTx, ...overview });
+      // 赛事 / 学院赛列表：与云端同一份下推实现（2026-10-29 第十二轮审计）。
+      for (const listKey of ['events', 'collegeEvents']) {
+        if (!result[listKey]) continue;
+        result[listKey].listPage = options => {
+          if (inTx) throw new Error(`事务内不允许分页读取（${listKey}），请改用 getById`);
+          return pageOfCollection(overview, scope, listKey, options);
+        };
+      }
       result.schoolMembers.listDirectoryPage = async options => {
         if (inTx) throw new Error('事务内不允许查询会员目录');
         return memoryDirectoryPage([...getState().schoolMembers.values()], [...getState().users.values()], scope, options);

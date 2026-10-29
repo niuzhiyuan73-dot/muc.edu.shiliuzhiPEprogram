@@ -315,7 +315,6 @@ async function listSchoolEvents(payload = {}, ctx) {
     return ok({ ok: false, events: [], canManage: false, total: 0, totalAll: 0, message: '没有读取协会空间的权限' });
   }
   const canManage = canManageAssociationSpace(ctx);
-  const allRows = (await ctx.repo.forScope(ctx).events.list()).filter(isEventDoc);
   // status 支持单个值或一组值：首页要同时取「报名中 + 进行中」两种状态。
   // 只接受数字，别把字符串拼进 includes 里——那会静默筛出空列表。
   const wanted = Array.isArray(payload.status)
@@ -324,6 +323,64 @@ async function listSchoolEvents(payload = {}, ctx) {
   const keyword = String(payload.keyword == null ? '' : payload.keyword).trim().toLowerCase().slice(0, 40);
   const yearText = String(payload.year == null ? '' : payload.year);
   const year = /^\d{4}$/.test(yearText) ? Number(yearText) : null;
+  // 默认「置顶 → 状态（报名中 > 进行中 > 已结束）→ 开赛时间倒序」。
+  // 状态优先级与 EVENT_STATUS 的取值顺序一致（SIGNUP 0 < ONGOING 1 < FINISHED 2），
+  // 所以这一档可以直接下推成 orderBy('status')。
+  // order='asc' 只反转「开赛时间」这一档：首页要看「最近要打的几场」。
+  const ascending = payload.order === 'asc';
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0
+    ? Math.min(payload.limit, EVENT_LIST_MAX) : EVENT_LIST_LIMIT;
+  const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
+  const scoped = ctx.repo.forScope(ctx);
+  // 人数直接用赛事汇总；本人报名状态仅点读当前页，读量不随报名总数增长。
+  const myId = ctx.actorId;
+  const decorate = async (docs) => {
+    // 「我报名了没」按**页**批读：一页 20 条原来是 20 次点读（2026-10-22 H-3）。
+    // 编号由 (赛事, 我) 派生，不是客户端给的，但仍按 _id 取回来对一遍，
+    // 免得派生规则将来变了、拿错文档还当成「已报名」。
+    const signupKeys = myId ? docs.map(doc => schoolEventSignupKey(doc._id, myId, ctx)) : [];
+    const signupById = new Map((signupKeys.length
+      ? await scoped.eventSignups.listByIds(signupKeys)
+      : []).map(doc => [doc._id, doc]));
+    return docs.map((doc, index) => eventSummary(
+      doc,
+      myId ? (signupById.get(signupKeys[index]) || null) : null,
+      displaySignupCount(doc),
+    ));
+  };
+
+  // ── 主路径下推：范围 + 状态 + 排序 + 分页交给数据库 ─────────────────────
+  // 无关键词、无年份时所有条件都能用索引表达，只取当前页（2026-10-29 第十二轮审计）。
+  // 关键词要匹配 title/name/location 三个字段（云数据库没有可用于包含匹配的索引），
+  // 年份要按东八区换算成区间——这两条仍回退内存，数据量是「本协会赛事数」。
+  if (!keyword && !year) {
+    const page = await scoped.events.listPage({
+      statuses: wanted,
+      order: [
+        { field: 'pinned', direction: 'desc' },
+        { field: 'status', direction: 'asc' },
+        { field: 'startTime', direction: ascending ? 'asc' : 'desc' },
+        { field: '_id', direction: 'asc' },
+      ],
+      limit,
+      offset,
+    });
+    const docs = page.rows.filter(isEventDoc);
+    return ok({
+      ok: true, canManage,
+      hasMore: page.hasMore,
+      nextOffset: offset + page.rows.length,
+      // total 是「过滤后」的条数（分页基准）；totalAll 是过滤前的总量，
+      // 首页概况的「N 场赛事」用它——不能被「只看报名中」的筛选带偏。
+      total: page.total,
+      totalAll: page.totalAll,
+      events: await decorate(docs),
+      message: '',
+    });
+  }
+
+  // ── 回退：关键词 / 年份在内存里筛 ───────────────────────────────────────
+  const allRows = (await scoped.events.list()).filter(isEventDoc);
   const yearOf = (value) => {
     const time = Date.parse(value || '');
     if (!Number.isFinite(time)) return null;
@@ -339,14 +396,6 @@ async function listSchoolEvents(payload = {}, ctx) {
     }
     return true;
   });
-
-  // 人数直接用赛事汇总；本人报名状态仅点读当前页，读量不随报名总数增长。
-  const myId = ctx.actorId;
-  // 默认「置顶 → 状态（报名中 > 进行中 > 已结束）→ 开赛时间倒序」。
-  // 状态优先级与 EVENT_STATUS 的取值顺序一致（SIGNUP 0 < ONGOING 1 < FINISHED 2），
-  // 所以这一档将来可以直接下推成 orderBy('status')，改查询时不用动业务口径。
-  // order='asc' 只反转「开赛时间」这一档：首页要看「最近要打的几场」。
-  const ascending = payload.order === 'asc';
   const sorted = rows.slice().sort((a, b) => {
     const pin = Number(Boolean(b.pinned)) - Number(Boolean(a.pinned));
     if (pin !== 0) return pin;
@@ -356,36 +405,16 @@ async function listSchoolEvents(payload = {}, ctx) {
     const ta = Date.parse(a.startTime) || 0;
     const tb = Date.parse(b.startTime) || 0;
     if (tb !== ta) return ascending ? ta - tb : tb - ta;
-    // 相等时返回 0：`a < b ? -1 : 1` 在自比时也给 1，不是合法的比较器
-    // （2026-10-29 第十一轮审计 P3-15）。_id 本应唯一，但数据异常时不该乱序。
     return a._id === b._id ? 0 : (a._id < b._id ? -1 : 1);
   });
-  const limit = Number.isInteger(payload.limit) && payload.limit > 0
-    ? Math.min(payload.limit, EVENT_LIST_MAX) : EVENT_LIST_LIMIT;
-  const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
   const page = sorted.slice(offset, offset + limit);
-  const scoped = ctx.repo.forScope(ctx);
-  // 「我报名了没」按**页**批读：一页 20 条原来是 20 次点读（2026-10-22 H-3）。
-  // 编号由 (赛事, 我) 派生，不是客户端给的，但仍按 _id 取回来对一遍，
-  // 免得派生规则将来变了、拿错文档还当成「已报名」。
-  const signupKeys = myId ? page.map(doc => schoolEventSignupKey(doc._id, myId, ctx)) : [];
-  const signupById = new Map((signupKeys.length
-    ? await scoped.eventSignups.listByIds(signupKeys)
-    : []).map(doc => [doc._id, doc]));
-  const mine = signupKeys.map(key => signupById.get(key) || null);
   return ok({
     ok: true, canManage,
     hasMore: sorted.length > offset + page.length,
     nextOffset: offset + page.length,
-    // total 是「过滤后」的条数（分页基准）；totalAll 是过滤前的总量，
-    // 首页概况的「N 场赛事」用它——不能被「只看报名中」的筛选带偏。
     total: sorted.length,
     totalAll: allRows.length,
-    events: page.map((doc, index) => eventSummary(
-      doc,
-      mine[index],
-      displaySignupCount(doc)
-    )),
+    events: await decorate(page),
     message: '',
   });
 }

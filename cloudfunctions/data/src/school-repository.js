@@ -3,6 +3,7 @@ const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../lib/utils/school.js');
 const { MEET_COLLECTIONS, meetScope } = require('../lib/utils/meet-scope.js');
 const { attachTeamReads, unique } = require('../lib/services/scoped-team-reads.js');
 const { attachOverviewReads } = require('../lib/services/school-overview-reads.js');
+const { pageOfCollection } = require('../lib/services/event-list-page.js');
 
 const SCHOOL_COLLECTIONS = ['schools', 'schoolAssociations', 'colleges', 'schoolMembers', 'schoolRoles', 'studentIdClaims',
   'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
@@ -436,6 +437,17 @@ function buildScoped(repo, io, inTx, options) {
     if (!io.memberCount) throw new Error('会员目录计数适配器未接入');
     return io.memberCount(scope, options);
   };
+  // 【赛事 / 学院赛列表的受控分页】（2026-10-29 第十二轮审计）
+  // 范围、状态、年份区间、排序与 offset/limit 一起下推，只取当前页；total 与
+  // totalAll 各一次聚合计数。原先这两个列表是「整表读 + 内存筛选排序切片」，
+  // 每翻一页都要把本协会全部赛事读一遍。
+  for (const key of ['events', 'collegeEvents']) {
+    if (!result[key]) continue;
+    result[key].listPage = options => {
+      if (inTx) throw new Error(`事务内不允许分页读取（${key}），请改用 getById`);
+      return pageOfCollection(io, scope, key, options);
+    };
+  }
   return result;}
 
 function attachSchoolRepository(repo, io, inTx) {
