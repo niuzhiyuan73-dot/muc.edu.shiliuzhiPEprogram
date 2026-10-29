@@ -750,8 +750,9 @@ async function submitTeamEntry(payload = {}, ctx) {
     return ok(refused(isCollegeCup ? '只有本学院负责人可以为本院报名' : '只有队长可以为本队报名'));
   }
 
-  const members = (await repo.teamMembers.list())
-    .filter(row => row.teamId === team._id && row.status === TEAM_MEMBER_STATUS.ACTIVE);
+  // 按队下推，不再读全协会队员再过滤（2026-10-29 第十一轮审计 P3）
+  const members = (await repo.teamMembers.listByTeams([team._id]))
+    .filter(row => row.status === TEAM_MEMBER_STATUS.ACTIVE);
   const entryMin = Number(event.entryMin) || 5;
   const entryMax = Number(event.entryMax) || 12;
 
@@ -909,11 +910,13 @@ async function getTeamEntryRoster(payload = {}, ctx) {
       : '只有队长或协会负责人可以编辑报名名单'));
   }
 
-  const activeRows = (await repo.teamMembers.list())
-    .filter(row => row.teamId === team._id && row.status === TEAM_MEMBER_STATUS.ACTIVE);
+  const activeRows = (await repo.teamMembers.listByTeams([team._id]))
+    .filter(row => row.status === TEAM_MEMBER_STATUS.ACTIVE);
   const dir = await buildDirectory(ctx);
+  // 姓名表改 Map：原先每人一次 find，名单一长就是 O(n²)
+  const nameById = new Map((dir.members || []).map(item => [item._id, item]));
   const nameOf = (userId) => {
-    const user = (dir.members || []).find(item => item._id === userId);
+    const user = nameById.get(userId);
     return (user && (user.realName || user.nickName)) || userId;
   };
 
@@ -1833,13 +1836,19 @@ async function reviewTeamMatchStats(payload = {}, ctx) {
  */
 async function schedulePeople(ctx, match) {
   const repo = ctx.repo.forScope(ctx);
-  const [dir, memberships, teams] = await Promise.all([
+  // 【按需读，不整表】（2026-10-29 第十一轮审计 P3-10）
+  // 原实现无条件读三份整表：目录（已缓存）、本协会全部会籍、本协会全部球队。
+  // 其中「球队」只为取两支队的队长——点读两次即可；「会籍」只有非足球协会才用
+  // （足球按账号口径判有效成员），足球路径整份读回来是纯浪费。
+  const isFootball = football.isFootball(ctx);
+  const [dir, memberships, teamA, teamB] = await Promise.all([
     buildDirectory(ctx),
-    repo.memberships.list(),
-    repo.teams.list(),
+    isFootball ? Promise.resolve([]) : repo.memberships.list(),
+    match.teamA ? repo.teams.getById(match.teamA) : null,
+    match.teamB ? repo.teams.getById(match.teamB) : null,
   ]);
   const userById = new Map(dir.members.map(user => [user._id, user]));
-  const activeIds = football.isFootball(ctx) ? new Set(dir.activeMemberIds.filter(id => userById.get(id)?.primarySchoolId === ctx.schoolId)) : new Set(
+  const activeIds = isFootball ? new Set(dir.activeMemberIds.filter(id => userById.get(id)?.primarySchoolId === ctx.schoolId)) : new Set(
     memberships
       .filter(row => row.status === 'active'
         && row.schoolId === ctx.schoolId
@@ -1847,9 +1856,7 @@ async function schedulePeople(ctx, match) {
       .map(row => row.userId)
   );
   const captainIds = new Set(
-    teams
-      .filter(team => team._id === match.teamA || team._id === match.teamB)
-      .map(team => team.captainId)
+    [teamA, teamB].filter(Boolean).map(team => team.captainId).filter(Boolean)
   );
   const people = [...activeIds]
     .filter(userId => userById.has(userId))

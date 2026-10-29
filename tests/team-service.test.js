@@ -326,3 +326,27 @@ test('列表 —— 人数按在队成员算，不是球队文档上的字段', 
   const detail = await call(repo, 'getTeam', { teamId }, { actor: 'u_leader' });
   assert.equal(detail.team.memberCount, 2);
 });
+
+/**
+ * 按队下推（2026-10-29 第十一轮审计 P3）
+ * ============================================================
+ * 球队详情与报名名单原先把**本协会全部队员**读回来再 filter(teamId)，球队越多越亏。
+ * 现在走 `teamMembers.listByTeams`。这里把整表读改成抛错，证明读路径真的换掉了：
+ * 若还有人偷偷 `list()`，用例立刻红，而不是等云端配额告警才发现。
+ */
+test('球队详情与报名名单按队下推，不做全协会队员整表读', async () => {
+  const repo = fixture();
+  const teamId = await activeTeam(repo);
+  const forScope = repo.forScope.bind(repo);
+  repo.forScope = (scope) => {
+    const surface = forScope(scope);
+    surface.teamMembers.list = () => { throw new Error('不应读取全协会队员'); };
+    return surface;
+  };
+
+  const detail = await call(repo, 'getTeam', { teamId }, { actor: 'u_leader' });
+  assert.equal(detail.ok, true, detail.message);
+  assert.ok(detail.members.length >= 1, '队长应当在名单里');
+  // 报名名单（team-event-service）走同一个原语，由团队赛报名用例覆盖；
+  // 这里只钉「详情页不再整表读」这一条，避免两处各写一份夹具。
+});

@@ -238,10 +238,18 @@ Component({
         if (request !== this.request) return;
         this.viewer = view.context.viewer;
         this.members = view.context.members.map(m => ({ id: m.userId, name: m.nickName || m.userId, realName: m.realName }));
+        // 【成员名单不进视图层】（2026-10-29 第十一轮审计 P3）
+        // `view.context` 带着**全校**在册成员（2000 人的学校就是 2000 行对象），
+        // 而模板一处都没用到它——只有 `this.members` 这张 id→姓名表需要。整份塞进
+        // setData 等于每次刷新都跨线程搬一次全量名册，白白拖慢首屏。这里保留
+        // viewer/canRecord 等标量，把 members 清空；续页要用的原件存在实例属性上，
+        // 不进 data（组件重渲染不需要它）。
+        this.viewContext = view.context || null;
         this.loaded = true;
         const records = view.records || [];
+        const viewForData = { ...view, context: { ...view.context, members: [] } };
         this.setData({
-          loading: false, error: '', switching: false, view, auth: view.auth,
+          loading: false, error: '', switching: false, view: viewForData, auth: view.auth,
           entryHint: this.describeEntry(view.auth), demoSchool: false, demoSchoolName: '', themeClass: currentThemeClass(),
           // 换标签 / 下拉刷新后回到第一屏：用户这一段要看的是「最近发生了什么」，
           // 不该记住上次翻到第几屏
@@ -254,6 +262,8 @@ Component({
       } catch (error) {
         if (request !== this.request) return;
         this.viewer = null;
+        // 上下文跟着清：否则换协会/换学校失败后，续页会拿着上一份名册去解析姓名
+        this.viewContext = null;
         this.loaded = true;
         this.setData({ loading: false, switching: false, view: {}, auth: { loggedIn: false, canRecord: false },
           error: error.message || '比赛数据加载失败，请下拉重试', themeClass: currentThemeClass(),
@@ -322,7 +332,7 @@ Component({
         try {
           // 复用上一页的上下文：续页不该再为「姓名映射」把全校名录读一遍
           const view = await loadSchoolMatchView(this.api, this.currentTab, {
-            cursor: nextCursor, context: this.data.view && this.data.view.context,
+            cursor: nextCursor, context: this.viewContext,
           });
           const merged = [...all, ...(view.records || [])];
           this.setData({

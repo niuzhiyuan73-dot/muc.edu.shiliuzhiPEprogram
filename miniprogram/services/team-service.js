@@ -360,7 +360,9 @@ async function getTeam(payload = {}, ctx) {
   if (!team) return ok(refused('球队不存在，或不在本协会'));
 
   const manage = canManageTeam(ctx, team, ctx.actorId);
-  const rows = (await ctx.repo.forScope(ctx).teamMembers.list()).filter(row => row.teamId === team._id);
+  // 按队下推（2026-10-29 第十一轮审计 P3）：原先是把本协会全部队员读回来再
+  // filter，球队越多越亏；`listByTeams` 走 teamId 条件查询，只取这一队。
+  const rows = await ctx.repo.forScope(ctx).teamMembers.listByTeams([team._id]);
   const membership = rows.find(row => row.userId === ctx.actorId);
 
   const visible = rows
@@ -755,7 +757,9 @@ async function getCollegeTeam(payload = {}, ctx) {
   const team = await ensureCollegeTeam(ctx, collegeId, dir);
   if (!team) return ok(refused('学院代表队初始化失败，请稍后重试'));
 
-  const rows = (await ctx.repo.forScope(ctx).teamMembers.list()).filter(row => row.teamId === team._id);
+  // 按队下推（2026-10-29 第十一轮审计 P3）：原先是把本协会全部队员读回来再
+  // filter，球队越多越亏；`listByTeams` 走 teamId 条件查询，只取这一队。
+  const rows = await ctx.repo.forScope(ctx).teamMembers.listByTeams([team._id]);
   const manage = canManageTeam(ctx, team, ctx.actorId);
   const membership = rows.find(row => row.userId === ctx.actorId);
   const active = rows.filter(row => isActiveMember(row));
