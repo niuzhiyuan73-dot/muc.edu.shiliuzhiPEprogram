@@ -86,6 +86,8 @@ const MANIFEST = [
   'services/school-overview-reads.js',
   // 赛事 / 学院赛列表的受控分页（第十一轮补漏：两端共用，云端与 mock 同一份）
   'services/event-list-page.js',
+  // 赛季积分物化（第十三轮）：写路径重算、读路径按代际回退实时聚合
+  'services/season-points.js',
   'services/team-profile-data.js',
   // 身份业务编排依赖注入仓储，不直接引用 wx、Node 或云 SDK。
   'services/school-context.js',

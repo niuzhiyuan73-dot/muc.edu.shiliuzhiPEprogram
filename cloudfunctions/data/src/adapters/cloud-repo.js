@@ -574,6 +574,10 @@ function buildCollections(scope, inTx, cmd) {
     seasons: {
       get: (id) => readDoc(scope, COLLECTIONS.seasons, id),
       set: (id, doc) => col('seasons').doc(id).set({ data: withoutId(doc) }),
+      // 赛季文档的局部更新：积分物化只写 `pointsSettledVersion` 一个字段
+      // （2026-10-29 第十三轮，见 lib/services/season-points.js）。整份 set 会把
+      // 「读到的 version」一并写回，把并发写推高的代际覆盖成旧值。
+      update: (id, patch) => col('seasons').doc(id).update({ data: withoutId(patch) }),
     },
 
 
@@ -741,6 +745,14 @@ function buildCollections(scope, inTx, cmd) {
       return readWhere(scope, COLLECTIONS[key], { eventId }, cmd);
     };
   }
+
+  // 会员行的局部更新：赛季积分物化只写 `seasonPoints` 三个字段
+  // （2026-10-29 第十三轮，见 lib/services/season-points.js）。
+  // 【为什么不复用 set】`set` 是整行覆盖：会员行同时承载学籍、学院、在册状态，
+  // 用「请求开头读到的那份行」整行写回，会把并发发生的学籍变更抹掉。
+  // 【为什么必须写在这里】attachSchoolRepository 会用 `{getById,set,list}`
+  // **重建** SCHOOL_COLLECTIONS 里每个集合对象，写在它前面会被整个盖掉。
+  repo.schoolMembers.update = (id, patch) => col('schoolMembers').doc(id).update({ data: withoutId(patch) });
 
   return repo;
 }

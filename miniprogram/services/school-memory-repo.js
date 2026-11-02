@@ -60,6 +60,21 @@ function createSchoolMemoryRepo(seed = {}) {
       };
     }
     repo.memberships.get = repo.memberships.getById;
+    // 赛季文档的局部更新（与云端同口径）：积分物化只写 `pointsSettledVersion`，
+    // 不整份覆盖——整份 set 会把读到的旧 version 写回去。
+    repo.seasons.update = async (id, patch) => {
+      const cur = getState().seasons.get(id);
+      if (!cur) throw new Error('记录不存在或不属于当前范围');
+      getState().seasons.set(id, clone({ ...cur, ...patch, _id: id }));
+    };
+    // 会员行的局部更新（与云端 cloud-repo 的 schoolMembers.update 同口径）：
+    // 赛季积分物化只写补丁字段，不整行覆盖学籍与学院
+    // （2026-10-29 第十三轮，见 services/season-points.js）。
+    repo.schoolMembers.update = async (id, patch) => {
+      const cur = getState().schoolMembers.get(id);
+      if (!cur) throw new Error('记录不存在或不属于当前范围');
+      getState().schoolMembers.set(id, clone({ ...cur, ...patch, _id: id }));
+    };
     // 按一批 userId 取账号：与云端 listByIds 同口径（云端非事务走 `_.in` 批查、
     // 事务内退化为逐条点读；这里两者都是点取）。业务用它替掉「读全平台 users
     // 再建 Map」——users 是平台级集合，全表读会随别校用户增长而变慢

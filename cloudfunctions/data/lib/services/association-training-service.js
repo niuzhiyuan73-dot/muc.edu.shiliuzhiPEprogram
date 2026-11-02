@@ -47,6 +47,10 @@ const {
 } = require('../utils/constants.js');
 // 签到状态与训练积分事实同源（training-points.js），避免两处各写一份状态机常量。
 const { ATTENDANCE_STATUS } = require('./training-points.js');
+// 积分事实一变就要推赛季代际并重算物化值（2026-10-29 第十三轮，见 season-points.js）。
+// 单人事实（确认 / 撤销 / 移除）走增量：一条事实固定 ±1，直接在第 1 格上加减，
+// 不重算——签到确认是高频动作，整份重算会把读放大搬到写路径。
+const { applyTrainingFactDelta, bumpSeasonVersion, refreshAfterWrite } = require('./season-points.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -597,8 +601,12 @@ async function cancelTraining(payload = {}, ctx) {
     await tx.audit.append({ _id: trainingAuditKey(doc._id, 'cancelTraining', next.revision),
       action: 'cancelTraining', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, trainingId: doc._id, reason: reason.value, at: nowIso });
+    // 取消训练会让本条训练下**所有**已确认签到失效（见 training-points.js）：
+    // 积分事实批量消失，代际必须在同一事务里推。
+    await bumpSeasonVersion(tx, fresh, fresh.now);
     return { ok: true, training: trainingSummary(next, fresh.now.getTime()), message: '' };
   });
+  if (result && result.ok) await refreshAfterWrite(ctx);
   return ok(result);
 }
 
@@ -731,6 +739,8 @@ async function removeTrainingRegistration(payload = {}, ctx) {
   if (typeof payload.userId !== 'string' || !payload.userId) return ok(refused('缺少目标成员'));
   const reason = text(payload.reason, 200, { label: '移除原因' });
   if (!reason.ok) return ok(refused(reason.message));
+  let pointsChanged = false;
+  let pointsNeedRefresh = false;
 
   const result = await ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);
@@ -754,8 +764,19 @@ async function removeTrainingRegistration(payload = {}, ctx) {
       action: 'removeTrainingRegistration', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, trainingId: training._id, targetUserId: payload.userId,
       reason: reason.value, at: nowIso });
+    // 移除「已确认签到」的报名才会撤掉一条积分事实；pending / 未提交的移除不动分，
+    // 别为它们白跑一次重算。
+    if ((reg.attendanceStatus || ATTENDANCE_STATUS.NOT_SUBMITTED) === ATTENDANCE_STATUS.CONFIRMED) {
+      const settled = await applyTrainingFactDelta(tx, fresh, {
+        userId: payload.userId, delta: -1,
+        effectiveAt: reg.pointEffectiveAt || training.startAt,
+      });
+      pointsChanged = settled.applied;
+      pointsNeedRefresh = settled.needsRefresh;
+    }
     return { ok: true, training: trainingSummary(next, fresh.now.getTime()), message: '' };
   });
+  if (result && result.ok && (pointsChanged || pointsNeedRefresh)) await refreshAfterWrite(ctx);
   return ok(result);
 }
 
@@ -827,6 +848,7 @@ async function confirmTrainingCheckIn(payload = {}, ctx) {
   if (!ctx.actorId) return ok(refused('请先登录'));
   if (typeof payload.trainingId !== 'string' || !payload.trainingId) return ok(refused('缺少训练编号'));
   if (typeof payload.userId !== 'string' || !payload.userId) return ok(refused('缺少目标成员'));
+  let pointsNeedRefresh = false;
 
   const result = await ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);
@@ -876,9 +898,16 @@ async function confirmTrainingCheckIn(payload = {}, ctx) {
     await tx.audit.append({ _id: signupAuditKey(key, 'confirmTrainingCheckIn', next.revision),
       action: 'confirmTrainingCheckIn', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, trainingId: training._id, targetUserId: payload.userId, at: nowIso });
+    // 确认签到 = 多一条 +1 的训练积分事实：同一事务里增量加减（见 season-points.js），
+    // 物化值不干净时才退回整次重算。
+    const settled = await applyTrainingFactDelta(tx, fresh, {
+      userId: payload.userId, delta: 1, effectiveAt: training.startAt,
+    });
+    pointsNeedRefresh = settled.needsRefresh;
     return { ok: true, registration: myRegistrationDTO(next),
       training: trainingSummary(training, fresh.now.getTime()), message: '' };
   });
+  if (result && result.ok && pointsNeedRefresh) await refreshAfterWrite(ctx);
   return ok(result);
 }
 
@@ -930,6 +959,7 @@ async function revokeTrainingCheckIn(payload = {}, ctx) {
   if (!ctx.actorId) return ok(refused('请先登录'));
   if (typeof payload.trainingId !== 'string' || !payload.trainingId) return ok(refused('缺少训练编号'));
   if (typeof payload.userId !== 'string' || !payload.userId) return ok(refused('缺少目标成员'));
+  let pointsNeedRefresh = false;
   const reason = text(payload.reason, 200, { required: true, label: '撤销原因' });
   if (!reason.ok) return ok(refused(reason.message));
 
@@ -956,9 +986,15 @@ async function revokeTrainingCheckIn(payload = {}, ctx) {
       action: 'revokeTrainingCheckIn', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, trainingId: training._id, targetUserId: payload.userId,
       reason: reason.value, at: nowIso });
+    // 撤销确认 = 撤回一条训练积分事实：同一事务里 −1，物化值不干净时退回整次重算。
+    const settled = await applyTrainingFactDelta(tx, fresh, {
+      userId: payload.userId, delta: -1, effectiveAt: training.startAt,
+    });
+    pointsNeedRefresh = settled.needsRefresh;
     return { ok: true, registration: myRegistrationDTO(next),
       training: trainingSummary(training, fresh.now.getTime()), message: '' };
   });
+  if (result && result.ok && pointsNeedRefresh) await refreshAfterWrite(ctx);
   return ok(result);
 }
 

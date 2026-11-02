@@ -30,6 +30,7 @@ const { legacyActorOf, legacyRoleOf, buildDirectory, actorDirectory } = require(
 const { permissionOf, permissionLabelOf, canSchoolAction } = require('./school-permission.js');
 const { displayRating } = require('./school-rating-service.js');
 const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = require('./school-points-service.js');
+const { settledPointsOf, isSettled } = require('./season-points.js');
 const { buildTrainingPointFacts } = require('./training-points.js');
 const { buildProjectLeaderboard, percentileFromBoard } = require('../utils/leaderboard.js');
 const { getPoolRating } = require('../utils/rating.js');
@@ -153,12 +154,27 @@ async function loadSeason(ctx) {
  * @returns {Promise<Array<Object>>}
  */
 async function replayMembersOf(ctx) {
-  const rows = await ctx.repo.forScope(ctx).schoolMembers.list();
+  return membersOfRows(ctx, await ctx.repo.forScope(ctx).schoolMembers.list());
+}
+
+/**
+ * 已经读出来的会员行 → 榜单口径的会员视图。
+ *
+ * 与 `replayMembersOf` 分成两步，是为了让「积分物化在会员行上」这件事少读一次：
+ * 榜单视图要拿这批行里的 `seasonPoints`（见 season-points.js），而它们本来
+ * 就要读——先读行、再决定要不要读三份积分事实，比先猜再读省一轮。
+ *
+ * @param {Object} ctx
+ * @param {Array<Object>} rows `schoolMembers` 文档
+ * @returns {Promise<Array<Object>>}
+ */
+async function membersOfRows(ctx, rows) {
+  const list = Array.isArray(rows) ? rows : [];
   // 账号按在册成员编号批量取：users 是平台级集合，list() 会连别校账号一起读，
   // 读量随平台总用户数增长（2026-10-21 审查 P0-1）。
-  const users = await ctx.repo.users.listByIds(rows.map(row => row.userId));
+  const users = await ctx.repo.users.listByIds(list.map(row => row.userId));
   const userById = new Map(users.map(user => [user._id, user]));
-  return rows
+  return list
     .map(row => viewMemberOf(row, userById.get(row.userId), ctx.schoolId))
     .filter(Boolean);
 }
@@ -257,15 +273,26 @@ async function loadScopeView(ctx, options = {}) {
   // 只读不写也要 33 页 RPC（训练报名 30 + 赛事 2 + 训练 1）。
   // 传 false 时跳过这三处，`member.points` 保持 undefined（不是 0——0 会被
   // 页面当成「这个人是零分」，而实际是「这次没算」）。
+  // 【积分物化在会员行上】（2026-10-29 第十三轮）
+  // 赛季跟得上事实（`pointsSettledVersion === version`）时，积分就在榜单本来
+  // 就要读的那批会员行的 `seasonPoints` 字段里——**零额外读**。
+  // events / trainings / trainingRegistrations 只在这两种情况下才读：
+  //   · 未结算（首次上线、刚写过库、并发写）→ 回退实时聚合；
+  //   · `needMatches`（要算 pointFacts 把赛事分挂到比赛流水上）。
+  const settled = needPoints && isSettled(season);
+  const needEventRows = needMatches || (needPoints && !settled);
+  const needPointRows = needPoints && !settled;
   const empty = Promise.resolve([]);
-  const [members, matches, ratingDocs, events, trainings, trainingRegistrations] = await Promise.all([
-    replayMembersOf(ctx),
+  const [memberRows, matches, ratingDocs, events, trainings, trainingRegistrations] = await Promise.all([
+    ctx.repo.forScope(ctx).schoolMembers.list(),
     needMatches ? ctx.repo.forScope(ctx).matches.list() : empty,
     ctx.repo.forScope(ctx).memberRatings.list(),
-    needPoints ? ctx.repo.forScope(ctx).events.list() : empty,
-    needPoints ? ctx.repo.forScope(ctx).associationTrainings.list() : empty,
-    needPoints ? registrationsOf() : empty,
+    needEventRows ? ctx.repo.forScope(ctx).events.list() : empty,
+    needPointRows ? ctx.repo.forScope(ctx).associationTrainings.list() : empty,
+    needPointRows ? registrationsOf() : empty,
   ]);
+  const members = await membersOfRows(ctx, memberRows);
+  const settledPoints = settled ? settledPointsOf(season, memberRows) : null;
 
   // ── 评级：按「userId|pool」建索引；缺档按性别兜底，读请求不写库 ──
   const ratingByKey = new Map(ratingDocs.map(doc => [`${doc.userId}|${doc.pool}`, doc]));
@@ -285,7 +312,7 @@ async function loadScopeView(ctx, options = {}) {
   // ── 积分：独立聚合（赛事 + 训练），赛事分挂到各人最后一场 ──
   mountEventPointDeltas(ratedMatches, pointFacts);
   if (needPoints) {
-    const pointsByUser = aggregatePoints({
+    const pointsByUser = settledPoints || aggregatePoints({
       events,
       trainings,
       trainingRegistrations,
@@ -321,12 +348,23 @@ async function loadScopeView(ctx, options = {}) {
 async function loadProfileFacts(ctx, userId) {
   const scopeRepo = ctx.repo.forScope(ctx);
   const season = await loadSeason(ctx);
-  const [events, trainings, registrations] = await Promise.all([
+  // 会员行与赛事并行读：行上带着物化积分（见 season-points.js），
+  // 结算跟得上事实时就不必再读训练与签到。
+  const [events, memberRows] = await Promise.all([
     scopeRepo.events.list(),
+    scopeRepo.schoolMembers.listByIds([schoolMemberKey(userId, ctx.schoolId)]),
+  ]);
+  const pointFacts = collectEventPointFacts({ events, resetTime: season.resetTime });
+
+  const settled = settledPointsOf(season, memberRows);
+  // 结算跟得上、且这个人确实有会员行 → 直接用物化值
+  if (settled && settled.has(userId)) {
+    return { season, events, pointFacts, points: settled.get(userId) || 0 };
+  }
+  const [trainings, registrations] = await Promise.all([
     scopeRepo.associationTrainings.list(),
     scopeRepo.trainingRegistrations.listByUser(userId),
   ]);
-  const pointFacts = collectEventPointFacts({ events, resetTime: season.resetTime });
   const pointsByUser = aggregatePoints({
     events,
     trainings,
@@ -745,21 +783,26 @@ async function statsOfMembers(ctx, userIds, { ratingsOnly }) {
 
   if (ratingsOnly || members.length === 0) return members.map(member => memberStatsRow(member));
 
-  const [season, events, trainings, registrations] = await Promise.all([
-    loadSeason(ctx),
-    scope.events.list(),
-    scope.associationTrainings.list(),
-    // 只增不减的集合：按人下推，只回这几个人自己的签到记录
-    Promise.all(userIds.map(userId => scope.trainingRegistrations.listByUser(userId)))
-      .then(rows => rows.flat()),
-  ]);
-  const pointsByUser = aggregatePoints({
-    events,
-    trainings,
-    trainingRegistrations: registrations,
-    resetTime: season.resetTime,
-    members: members.map(member => ({ userId: member._id })),
-  });
+  // 【物化优先】（2026-10-29 第十三轮）：积分就在上面那批会员行里，跟得上事实
+  // 时**一次额外读都不发**；只有脏了才回退「读三份事实 + 按人下推签到」。
+  const season = await loadSeason(ctx);
+  let pointsByUser = settledPointsOf(season, memberRows);
+  if (!pointsByUser) {
+    const [events, trainings, registrations] = await Promise.all([
+      scope.events.list(),
+      scope.associationTrainings.list(),
+      // 只增不减的集合：按人下推，只回这几个人自己的签到记录
+      Promise.all(userIds.map(userId => scope.trainingRegistrations.listByUser(userId)))
+        .then(rows => rows.flat()),
+    ]);
+    pointsByUser = aggregatePoints({
+      events,
+      trainings,
+      trainingRegistrations: registrations,
+      resetTime: season.resetTime,
+      members: members.map(member => ({ userId: member._id })),
+    });
+  }
   for (const member of members) member.points = pointsByUser.get(member._id) || 0;
   return members.map(member => memberStatsRow(member));
 }
@@ -1055,6 +1098,9 @@ async function resetSchoolSeason(payload = {}, ctx) {
       },
     };
   });
+  // 重置**不做**即时重算（2026-10-29 第十三轮）：代际已经 +1，读取端从此回退实时
+  // 聚合，分数正确；而此刻重算要把全校会员行按「旧分 → 0」逐行写一遍，等于用
+  // 几百次写换一次读。下一次结算/签到确认会顺手把旧分与旧锚点清掉。
   return ok(result);
 }
 

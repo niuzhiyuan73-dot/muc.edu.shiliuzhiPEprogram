@@ -65,6 +65,18 @@ const memberStats = async (repo, opts) => {
   return result.members[0];
 };
 
+/**
+ * 直写积分事实（绕过业务写路径）之后必须补一次代际。
+ *
+ * 赛季积分物化在会员行上（season-points.js）：真实写路径（结算、签到确认/撤销、
+ * 取消训练）在事务里推 `seasons.version`，读取端据此判断物化值是否落后。测试若
+ * 直接把「已结束赛事」塞进仓储，就必须自己补这一步——否则读到的是旧物化值。
+ */
+async function bumpPointsVersion(repo) {
+  const { bumpSeasonVersion } = require('../miniprogram/services/season-points.js');
+  await repo.transaction(tx => bumpSeasonVersion(tx, { schoolId: 'muc', association: 'pkb' }, NOW));
+}
+
 test('T20 训练积分按范围隔离：民大匹克球签到不动民大羽球与北航积分', async () => {
   const repo = fixture();
   await confirmedCheckIn(repo, 'r1', { startAt: at(HOUR) });
@@ -154,6 +166,8 @@ test('积分合计一致：赛事名次 + 训练签到的总分在统计 / 个�
     startTime: at(-3 * 24 * HOUR), finishedAt: at(-2 * 24 * HOUR),
     results: [{ userId: 'demo_muc_member', placement: 1 }, { userId: 'demo_muc_admin', placement: 2 }],
   });
+  // 直写事实后补代际，模拟 finishSchoolEvent 事务里的那一步
+  await bumpPointsVersion(repo);
 
   const stats = await call(repo, 'getSchoolMemberStats', { userIds: ['demo_muc_member'] },
     { actor: 'demo_muc_member' });

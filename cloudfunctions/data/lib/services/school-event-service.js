@@ -40,6 +40,7 @@
 
 const { buildSchoolContext } = require('./school-context.js');
 const { loadColleges } = require('./college-directory.js');
+const { bumpSeasonVersion, refreshAfterWrite } = require('./season-points.js');
 const {
   canReadAssociationSpace, canManageAssociationSpace, canParticipateInAssociation,
 } = require('./association-space-permission.js');
@@ -958,8 +959,13 @@ async function finishSchoolEvent(payload = {}, ctx) {
     await tx.audit.append({ _id: eventAuditKey(doc._id, 'finishEvent', next.revision),
       action: 'finishEvent', schoolId: ctx.schoolId, association: ctx.association,
       actorId: ctx.actorId, eventId: doc._id, at: nowIso });
+    // 名次一落库，赛季积分的事实就变了：同一事务里把物化代际 +1
+    // （2026-10-29 第十三轮：赛季积分物化）。事务外再重算物化表；重算失败也只是让读取端
+    // 回退实时聚合，不会读错分。
+    await bumpSeasonVersion(tx, ctx, ctx.now);
     return { ok: true, event: eventSummary(next), results: checked.results, message: '' };
   });
+  if (result && result.ok) await refreshAfterWrite(ctx);
   return ok(result);
 }
 
