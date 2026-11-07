@@ -19,6 +19,7 @@
  */
 
 const { TEAM_MATCH_STATUS, BRACKET_STAGE } = require('./constants.js');
+const { compareCode } = require('./text-order.js');
 
 /**
  * 这一场是否已定局：已发布即定局。
@@ -129,7 +130,7 @@ function computeTeamTable({ entries, matches } = {}) {
         (h2h.get(y.teamId) - h2h.get(x.teamId))
         || (y.diff - x.diff)
         || (y.pointsFor - x.pointsFor)
-        || String(x.teamId).localeCompare(String(y.teamId))
+        || compareCode(x.teamId, y.teamId)
       ));
       group.forEach((row, index) => {
         rowList[start + index] = row;

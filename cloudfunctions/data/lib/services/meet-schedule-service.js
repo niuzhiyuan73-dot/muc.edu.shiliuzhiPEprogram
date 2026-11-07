@@ -32,6 +32,7 @@ const { loadColleges } = require('./college-directory.js');
 const {
   touchEvent, liveMeet, scheduleRevisionOf, unchangedScheduleRevision,
 } = require('./meet-consistency.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // DTO 补 ok:true，与其余三域同形（见 meet-service.js 的说明）。
 const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? true : data.ok } });
@@ -115,7 +116,7 @@ async function listSessions(repo, ctx) {
         ? Date.parse(String(a.startAt).replace(' ', 'T')) : Number.MAX_SAFE_INTEGER;
       const tb = Number.isFinite(Date.parse(String(b.startAt || '').replace(' ', 'T')))
         ? Date.parse(String(b.startAt).replace(' ', 'T')) : Number.MAX_SAFE_INTEGER;
-      return ta - tb || String(a._id).localeCompare(String(b._id));
+      return ta - tb || compareCode(a._id, b._id);
     });
 }
 

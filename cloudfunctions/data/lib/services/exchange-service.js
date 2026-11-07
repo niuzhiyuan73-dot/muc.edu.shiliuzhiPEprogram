@@ -657,7 +657,7 @@ async function getExchangeEvents(_payload, ctx) {
     const event = await ctx.repo.exchangeEvents.getById(invitation.eventId);
     if (canSee(event, ctx)) events.push(summary(event));
   }
-  return ok({ ok: true, events: events.sort((a, b) => a.startTime.localeCompare(b.startTime)), message: '' });
+  return ok({ ok: true, events: events.sort((a, b) => (a.startTime < b.startTime ? -1 : a.startTime > b.startTime ? 1 : 0)), message: '' });
 }
 
 /** 管理员按已接受邀请的学校搜索裁判；每次只返回一页。 */

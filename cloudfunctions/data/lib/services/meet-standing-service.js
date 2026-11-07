@@ -20,6 +20,7 @@ const {
   meetReadable, canManageMeet,
 } = require('./meet-permission.js');
 const { listAliveEvents } = require('../utils/meet-scope.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // DTO 补 ok:true，与其余三域同形（见 meet-service.js 的说明）。
 const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? true : data.ok } });
@@ -96,7 +97,7 @@ async function getMeetStandings(payload = {}, ctx) {
       || b.gold - a.gold
       || b.silver - a.silver
       || b.bronze - a.bronze
-      || String(a.collegeId).localeCompare(String(b.collegeId)));
+      || compareCode(a.collegeId, b.collegeId));
 
   // 竞赛排名 1,2,2,4：比较键完全相同的学院并列
   const ranked = [];
@@ -163,7 +164,7 @@ async function getMyMeetHonors(payload = {}, ctx) {
       };
     })
     .sort((a, b) => a.rank - b.rank
-      || String(b.publishedAt).localeCompare(String(a.publishedAt))
+      || compareCode(b.publishedAt, a.publishedAt)
       || String(a.name).localeCompare(String(b.name)));
 
   const summary = {

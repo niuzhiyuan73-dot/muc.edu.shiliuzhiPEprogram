@@ -33,6 +33,7 @@
 const { compareMeasure } = require('./meet-measure.js');
 const { bracketSizeOf, standardSeedOrder } = require('../utils/bracket.js');
 const { DEFAULT_LANE_CAPACITY } = require('./meet-event-catalog.js');
+const { compareCode } = require('../utils/text-order.js');
 
 /**
  * 每组人数（径赛道数）的兜底值。
@@ -237,7 +238,7 @@ function bracketStandings({ entries = [], totalRounds = 1, matches = [] } = {}) 
     if (!round) continue;
     rows.push({ entryKey, rank: Math.pow(2, total - round) + 1 });
   }
-  rows.sort((a, b) => a.rank - b.rank || String(a.entryKey).localeCompare(String(b.entryKey)));
+  rows.sort((a, b) => a.rank - b.rank || compareCode(a.entryKey, b.entryKey));
   return { ok: true, champion, rows, pending: [] };
 }
 
@@ -314,7 +315,7 @@ function roundRobinStandings({ entries = [], matches = [] } = {}) {
       }
     }
     const ordered = [...group].sort((a, b) => inner.get(b) - inner.get(a)
-      || String(a).localeCompare(String(b)));
+      || compareCode(a, b));
     let lastInner = null;
     let lastRank = 0;
     ordered.forEach((entryKey, index) => {
@@ -490,7 +491,7 @@ function groupKnockoutStandings({
     if (ranked.has(entryKey)) continue;
     rows.push({ entryKey, rank: size + 1, stage: 'group' });
   }
-  rows.sort((a, b) => a.rank - b.rank || String(a.entryKey).localeCompare(String(b.entryKey)));
+  rows.sort((a, b) => a.rank - b.rank || compareCode(a.entryKey, b.entryKey));
   return { ok: true, rows, champion: bracket.champion, qualified, pending: [] };
 }
 

@@ -31,6 +31,20 @@ const AUDIENCE_MODE = Object.freeze({
 const GROUP_ID_PATTERN = /^[a-zA-Z0-9_-]{1,64}$/;
 
 /**
+ * 一次限制最多选几个小组。
+ *
+ * 【为什么必须有】（2026-11-07 审查 P2）报名事务里要**逐组**读本人关系
+ * （事务内不能整表查），命中的组还要再读+写一次提升 membershipRevision。
+ * 40 个组就是 80+ 个操作，加上下文与报名本身会撞 100 操作的事务预算——
+ * 表现为报名随机失败、报错还看不出原因。取 20：最坏 20 读 + 20 写 = 40，
+ * 留足余量。
+ *
+ * 【老数据怎么办】写入路径一律走这里，所以新数据一定在限内；历史超限的活动
+ * 读路径（`readAudience`）不做截断，避免悄悄改变「谁有资格报名」的口径。
+ */
+const AUDIENCE_GROUP_MAX = 20;
+
+/**
  * 把外部传入的限制字段规范化。用于**写入**：非法即拒绝。
  *
  * @param {Object} [payload] { audienceMode, audienceGroupIds }
@@ -62,6 +76,10 @@ function buildAudience(payload = {}) {
   }
   if (ids.length === 0) {
     return { ok: false, audienceMode: '', audienceGroupIds: [], message: '请至少选择一个小组' };
+  }
+  if (ids.length > AUDIENCE_GROUP_MAX) {
+    return { ok: false, audienceMode: '', audienceGroupIds: [],
+      message: `最多选择 ${AUDIENCE_GROUP_MAX} 个小组（当前 ${ids.length} 个）` };
   }
   return { ok: true, audienceMode: AUDIENCE_MODE.GROUPS, audienceGroupIds: ids, message: '' };
 }
@@ -113,6 +131,6 @@ function hitGroupIds(audience, activeGroupIds) {
 }
 
 module.exports = {
-  AUDIENCE_MODE, GROUP_ID_PATTERN,
+  AUDIENCE_MODE, GROUP_ID_PATTERN, AUDIENCE_GROUP_MAX,
   buildAudience, readAudience, audienceAllows, hitGroupIds,
 };

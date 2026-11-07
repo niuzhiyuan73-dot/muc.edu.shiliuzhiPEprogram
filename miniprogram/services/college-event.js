@@ -493,7 +493,7 @@ function sortCollegeEvents(events) {
     Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)) ||
     priority(a) - priority(b) ||
     (Date.parse(a.startTime) || 0) - (Date.parse(b.startTime) || 0) ||
-    String(a._id || '').localeCompare(String(b._id || '')));
+    (a._id || '') < (b._id || '') ? -1 : (a._id || '') > (b._id || '') ? 1 : 0);
 }
 
 module.exports = {

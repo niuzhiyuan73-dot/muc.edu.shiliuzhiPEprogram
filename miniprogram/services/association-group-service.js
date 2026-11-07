@@ -206,7 +206,8 @@ async function listAssociationGroups(payload = {}, ctx) {
     .map(row => row.groupId));
 
   const sorted = rows.slice().sort((a, b) =>
-    String(a.createdAt || '').localeCompare(String(b.createdAt || '')) || (a._id < b._id ? -1 : 1));
+    ((a.createdAt || '') < (b.createdAt || '') ? -1 : (a.createdAt || '') > (b.createdAt || '') ? 1 : 0)
+    || (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
   const after = typeof payload.cursor === 'string' ? payload.cursor : '';
   let start = 0;
   if (after) {

@@ -6,6 +6,7 @@ const { schoolKey } = require('../utils/school');
 const { teamSportStrategyFor } = require('../utils/team-sport-rules');
 const { normalizeFootballReport, scoreText, FIELDS } = require('../utils/football-report');
 const { TEAM_EVENT_STATUS_LABEL, TEAM_STATUS_LABEL, TEAM_MEMBER_STATUS_LABEL } = require('../utils/constants');
+const { compareCode } = require('../utils/text-order.js');
 const ok = data => ({ ok: true, data });
 const refused = message => ({ ok: false, message });
 const clone = value => JSON.parse(JSON.stringify(value));
@@ -290,7 +291,7 @@ async function getTeamEventPlayerStats(payload, ctx) {
   if (!validEvent(ctx, event) || event.status === 'draft') return ok(refused('赛事不存在或尚未发布'));
   const matches = publicMatches(await repo.teamMatches.listByEvent(event._id));
   const players = aggregate(matches);
-  const order = field => players.filter(p => p[field] !== null).sort((a, b) => b[field] - a[field] || a.userId.localeCompare(b.userId));
+  const order = field => players.filter(p => p[field] !== null).sort((a, b) => b[field] - a[field] || a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
   const completeCount = matches.filter(m => ['A', 'B'].every(s => m.footballPublished.sides[s].coverage.goals === 'full'
     && m.footballPublished.sides[s].coverage.ownGoals === 'full')).length;
   return ok({ ok: true, sportFormat: 'football11', players: order('goals'), scorers: order('goals'), assists: order('assists'),
@@ -342,7 +343,7 @@ async function getTeamRecord(payload, ctx) {
       placement: rank, placementText: placementText(rank), ...teamRecord(matchesByEvent.get(event._id) || [], team._id) };
   }).filter(Boolean);
   const recent = publicMatches(teamMatches).filter(m => [m.teamA, m.teamB].includes(team._id))
-    .sort((a, b) => String(b.matchTime || b.publishedAt || '').localeCompare(String(a.matchTime || a.publishedAt || '')))
+    .sort((a, b) => compareCode(b.matchTime || b.publishedAt, a.matchTime || a.publishedAt))
     .slice(0, 10).map(m => {
     const a = m.teamA === team._id; const mine = a ? m.scoreA : m.scoreB; const other = a ? m.scoreB : m.scoreA;
     const opponent = teamById.get(a ? m.teamB : m.teamA);

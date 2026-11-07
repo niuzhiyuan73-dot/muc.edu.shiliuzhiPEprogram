@@ -8,6 +8,7 @@ const { memoryDirectoryPage, memoryDirectoryCount } = require('./account-directo
 const { memoryPersonalPage } = require('./personal-sports-query.js');
 const { attachOverviewReads, memoryOverviewIO } = require('./school-overview-reads.js');
 const { pageOfCollection } = require('./event-list-page.js');
+const { compareCode } = require('../utils/text-order.js');
 /**
  * 带 eventId 的「从属集合」：按赛事取子集用 listByEvent（条件查询 + 索引），
  * 不整表读完再内存过滤。顶层与 forScope 两处都要提供，方法面与云端
@@ -192,7 +193,7 @@ function createSchoolMemoryRepo(seed = {}) {
               .filter(doc => owns(doc) && doc.status === status
                 && (!options.collegeId || doc.collegeId === options.collegeId)
                 && (!afterId || String(doc._id) > afterId))
-              .sort((a, b) => String(a._id).localeCompare(String(b._id)));
+              .sort((a, b) => compareCode(a._id, b._id));
             return { rows: rows.slice(0, limit).map(clone), hasMore: rows.length > limit };
           };
           result[key].countByStatus = async status => (await repo[key].list())
@@ -268,7 +269,7 @@ function createSchoolMemoryRepo(seed = {}) {
               .filter(hit)
               .sort((a, b) => Number(b.elo) - Number(a.elo)
                 || Number(b.wins || 0) - Number(a.wins || 0)
-                || String(a._id).localeCompare(String(b._id)))
+                || compareCode(a._id, b._id))
               .slice(0, limit);
           };
           result[key].countRanked = async (options = {}) => {

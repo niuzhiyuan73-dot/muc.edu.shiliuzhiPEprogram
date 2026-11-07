@@ -94,6 +94,31 @@ const ACTION_READ_COST = Object.freeze({
 });
 
 /**
+ * **写动作附带的整表读**（2026-11-07 审查 P3）。
+ *
+ * 【为什么写动作也要记读成本】积分物化让几个写动作在事务外重算：赛事结算、
+ * 取消训练要读「赛事 + 训练 + 全部签到 + 全部会员行」。这些读原本发生在每一次
+ * 打开榜单，现在挪到了写请求里——按「写恒为 1 点」记账，读配额被吃掉却看不见，
+ * 告警会一直滞后到配额打空。
+ *
+ * 【为什么是估值】入口拿不到真实读条数（要读完才知道）。这里给的是量级：
+ * 结算 ≈ 几十页（签到与会员行随历史增长），增量维护 ≈ 两行读写。
+ * 保守取值，避免误伤正常操作。
+ */
+const WRITE_READ_COST = Object.freeze({
+  // 结算要重算：赛事 + 训练 + 全部签到 + 全部会员行，还带一批行写入
+  finishSchoolEvent: 20,
+  // 取消训练令整场签到失效，同样走整次重算
+  cancelTraining: 20,
+  // 三条单人事实走增量（正常只读写一行）；物化脏了才退回整次重算
+  confirmTrainingCheckIn: 2,
+  revokeTrainingCheckIn: 2,
+  removeTrainingRegistration: 2,
+  // 重置只推代际、不重算
+  resetSchoolSeason: 1,
+});
+
+/**
  * 这一次请求该记几个成本点。
  *
  * `listSchoolMembers` 有两条便宜分支（只数 / 只取一页），它们各只花一次聚合或
@@ -197,20 +222,38 @@ function sweepDaily(day) {
  * @param {string} action
  * @param {number} nowMs
  * @param {boolean} anon 是否匿名桶（额度更严）
+ * @param {number} [extraRead] 写动作附带的读成本点（见 WRITE_READ_COST）
  * @returns {null|{message:string, kind:string, limit:number, scope:string}}
  */
-function guardDaily(key, kind, action, nowMs, anon, cost = 1) {
+function guardDaily(key, kind, action, nowMs, anon, cost = 1, extraRead = 0) {
   if (POLL_ACTIONS.has(action)) return null;
   const day = dayOf(nowMs);
   const limit = (anon ? ANON_DAILY_LIMITS : DAILY_LIMITS)[kind];
+  const readLimit = (anon ? ANON_DAILY_LIMITS : DAILY_LIMITS).read;
   let row = daily.get(key);
   if (!row || row.day !== day) {
     sweepDaily(day);
     row = { day, read: 0, write: 0 };
     daily.set(key, row);
   }
-  // 写动作恒为 1：它们的成本在事务预算里另有约束，且写比读稀有得多。
-  row[kind] += kind === 'read' ? Math.max(1, Math.floor(cost) || 1) : 1;
+  // 先把读成本记上（读动作按成本表，写动作按它附带的整表读）。
+  const readCost = (kind === 'read' ? Math.max(1, Math.floor(cost) || 1) : 0)
+    + Math.max(0, Math.floor(extraRead) || 0);
+  if (readCost > 0) {
+    row.read += readCost;
+    if (row.read > readLimit) {
+      return {
+        message: kind === 'write'
+          ? '今日读取配额已用尽（结算等操作会附带大量读取），请明天再试'
+          : '今日使用次数已达上限，请明天再试',
+        kind: 'read',
+        limit: readLimit,
+        scope: 'day',
+      };
+    }
+  }
+  // 写动作的「次数」恒为 1：真正的成本在事务预算与上面的读成本里。
+  if (kind === 'write') row.write += 1;
   if (row[kind] > limit) {
     return {
       message: kind === 'write'
@@ -244,6 +287,8 @@ function guardRate(openId, action, nowMs = Date.now(), meta = {}) {
   const cost = kind === 'read'
     ? (Number.isFinite(meta.cost) && meta.cost > 0 ? meta.cost : readCostOf(action, meta.payload))
     : 1;
+  // 写动作也可能带着整表读（物化重算），照实记到读预算里，见 WRITE_READ_COST。
+  const extraRead = kind === 'write' ? (WRITE_READ_COST[action] || 0) : 0;
   const nowSec = Math.floor(nowMs / WINDOW_MS);
   // 没有 OPENID ⇒ 按来源（CLIENTIP）分桶，拿不到 IP 时退回全站共享桶。
   const anon = !openId;
@@ -271,7 +316,7 @@ function guardRate(openId, action, nowMs = Date.now(), meta = {}) {
       limit,
     };
   }
-  return guardDaily(key, kind, action, nowMs, anon, cost);
+  return guardDaily(key, kind, action, nowMs, anon, cost, extraRead);
 }
 
 /** 仅供测试：清空计数，避免用例之间互相影响。 */
@@ -283,5 +328,5 @@ function resetRateLimit() {
 
 module.exports = {
   guardRate, resetRateLimit, kindOf, readCostOf, ACTION_READ_COST,
-  LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS, POLL_ACTIONS, dayOf,
+  LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS, POLL_ACTIONS, dayOf, WRITE_READ_COST,
 };

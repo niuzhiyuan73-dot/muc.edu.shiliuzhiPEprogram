@@ -44,6 +44,7 @@ const { computeTeamPlacements, isFinal } = require('../utils/team-standings.js')
 const football = require('./football-match-service');
 const footballSchedule = require('./football-schedule-service');
 const { matchMinutes: footballMatchMinutes } = require('../utils/football-report');
+const { compareCode } = require('../utils/text-order.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -328,7 +329,7 @@ async function listTeamEvents(payload = {}, ctx) {
       // 跨年前后 8 小时内建的赛事会归错年，本地与云端结果不一致。
       return displayYearOf(event.createdAt) === yearFilter;
     })
-    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')))
+    .sort((a, b) => compareCode(b.createdAt, a.createdAt))
     .map((event) => {
       const view = eventView(event, ctx, { manage, entryCount: countByEvent.get(event._id) });
       if (!view.isCollegeCup) return { ...view, canSubmit: false, myEntryStatusLabel: '' };
@@ -1269,7 +1270,7 @@ async function drawTeamEvent(payload = {}, ctx) {
 
   const entries = (await repo.teamEventEntries.listByEvent(event._id))
     .filter(entry => entry.status === TEAM_ENTRY_STATUS.LOCKED)
-    .sort((a, b) => String(a.teamId).localeCompare(String(b.teamId)));
+    .sort((a, b) => compareCode(a.teamId, b.teamId));
   if (entries.length < 2) return ok(refused('至少 2 支球队才能抽签'));
 
   const existingMatches = await repo.teamMatches.listByEvent(event._id);
@@ -2789,7 +2790,7 @@ async function getTeamEventPlayerStats(payload = {}, ctx) {
       const reboundA = a.rebounds === null ? -1 : a.rebounds;
       const reboundB = b.rebounds === null ? -1 : b.rebounds;
       return (pointsB - pointsA) || (reboundB - reboundA)
-        || String(a.userId).localeCompare(String(b.userId));
+        || compareCode(a.userId, b.userId);
     });
 
   return ok({ ok: true, players, matchCount: matches.length, message: '' });
@@ -2973,7 +2974,7 @@ async function getMyTeamProfile(payload = {}, ctx) {
       };
     })
     .filter(Boolean)
-    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    .sort((a, b) => compareCode(b.createdAt, a.createdAt));
 
   // 团队荣誉：只算前三名。第四名也是成绩，但「荣誉」在校园语境里就是冠亚季
   const honors = eventRows
@@ -3196,13 +3197,12 @@ async function getTeamRecord(payload = {}, ctx) {
       };
     })
     .filter(Boolean)
-    .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    .sort((a, b) => compareCode(b.createdAt, a.createdAt));
 
   // 近期战绩：只列已发布的，比分是定稿的那一版
   const recent = teamMatches
     .filter(match => match.status === TEAM_MATCH_STATUS.PUBLISHED)
-    .sort((a, b) => String(b.matchTime || b.recordedAt || '')
-      .localeCompare(String(a.matchTime || a.recordedAt || '')))
+    .sort((a, b) => compareCode(b.matchTime || b.recordedAt, a.matchTime || a.recordedAt))
     .slice(0, 10)
     .map((match) => {
       const isA = match.teamA === team._id;

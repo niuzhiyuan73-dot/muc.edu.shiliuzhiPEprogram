@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
-  AUDIENCE_MODE, buildAudience, readAudience, audienceAllows, hitGroupIds,
+  AUDIENCE_MODE, AUDIENCE_GROUP_MAX, buildAudience, readAudience, audienceAllows, hitGroupIds,
 } = require('../miniprogram/services/association-audience');
 
 test('buildAudience 缺省即「不限」，显式 all 也规范成空清单', () => {
@@ -58,4 +58,20 @@ test('AUDIENCE_MODE 常量冻结且取值稳定', () => {
   assert.equal(AUDIENCE_MODE.ALL, 'all');
   assert.equal(AUDIENCE_MODE.GROUPS, 'groups');
   assert.equal(Object.isFrozen(AUDIENCE_MODE), true);
+});
+
+test('一次限制最多 20 个小组：超出即拒绝，不是静默截断', () => {
+  const ids = Array.from({ length: AUDIENCE_GROUP_MAX }, (_, i) => `g${i}`);
+  const ok20 = buildAudience({ audienceMode: 'groups', audienceGroupIds: ids });
+  assert.equal(ok20.ok, true, '正好 20 个允许');
+  assert.equal(ok20.audienceGroupIds.length, AUDIENCE_GROUP_MAX);
+
+  const over = buildAudience({ audienceMode: 'groups', audienceGroupIds: [...ids, 'g-extra'] });
+  assert.equal(over.ok, false, '21 个必须拒绝');
+  assert.match(over.message, /最多选择 20 个小组/);
+  assert.deepEqual(over.audienceGroupIds, [], '拒绝时不回半份清单');
+
+  // 去重后才算数：重复的 30 个编号实际只有 20 个小组
+  const dup = buildAudience({ audienceMode: 'groups', audienceGroupIds: [...ids, ...ids] });
+  assert.equal(dup.ok, true, '重复编号先去重再判上限');
 });

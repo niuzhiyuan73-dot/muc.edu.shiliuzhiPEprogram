@@ -15,6 +15,7 @@
 
 const { getPoolRating } = require('./rating.js');
 const { RANK_PROJECT_CONFIG, RATING_POOL, isRankable } = require('./constants.js');
+const { compareCode } = require('./text-order.js');
 
 /** 长时间未参赛而被标记为「不活跃」的天数阈值 */
 const INACTIVE_DAYS = 90;
@@ -97,7 +98,7 @@ function buildLeaderboard(players, { sortBy = 'elo', now = Date.now() } = {}) {
     if (timeA !== timeB) return timeA - timeB;
 
     // 5. ID 兜底，保证排序结果稳定（同样的输入永远得到同样的顺序）
-    return String(a._id).localeCompare(String(b._id));
+    return compareCode(a._id, b._id);
   });
 
   // 写入名次。注意：名次是连续的，不因等级分相同而并列。
@@ -331,7 +332,7 @@ function buildProgressLeaderboard(entries, options = {}) {
     // 2. 涨幅相同时，当前分数高者靠前（同样涨 50 分，从 1400 涨到 1450 更难）
     if (b.currentElo !== a.currentElo) return b.currentElo - a.currentElo;
     // 3. ID 兜底，保证顺序稳定
-    return String(a._id).localeCompare(String(b._id));
+    return compareCode(a._id, b._id);
   });
 
   const ranked = qualified.map((e, index) => ({ ...e, rank: index + 1 }));

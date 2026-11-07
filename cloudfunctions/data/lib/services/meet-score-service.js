@@ -47,6 +47,7 @@ const { buildMeetContext, freshMeetContext } = require('./meet-context.js');
 const { collegeKey } = require('../utils/school.js');
 const { unchangedEvent, touchEvent, liveMeet, publishedRowsOf } = require('./meet-consistency.js');
 const { meetReadable, canManageMeet, canPublishMeetResult } = require('./meet-permission.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // DTO 补 ok:true，与其余三域同形（见 meet-service.js 的说明）。
 const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? true : data.ok } });
@@ -1101,7 +1102,7 @@ async function getPublishedResults(payload = {}, ctx) {
   });
   const rounds = mine
     .sort((a, b) => Number(a.official ? 1 : 0) - Number(b.official ? 1 : 0)
-      || String(a.sessionKey).localeCompare(String(b.sessionKey)))
+      || compareCode(a.sessionKey, b.sessionKey))
     .map((doc) => ({
       sessionKey: doc.sessionKey,
       round: doc.round,
@@ -1193,7 +1194,7 @@ async function listMeetPublishedResults(payload = {}, ctx) {
     if (!own || own.length === 0) continue;
     const rounds = own
       .sort((a, b) => Number(a.official ? 1 : 0) - Number(b.official ? 1 : 0)
-        || String(a.sessionKey).localeCompare(String(b.sessionKey)))
+        || compareCode(a.sessionKey, b.sessionKey))
       .map((doc) => ({
         sessionKey: doc.sessionKey,
         round: doc.round,

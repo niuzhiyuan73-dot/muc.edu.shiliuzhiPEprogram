@@ -27,7 +27,7 @@ const trainingHandlers = require('../miniprogram/services/association-training-s
 const rankHandlers = require('../miniprogram/services/school-rank-service');
 const eventHandlers = require('../miniprogram/services/school-event-service');
 const seasonPoints = require('../miniprogram/services/season-points');
-const { schoolMemberKey, scopeKey } = require('../miniprogram/utils/school');
+const { schoolMemberKey, scopeKey, memberRatingKey } = require('../miniprogram/utils/school');
 const { EVENT_STATUS, MATCH_TYPE } = require('../miniprogram/utils/constants');
 
 const HANDLERS = { ...trainingHandlers, ...rankHandlers, ...eventHandlers };
@@ -76,6 +76,31 @@ function trackReads(repo) {
   return counts;
 }
 
+/**
+ * 记录评级集合走了哪条路：整表 `list` 还是按编号 `listByIds`。
+ * 与 `tests/rank-read-budget.test.js` 同一手法——包装 forScope 返回的集合面。
+ */
+function spyRatings(repo) {
+  const calls = [];
+  const raw = repo.forScope;
+  repo.forScope = (input) => {
+    const surface = raw(input);
+    const collection = surface.memberRatings;
+    if (collection) {
+      for (const method of ['list', 'listByIds']) {
+        if (typeof collection[method] !== 'function') continue;
+        const original = collection[method];
+        collection[method] = (...args) => {
+          calls.push(method);
+          return original.apply(collection, args);
+        };
+      }
+    }
+    return surface;
+  };
+  return calls;
+}
+
 /** 数会员行写入次数：用来钉「只写变化的人」。 */
 function trackMemberWrites(repo) {
   let count = 0;
@@ -110,8 +135,8 @@ test('签到确认后积分落到会员行，榜单命中物化值且不再读�
   await confirmedCheckIn(repo, 'r1', { startAt: at(HOUR) });
 
   const row = await memberRow(repo);
-  assert.equal(row.seasonPoints, 1, '会员行上带着本赛季积分');
-  assert.equal(row.pointsAnchor, '', '从未重置时锚点为空串');
+  assert.equal(row.seasonPointsByAssociation.pkb, 1, '会员行上带着本赛季积分');
+  assert.equal(row.pointsAnchorByAssociation.pkb, '', '从未重置时锚点为空串');
   const season = await repo.seasons.getById(scopeKey(SCOPE));
   assert.equal(season.pointsSettledVersion, season.version, '物化已对齐代际');
 
@@ -164,24 +189,24 @@ test('重算用 update 合并：学籍字段不被覆盖', async () => {
 test('撤销确认把会员行清零；取消训练让该训练的分整体失效', async () => {
   const repo = fixture();
   const trainingId = await confirmedCheckIn(repo, 'r1', { startAt: at(HOUR) });
-  assert.equal((await memberRow(repo)).seasonPoints, 1);
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 1);
 
   const revoked = await call(repo, 'revokeTrainingCheckIn',
     { trainingId, userId: 'demo_muc_member', reason: '录错了' }, { now: new Date(at(2 * HOUR)) });
   assert.equal(revoked.ok, true, revoked.message);
-  assert.equal((await memberRow(repo)).seasonPoints, 0, '撤销后行上归零');
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 0, '撤销后行上归零');
 
   // 再确认一次，然后取消整场训练：分同样清零
   await call(repo, 'requestTrainingCheckIn', { trainingId },
     { actor: 'demo_muc_member', now: new Date(at(2 * HOUR)) });
   await call(repo, 'confirmTrainingCheckIn', { trainingId, userId: 'demo_muc_member' },
     { now: new Date(at(2 * HOUR)) });
-  assert.equal((await memberRow(repo)).seasonPoints, 1);
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 1);
 
   const canceled = await call(repo, 'cancelTraining', { trainingId, reason: '场地临时关闭' },
     { now: new Date(at(3 * HOUR)) });
   assert.equal(canceled.ok, true, canceled.message);
-  assert.equal((await memberRow(repo)).seasonPoints, 0, '取消训练后该训练不再计分');
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 0, '取消训练后该训练不再计分');
 });
 
 test('确认签到走增量维护：不整份重算，代际与行上的值同步前进', async () => {
@@ -201,7 +226,7 @@ test('确认签到走增量维护：不整份重算，代际与行上的值同�
     { trainingId, userId: 'demo_muc_member' }, { now: new Date(startAt) });
   assert.equal(confirmed.ok, true, confirmed.message);
 
-  assert.equal((await memberRow(repo)).seasonPoints, 1, '行上 +1');
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 1, '行上 +1');
   assert.deepEqual([counts.events, counts.trainings, counts.registrations], [0, 0, 0],
     '高频动作不重算：不读赛事 / 训练 / 签到');
   const season = await repo.seasons.getById(scopeKey(SCOPE));
@@ -239,7 +264,7 @@ test('重算按事务分批：45 个有分的人只开 2 次事务，而不是 4
   assert.equal(result.written, 45, '45 行都要写');
   assert.equal(txs, 2, '30 行一个事务，45 行 = 2 次');
   const rows = await Promise.all(ids.slice(0, 2).map(id => repo.schoolMembers.getById(schoolMemberKey(id, 'muc'))));
-  assert.ok(rows.every(row => row.seasonPoints > 0), '每行都拿到分');
+  assert.ok(rows.every(row => row.seasonPointsByAssociation.pkb > 0), '每行都拿到分');
 });
 
 test('赛事结算走真实写路径：会员行立刻有分，旧赛季锚点被换掉', async () => {
@@ -269,8 +294,8 @@ test('赛事结算走真实写路径：会员行立刻有分，旧赛季锚点�
   assert.equal(finished.ok, true, finished.message);
 
   const row = await memberRow(repo);
-  assert.ok(row.seasonPoints > 0, '结算后会员行立刻有分');
-  assert.equal(row.pointsAnchor, new Date(at(-10 * 24 * HOUR)).toISOString(), '锚点跟着赛季走');
+  assert.ok(row.seasonPointsByAssociation.pkb > 0, '结算后会员行立刻有分');
+  assert.equal(row.pointsAnchorByAssociation.pkb, new Date(at(-10 * 24 * HOUR)).toISOString(), '锚点跟着赛季走');
   const season = await repo.seasons.getById(scopeKey(SCOPE));
   assert.equal(season.pointsSettledVersion, season.version, '结算事务与重算对上了代际');
 
@@ -281,5 +306,167 @@ test('赛事结算走真实写路径：会员行立刻有分，旧赛季锚点�
   });
   const refreshed = await seasonPoints.refreshAssociationPoints(await ctxOf(repo));
   assert.ok(refreshed.cleared >= 1, '跨赛季的旧分被清掉');
-  assert.equal((await memberRow(repo)).seasonPoints, 0, '本赛季不再计这场');
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 0, '本赛季不再计这场');
+});
+
+test('同一学校两个协会各自物化：互不覆盖，也互不清零', async () => {
+  const repo = fixture();
+  const finished = (association, id, level) => ({
+    _id: id, schoolId: 'muc', association, title: id, status: EVENT_STATUS.FINISHED,
+    matchType: MATCH_TYPE.SINGLES, pool: 1, level,
+    startTime: at(-2 * HOUR), finishedAt: at(-HOUR),
+    results: [{ userId: 'demo_muc_member', placement: 1 }],
+  });
+  await repo.events.set('p_pkb', finished('pkb', 'p_pkb', 3)); // 三级 = 22
+  await repo.events.set('p_tt', finished('tt', 'p_tt', 1));    // 一级 = 82
+
+  const pkbCtx = await ctxOf(repo, { actor: 'demo_platform_admin', association: 'pkb' });
+  const ttCtx = await ctxOf(repo, { actor: 'demo_platform_admin', association: 'tt' });
+  await seasonPoints.refreshAssociationPoints(pkbCtx);
+  await seasonPoints.refreshAssociationPoints(ttCtx);
+
+  const row = await memberRow(repo);
+  assert.deepEqual(row.seasonPointsByAssociation, { pkb: 22, tt: 82 },
+    '两个协会各占一格，后写的不覆盖先写的');
+  assert.deepEqual(row.pointsAnchorByAssociation, { pkb: '', tt: '' });
+
+  const board = async (association) => {
+    const result = await call(repo, 'getSchoolMemberStats', { top: 5 },
+      { actor: 'demo_platform_admin', association });
+    return (result.top || []).find(item => item.userId === 'demo_muc_member');
+  };
+  assert.equal((await board('pkb')).points, 22, '匹克球榜读自己那格');
+  assert.equal((await board('tt')).points, 82, '羽毛球榜读自己那格');
+
+  // 再给羽毛球结算一场：匹克球那一格既不被覆盖，也不被清零
+  await repo.events.set('p_tt2', finished('tt', 'p_tt2', 3));
+  await seasonPoints.refreshAssociationPoints(ttCtx);
+  const after = await memberRow(repo);
+  assert.equal(after.seasonPointsByAssociation.pkb, 22, '另一协会的分不受影响');
+  assert.equal(after.seasonPointsByAssociation.tt, 104, '本协会继续累加（82 + 22）');
+  assert.equal((await board('pkb')).points, 22);
+});
+
+test('有会员行写失败时不对齐代际：读端回退实时聚合拿到正确值', async () => {
+  const repo = fixture();
+  const finished = (id) => ({
+    _id: id, schoolId: 'muc', association: 'pkb', title: id, status: EVENT_STATUS.FINISHED,
+    matchType: MATCH_TYPE.SINGLES, pool: 1, level: 1,
+    startTime: at(-2 * HOUR), finishedAt: at(-HOUR),
+    results: [{ userId: 'demo_muc_member', placement: 1 }],
+  });
+  await repo.events.set('e1', finished('e1'));
+  const ctx = await ctxOf(repo);
+  await seasonPoints.refreshAssociationPoints(ctx);
+  assert.equal((await memberRow(repo)).seasonPointsByAssociation.pkb, 82, '先物化一场');
+
+  // 事实变了（第二场），写路径会推代际；这里模拟「重算时批量写事务失败」
+  await repo.events.set('e2', finished('e2'));
+  await bumpPointsVersion(repo);
+
+  const originalTx = repo.transaction;
+  repo.transaction = async () => { throw new Error('模拟批量写事务失败'); };
+  let result;
+  try {
+    result = await seasonPoints.refreshAssociationPoints(ctx);
+  } finally {
+    repo.transaction = originalTx;
+  }
+
+  assert.ok(result.failed > 0, '失败行数要如实回报');
+  assert.equal(result.stale, true, '有失败就不算结算完成');
+  const season = await repo.seasons.getById(scopeKey(SCOPE));
+  assert.notEqual(season.pointsSettledVersion, season.version, '代际没有被对齐');
+
+  const stats = await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
+  const mine = (stats.top || []).find(item => item.userId === 'demo_muc_member');
+  assert.equal(mine.points, 164, '回退实时聚合：两场一级赛都要算进去，不能停在旧的 82');
+});
+
+test('旧的单字段物化数据不被信任：缺格式版本一律回退', async () => {
+  const repo = fixture();
+  await repo.events.set('legacy_ev', {
+    _id: 'legacy_ev', schoolId: 'muc', association: 'pkb', title: '旧赛', status: EVENT_STATUS.FINISHED,
+    matchType: MATCH_TYPE.SINGLES, pool: 1, level: 1,
+    startTime: at(-2 * HOUR), finishedAt: at(-HOUR),
+    results: [{ userId: 'demo_muc_member', placement: 1 }],
+  });
+  // 手写一份「上一版」的赛季与会员行：代际对齐、但没有 pointsSchemaVersion
+  const id = scopeKey(SCOPE);
+  await repo.seasons.set(id, {
+    _id: id, schoolId: 'muc', association: 'pkb',
+    resetTime: null, anchorTime: null, seasonNumber: 1, version: 0, pointsSettledVersion: 0,
+  });
+  await repo.schoolMembers.update(schoolMemberKey('demo_muc_member', 'muc'), {
+    seasonPoints: 999, pointsAnchor: '',
+  });
+
+  const stats = await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
+  const mine = (stats.top || []).find(item => item.userId === 'demo_muc_member');
+  assert.equal(mine.points, 82, '旧字段的数字不被采信，按事实重算');
+});
+
+test('行上的代际落后于赛季代际：整份不可信，回退实时聚合', async () => {
+  const repo = fixture();
+  await repo.events.set('e1', {
+    _id: 'e1', schoolId: 'muc', association: 'pkb', title: 'e1', status: EVENT_STATUS.FINISHED,
+    matchType: MATCH_TYPE.SINGLES, pool: 1, level: 1,
+    startTime: at(-2 * HOUR), finishedAt: at(-HOUR),
+    results: [{ userId: 'demo_muc_member', placement: 1 }],
+  });
+  const ctx = await ctxOf(repo);
+  await seasonPoints.refreshAssociationPoints(ctx);
+  const season = await repo.seasons.getById(scopeKey(SCOPE));
+
+  // 正常情况下：命中物化，不读赛事
+  const clean = trackReads(repo);
+  await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
+  assert.equal(clean.events, 0, '代际一致时不读赛事');
+
+  // 模拟「并发重算里慢的那份后落盘」：这一行还停在上一代
+  await repo.schoolMembers.update(schoolMemberKey('demo_muc_member', 'muc'), {
+    pointsVersion: Number(season.pointsSettledVersion) - 1,
+  });
+  const dirty = trackReads(repo);
+  const stats = await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
+  const mine = (stats.top || []).find(item => item.userId === 'demo_muc_member');
+  assert.ok(dirty.events >= 1, '有行落后就回退实时聚合（读赛事）');
+  assert.equal(mine.points, 82, '回退后分数仍正确');
+});
+
+test('按编号取成绩有数量上限：超过 200 人走业务拒绝', async () => {
+  const repo = fixture();
+  const tooMany = Array.from({ length: 201 }, (_, i) => `u${i}`);
+  const refused = await call(repo, 'getSchoolMemberStats', { userIds: tooMany }, { actor: 'demo_muc_member' });
+  assert.equal(refused.ok, false);
+  assert.match(refused.message, /最多查询 200 名会员/);
+
+  const allowed = await call(repo, 'getSchoolMemberStats',
+    { userIds: tooMany.slice(0, 200) }, { actor: 'demo_muc_member' });
+  assert.equal(allowed.ok, true, '正好 200 人放行');
+});
+
+test('积分面板不整表读评级：只在选中的人上补', async () => {
+  const repo = fixture();
+  await repo.events.set('e1', {
+    _id: 'e1', schoolId: 'muc', association: 'pkb', title: 'e1', status: EVENT_STATUS.FINISHED,
+    matchType: MATCH_TYPE.SINGLES, pool: 1, level: 1,
+    startTime: at(-2 * HOUR), finishedAt: at(-HOUR),
+    results: [{ userId: 'demo_muc_member', placement: 1 }],
+  });
+  // 一条真实的评级（不是按性别兜底的展示值）
+  await repo.memberRatings.set(memberRatingKey('demo_muc_member', 'singles', SCOPE), {
+    _id: memberRatingKey('demo_muc_member', 'singles', SCOPE),
+    schoolId: 'muc', association: 'pkb', userId: 'demo_muc_member', pool: 'singles',
+    elo: 1666, matchCount: 7, wins: 5, losses: 2,
+  });
+  await seasonPoints.refreshAssociationPoints(await ctxOf(repo));
+
+  const calls = spyRatings(repo);
+  const stats = await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
+  const mine = (stats.top || []).find(item => item.userId === 'demo_muc_member');
+  assert.ok(!calls.includes('list'), '不再整表读评级');
+  assert.ok(calls.includes('listByIds'), '改为按编号批读');
+  assert.equal(mine.ratings.singles.elo, 1666, '前 N 的评级仍是真实值');
+  assert.equal(mine.ratings.singles.matchCount, 7);
 });

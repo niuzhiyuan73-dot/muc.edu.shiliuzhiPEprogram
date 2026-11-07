@@ -40,6 +40,7 @@ const { schoolMemberKey } = require('../utils/school.js');
 const { registrationWindow } = require('./meet-registration-service.js');
 const { meetReadable, canManageMeet, isActiveMeetLead } = require('./meet-permission.js');
 const { meetCollegeLeadKey } = require('../utils/meet-scope.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // 【DTO 为什么也带 ok:true】（2026-10-28 第十轮只读审计 P2）
 // 身份 / 协会空间 / 跨校三域的处理器在业务对象里回 `ok:true`，运动会域此前只在外层
@@ -767,7 +768,7 @@ async function listSportsMeets(payload = {}, ctx) {
   }
 
   items.sort((a, b) => (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9)
-    || String(b.startDate).localeCompare(String(a.startDate)));
+    || compareCode(b.startDate, a.startDate));
 
   return ok({
     total: items.length,

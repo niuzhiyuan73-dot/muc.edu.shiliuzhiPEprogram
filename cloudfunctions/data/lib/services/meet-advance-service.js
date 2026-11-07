@@ -41,6 +41,7 @@ const { freshMeetContext } = require('./meet-context.js');
 const { meetReadable, canManageMeet, canPublishMeetResult, isChiefJudge } = require('./meet-permission.js');
 
 const { unchanged, liveMeet, publishedRowsOf, touchScheduleRevision } = require('./meet-consistency.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // DTO 补 ok:true，与其余三域同形（见 meet-service.js 的说明）。
 const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? true : data.ok } });
@@ -67,7 +68,7 @@ const MAX_HEATS_CAPACITY = 20;
 function approvedOf(entries, eventKey) {
   return entries
     .filter((doc) => doc.eventKey === eventKey && doc.status === MEET_ENTRY_STATUS.APPROVED)
-    .sort((a, b) => String(a._id).localeCompare(String(b._id)));
+    .sort((a, b) => compareCode(a._id, b._id));
 }
 
 /** 取一个可复现的随机种子：显式传入优先，否则用当前毫秒。落库后可供复核。 */

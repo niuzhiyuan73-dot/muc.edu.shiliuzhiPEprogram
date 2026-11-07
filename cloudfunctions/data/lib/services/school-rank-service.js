@@ -150,19 +150,10 @@ async function loadSeason(ctx) {
  * status，S2 在册名单不带，缺了它所有人都被判成可上榜（虽然这里本就都
  * 是 active，但显式给出免得日后加离校名单时忘掉）。
  *
- * @param {Object} ctx
- * @returns {Promise<Array<Object>>}
- */
-async function replayMembersOf(ctx) {
-  return membersOfRows(ctx, await ctx.repo.forScope(ctx).schoolMembers.list());
-}
-
-/**
- * 已经读出来的会员行 → 榜单口径的会员视图。
- *
- * 与 `replayMembersOf` 分成两步，是为了让「积分物化在会员行上」这件事少读一次：
- * 榜单视图要拿这批行里的 `seasonPoints`（见 season-points.js），而它们本来
- * 就要读——先读行、再决定要不要读三份积分事实，比先猜再读省一轮。
+ * 【为什么入口是「行」而不是「ctx」】（2026-11-07 审查 P3）
+ * 调用方（榜单视图、成绩行）本来就要读会员行，积分也长在行上；把「读行」留在
+ * 调用方，才能先看行、再决定要不要读三份积分事实。原先还有一个
+ * `replayMembersOf(ctx)` 的包装，本次改造后已无调用方，删掉。
  *
  * @param {Object} ctx
  * @param {Array<Object>} rows `schoolMembers` 文档
@@ -250,7 +241,7 @@ function ratedMatchesOf(rows) {
  * @returns {Promise<{season:Object, members:Array<Object>, matches:Array<Object>, pointFacts:Array<Object>, events:Array<Object>}>}
  */
 async function loadScopeView(ctx, options = {}) {
-  const { needMatches = true, pointsFor = '', needPoints = true } = options;
+  const { needMatches = true, needPoints = true, needRatings = true } = options;
   const season = await loadSeason(ctx);
   // 【为什么榜单可以不读 matches】（2026-10-21 审查 P0-2）
   // 榜单每行的 elo / 胜 / 负 / 出场数全部来自 member_ratings（Elo 逐场结算后
@@ -258,15 +249,11 @@ async function loadScopeView(ctx, options = {}) {
   // **个人主页的走势**里用得到（buildRatingHistory）。
   // 而 matches 是只增不减的最大集合：把它读回来只为两个不用的接口，等于
   // 第 5 年打开榜单要读 5 年的流水。榜单与成绩因此显式关掉它。
-  // 训练报名：只算一个人的积分时按 userId 下推（个人主页）。
-  // trainingRegistrations 是只增不减的集合，3000 条就是 30 页 RPC，而个人主页
-  // 只用到这个人的几十条。注意**只有传了 pointsFor 的那个人的 points 可信**：
-  // 其他人的训练积分会因为缺数据而偏低，所以这条路只给单人的读接口用。
-  // 注意这里写成**惰性函数**：`needPoints: false` 时（榜单）一次都不该发出去。
+  // 训练报名是只增不减的集合，3000 条就是 30 页 RPC；单人的读法走
+  // `loadProfileFacts`（按 userId 下推），不走这里。
+  // 写成**惰性函数**：`needPoints: false` 时（榜单）一次都不该发出去；
   // 若先算出 Promise 再在三元里挑，查询在赋值那一刻就已经上路了。
-  const registrationsOf = () => (pointsFor
-    ? ctx.repo.forScope(ctx).trainingRegistrations.listByUser(pointsFor)
-    : ctx.repo.forScope(ctx).trainingRegistrations.list());
+  const registrationsOf = () => ctx.repo.forScope(ctx).trainingRegistrations.list();
   // 【为什么榜单连积分也不读】needPoints: false（2026-10-23 H-6 的第一步）
   // 榜单每行只有 elo / 胜负 / 出场数 / 昵称，**不用赛季积分**——积分是个人主页
   // 的事项。而积分要从 events + trainings + trainingRegistrations 三处聚合：
@@ -275,7 +262,7 @@ async function loadScopeView(ctx, options = {}) {
   // 页面当成「这个人是零分」，而实际是「这次没算」）。
   // 【积分物化在会员行上】（2026-10-29 第十三轮）
   // 赛季跟得上事实（`pointsSettledVersion === version`）时，积分就在榜单本来
-  // 就要读的那批会员行的 `seasonPoints` 字段里——**零额外读**。
+  // 就要读的那批会员行的 `seasonPointsByAssociation` 里——**零额外读**。
   // events / trainings / trainingRegistrations 只在这两种情况下才读：
   //   · 未结算（首次上线、刚写过库、并发写）→ 回退实时聚合；
   //   · `needMatches`（要算 pointFacts 把赛事分挂到比赛流水上）。
@@ -286,13 +273,30 @@ async function loadScopeView(ctx, options = {}) {
   const [memberRows, matches, ratingDocs, events, trainings, trainingRegistrations] = await Promise.all([
     ctx.repo.forScope(ctx).schoolMembers.list(),
     needMatches ? ctx.repo.forScope(ctx).matches.list() : empty,
-    ctx.repo.forScope(ctx).memberRatings.list(),
+    // 【面板只要积分时可以不读评级】（2026-11-07 审查 P2）
+    // 2000 人的协会 = 4000 条评级 = 40 页，而积分榜只用得到分。传 false 时
+    // 这里一条都不读，选中前 N（+我）之后再用 listByIds 补 ≤ 51 人的评级。
+    needRatings ? ctx.repo.forScope(ctx).memberRatings.list() : empty,
     needEventRows ? ctx.repo.forScope(ctx).events.list() : empty,
     needPointRows ? ctx.repo.forScope(ctx).associationTrainings.list() : empty,
     needPointRows ? registrationsOf() : empty,
   ]);
   const members = await membersOfRows(ctx, memberRows);
-  const settledPoints = settled ? settledPointsOf(season, memberRows) : null;
+  // 【行上的代际也要认可】（2026-11-07 审查 P2-1）
+  // 读的「计划」只看赛季代际，但并发重算可能把某一行的旧快照写晚了。这时
+  // `settledPointsOf` 会返回 null，而事实集合按计划根本没读——直接回退会得到
+  // 「全员 0 分」。所以这里补读一次，宁可多一次往返，也不能让分数变 0。
+  let settledPoints = settled ? settledPointsOf(season, memberRows, ctx.association) : null;
+  let eventRows = events;
+  let trainingRows = trainings;
+  let registrationRows = trainingRegistrations;
+  if (needPoints && settled && !settledPoints) {
+    [eventRows, trainingRows, registrationRows] = await Promise.all([
+      needMatches ? events : ctx.repo.forScope(ctx).events.list(),
+      ctx.repo.forScope(ctx).associationTrainings.list(),
+      registrationsOf(),
+    ]);
+  }
 
   // ── 评级：按「userId|pool」建索引；缺档按性别兜底，读请求不写库 ──
   const ratingByKey = new Map(ratingDocs.map(doc => [`${doc.userId}|${doc.pool}`, doc]));
@@ -306,16 +310,16 @@ async function loadScopeView(ctx, options = {}) {
   }));
 
   // ── 计分比赛：带「计分」结算快照的已生效比赛，按结算序号连成 Elo 链 ──
-  const pointFacts = collectEventPointFacts({ events, resetTime: season.resetTime });
+  const pointFacts = collectEventPointFacts({ events: eventRows, resetTime: season.resetTime });
   const ratedMatches = ratedMatchesOf(matches);
 
   // ── 积分：独立聚合（赛事 + 训练），赛事分挂到各人最后一场 ──
   mountEventPointDeltas(ratedMatches, pointFacts);
   if (needPoints) {
     const pointsByUser = settledPoints || aggregatePoints({
-      events,
-      trainings,
-      trainingRegistrations,
+      events: eventRows,
+      trainings: trainingRows,
+      trainingRegistrations: registrationRows,
       resetTime: season.resetTime,
       members: viewMembers.map(m => ({ userId: m._id })),
     });
@@ -326,7 +330,7 @@ async function loadScopeView(ctx, options = {}) {
 
   // events 一并带出：个人主页要按「我参加过的赛事」算荣誉，原先它自己又读了
   // 一遍同一份 events（整表读 × 2）。多回一个字段，调用方按需取。
-  return { season, members: viewMembers, matches: ratedMatches, pointFacts, events };
+  return { season, members: viewMembers, matches: ratedMatches, pointFacts, events: eventRows };
 }
 
 /**
@@ -356,7 +360,7 @@ async function loadProfileFacts(ctx, userId) {
   ]);
   const pointFacts = collectEventPointFacts({ events, resetTime: season.resetTime });
 
-  const settled = settledPointsOf(season, memberRows);
+  const settled = settledPointsOf(season, memberRows, ctx.association);
   // 结算跟得上、且这个人确实有会员行 → 直接用物化值
   if (settled && settled.has(userId)) {
     return { season, events, pointFacts, points: settled.get(userId) || 0 };
@@ -425,7 +429,7 @@ function buildRows(users, project, myId) {
  *
  * @param {Array<Object>} docs 评级文档（已按条件筛好）
  * @param {Map<string,Object>} userById userId → 账号
- * @returns {Array<Object>} 形如 replayMembersOf 的产物
+ * @returns {Array<Object>} 形如 membersOfRows 的产物
  */
 function membersFromRatingDocs(docs, userById) {
   return (Array.isArray(docs) ? docs : []).map((doc) => {
@@ -674,6 +678,12 @@ async function getSchoolMemberStats(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) return ok({ ok: false, members: [], message: '没有读取本协会成绩的权限' });
   const wanted = new Set((Array.isArray(payload.userIds) ? payload.userIds : [])
     .filter(id => typeof id === 'string' && id));
+  // 【编号数量上限】（2026-11-07 审查 P2）：这里每个编号会展开成
+  // 「1 条学籍 + 1 个账号 + 池数条评级」三次批读，传几千个就能把一次请求放大成
+  // 几百次查询。与名录的 `MEMBER_IDS_MAX` 对齐取 200；真要全量应走排行榜/分页。
+  if (wanted.size > STATS_USER_IDS_MAX) {
+    return ok({ ok: false, members: [], message: `单次最多查询 ${STATS_USER_IDS_MAX} 名会员` });
+  }
   // 只要评级计数（启动时选默认协会用）：不算赛季积分，也不读赛事/训练/训练报名。
   // 没有指定人时这个开关没有意义（全量列表本来就要算积分），直接拒绝，别让它变成
   // 「静默返回一堆没有 points 的行」。
@@ -701,19 +711,26 @@ async function getSchoolMemberStats(payload = {}, ctx) {
   // lastMatchTime），实际不参与比较，所以这里不需要复制整套 buildLeaderboard。
   const top = Number.isInteger(payload.top) && payload.top > 0 ? Math.min(payload.top, 50) : 0;
   if (top > 0) {
-    const { members } = await loadScopeView(ctx, { needMatches: false });
+    // 【面板不读评级】（2026-11-07 审查 P2）：先只拿会员行（积分在行上），
+    // 排完序再给要下发的这几十个人补评级——2000 人的协会从「40 页评级」降到
+    // 「2 页批读」。行对象仍是 `memberStatsRow` 的同一形状，客户端不用改。
+    const { members } = await loadScopeView(ctx, { needMatches: false, needRatings: false });
     // 离校不过滤：面板原先把 status 硬写成 ACTIVE 再交给 buildPointsRows，
     // 这里保持同一口径，避免「同一个榜在面板与排行榜上人数不同」。
-    const rows = members.map(member => memberStatsRow(member))
-      .filter(row => Number(row.points) > 0)
-      .sort((a, b) => (b.points - a.points)
-        || (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
-    const total = rows.length;
-    const mine = rows.findIndex(row => row.userId === ctx.actorId);
+    const scored = members
+      .filter(member => Number(member.points || 0) > 0)
+      .sort((a, b) => (Number(b.points) - Number(a.points))
+        || (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
+    const total = scored.length;
+    const mine = scored.findIndex(member => member._id === ctx.actorId);
+    const picked = scored.slice(0, top);
+    const meMember = mine >= top ? scored[mine] : null;
+    // 只给「前 N + 榜外的我」补真实评级：≤ 51 人 × 池数，一次批读就够
+    await fillRatings(ctx, meMember ? [...picked, meMember] : picked);
     return ok({
       ok: true,
-      top: rows.slice(0, top).map((row, index) => ({ ...row, rank: index + 1 })),
-      me: mine >= 0 ? { ...rows[mine], rank: mine + 1 } : null,
+      top: picked.map((member, index) => ({ ...memberStatsRow(member), rank: index + 1 })),
+      me: mine >= 0 ? { ...memberStatsRow(scored[mine]), rank: mine + 1 } : null,
       total,
       message: '',
     });
@@ -722,6 +739,40 @@ async function getSchoolMemberStats(payload = {}, ctx) {
   // 成绩同榜单：评级已落库，不需要读比赛流水。
   const { members } = await loadScopeView(ctx, { needMatches: false });
   return ok({ ok: true, members: members.map(member => memberStatsRow(member)), message: '' });
+}
+
+/** 按编号取成绩时一次最多查多少人：与名录的批读上限对齐。 */
+const STATS_USER_IDS_MAX = 200;
+
+/**
+ * 给「已经挑出来的这几个人」补真实评级（就地改 `member.ratings`）。
+ *
+ * 面板只要积分，先不读评级省下整表读；补的时候只按确定性主键批读这几十人，
+ * 每人池数条。缺档的保持 `displayRating` 的兜底值（不写库，与全量路径同口径）。
+ *
+ * @param {Object} ctx
+ * @param {Array<Object>} members 已过滤的会员视图（含 _id / ratings）
+ */
+async function fillRatings(ctx, members) {
+  const ids = [...new Set((Array.isArray(members) ? members : [])
+    .map(member => member && member._id).filter(id => typeof id === 'string' && id))];
+  if (ids.length === 0) return;
+  const keys = ids.flatMap(userId => ALL_RATING_POOLS.map(pool => memberRatingKey(userId, pool, ctx)));
+  const docs = await ctx.repo.forScope(ctx).memberRatings.listByIds(keys);
+  const byKey = new Map(docs.map(doc => [`${doc.userId}|${doc.pool}`, doc]));
+  for (const member of members) {
+    if (!member) continue;
+    for (const pool of ALL_RATING_POOLS) {
+      const doc = byKey.get(`${member._id}|${pool}`);
+      if (!doc) continue;
+      member.ratings[pool] = {
+        elo: Number(doc.elo),
+        matchCount: Number(doc.matchCount || 0),
+        wins: Number(doc.wins || 0),
+        losses: Number(doc.losses || 0),
+      };
+    }
+  }
 }
 
 /** 一个会员行的对外形状（评级四池 + 赛季积分）。全量与按编号两条路共用。 */
@@ -786,7 +837,7 @@ async function statsOfMembers(ctx, userIds, { ratingsOnly }) {
   // 【物化优先】（2026-10-29 第十三轮）：积分就在上面那批会员行里，跟得上事实
   // 时**一次额外读都不发**；只有脏了才回退「读三份事实 + 按人下推签到」。
   const season = await loadSeason(ctx);
-  let pointsByUser = settledPointsOf(season, memberRows);
+  let pointsByUser = settledPointsOf(season, memberRows, ctx.association);
   if (!pointsByUser) {
     const [events, trainings, registrations] = await Promise.all([
       scope.events.list(),

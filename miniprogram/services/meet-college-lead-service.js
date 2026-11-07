@@ -29,6 +29,7 @@ const {
 } = require('../utils/meet-scope.js');
 const { buildMeetContext, freshMeetContext } = require('./meet-context.js');
 const { canManageMeet, isActiveMeetLead } = require('./meet-permission.js');
+const { compareCode } = require('../utils/text-order.js');
 
 // DTO 补 ok:true，与其余三域同形（见 meet-service.js 的说明）。
 const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? true : data.ok } });
@@ -166,7 +167,7 @@ async function listMeetCollegeLeads(payload = {}, ctx) {
       name: personName.get(doc.userId) || doc.userId,
       collegeName: nameOf.get(doc.collegeId) || doc.collegeId,
     }))
-    .sort((a, b) => String(a.collegeId).localeCompare(String(b.collegeId)));
+    .sort((a, b) => compareCode(a.collegeId, b.collegeId));
   return ok({ items, message: '' });
 }
 

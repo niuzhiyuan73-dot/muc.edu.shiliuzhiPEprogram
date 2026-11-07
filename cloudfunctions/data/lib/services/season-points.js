@@ -9,16 +9,33 @@
  * 往往只是「前 10 名」或者「我这个人的分」。
  *
  * 【物化到哪里】
- * 写进 `schoolMembers` 会员行本身（字段 `seasonPoints` / `pointsAnchor`），
- * 不是另开一张积分表。理由是读端的形状：榜单与成绩页本来就要读会员行
- * （名字、学院、在册状态），积分长在行上等于**零额外读**；另建一张每人一行的
- * 表反而多一次整表读（人数越多越贵），且多一个集合、一套归属校验。
+ * 写进 `schoolMembers` 会员行本身（字段 `seasonPointsByAssociation` /
+ * `pointsAnchorByAssociation`），不是另开一张积分表。理由是读端的形状：榜单与
+ * 成绩页本来就要读会员行（名字、学院、在册状态），积分长在行上等于**零额外读**；
+ * 另建一张每人一行的表反而多一次整表读（人数越多越贵），且多一个集合、一套
+ * 归属校验。
+ *
+ * 【为什么字段按协会分键，而不是一个 `seasonPoints` 数字】
+ * 会员行是**学校级**的（`sm:<school>:<user>`，一人一行），而赛季积分是
+ * 「学校 × 协会」口径（`seasons` 的主键含 association）。一个学校启用多个协会时，
+ * 单个数字会被后写入的协会覆盖，读取端还会因为「本协会代际已对齐」而认账——
+ * 甲协会的榜单显示乙协会的分。所以两个字段都是 map：`{ pkb: 22, tt: 82 }`，
+ * 写只改自己那一个 key，读只取 `ctx.association` 那一个 key。
+ *
+ * 【兼容老数据：格式版本】
+ * 上一版把分写在单字段 `seasonPoints` 上。`pointsSchemaVersion` 就是给这件事
+ * 留的开关：没有这个版本号的赛季一律按「未物化」处理（回退实时聚合），
+ * 下一次写动作重算时自动升到当前版本。**不要**用 `pointsSettledVersion` 兼任，
+ * 它已经存在且会被旧数据带上，分辨不出格式。
  *
  * 【正确性怎么保证：宁可慢，不可错】
  * 任何影响积分事实的写都会在同一事务里把 `seasons.version` +1（见写路径的
  * `bumpSeasonVersion`）。读取端先看 `pointsSettledVersion === version`：
  *   · 相等 → 直接用行上的物化值；
  *   · 不等（含首次上线、上次重算失败、并发写）→ **一律回退实时聚合**。
+ * 另外两条同源的保险：
+ *   · 重算时只要有一行写失败，就**不**对齐代际（否则读端会信任半新半旧的值）；
+ *   · 代际对齐只在「读到的 version 仍是本次快照」时才写（并发写会把它推高）。
  * 因此物化最多让读变慢（回到改造前的样子），不会让读出错分。
  *
  * 【为什么重算不放在读取里】
@@ -27,8 +44,8 @@
  *
  * 【为什么只写变化的人】
  * 一次结算若把所有行都重写一遍，就是几百次写。行上**不存版本号**（版本只在
- * 赛季文档上比一次），逐行比 `points` 与 `anchor`：分数没变、赛季没换的人
- * 一个字段都不写。0 分且从未物化过的行也不写——否则首次上线要写全校。
+ * 赛季文档上比一次），逐行比本协会的 `points` 与 `anchor`：分数没变、赛季没换
+ * 的人一个字段都不写。0 分且从未物化过的行也不写——否则首次上线要写全校。
  *
  * 【已知边界】
  * 会员行是在上一次重算之后才建出来的（离校又返校、审批刚通过），行上没有
@@ -50,15 +67,32 @@ const WRITE_BATCH = 20;
  * 【为什么按事务分批，而不是一行一个事务】一次结算要更新的人数可能上百
  * （176 人的双打签表就是 176 行）。一行一个事务在云开发上是「一行一次
  * 独立事务」：往返 100 多次，请求很容易撞到 3 秒超时。事务内每行是
- * 「读 + 写」2 个操作，预算 100（见 cloud-repo 的 TX_OPERATION_BUDGET），
- * 取 30 行 = 60 操作，留足余量；100 行的人也只要 4 次往返。
+ * 「读快照 + 读当前 + 写」3 个操作，预算 100（见 cloud-repo 的
+ * TX_OPERATION_BUDGET），取 25 行 = 75 操作，留足余量。
+ *
+ * 【为什么每行要读两次】第一次读（`getById`）拿本事务快照，用来在
+ * `seasonPointsByAssociation` 这份 map 上只改**本协会**那一个 key；第二次是
+ * `update` 自己在事务内重读-合并。少读那一次就得用手上的旧 map 整份覆盖，
+ * 卡在两个协会同时结算的窗口上会把对方刚写的分数抹掉——正是本轮要修的 P0。
  */
-const TX_ROWS = 30;
+const TX_ROWS = 25;
 
-/** 会员行上的三个物化字段。抽成常量，免得读写两头各写一份字符串。 */
-const POINTS_FIELD = 'seasonPoints';
-const ANCHOR_FIELD = 'pointsAnchor';
+/** 会员行上的物化字段。抽成常量，免得读写两头各写一份字符串。 */
+// 按协会分键的积分：{ pkb: 22, tt: 82 }。**不能**退回单个数字，理由见文件头。
+const POINTS_MAP_FIELD = 'seasonPointsByAssociation';
+// 按协会分键的赛季锚点：与积分同一把尺子，跨赛季残留靠它识别。
+const ANCHOR_MAP_FIELD = 'pointsAnchorByAssociation';
+// 最后一次写入时间（与协会无关，只用于排查「这行是什么时候被写过」）。
 const UPDATED_FIELD = 'pointsUpdatedAt';
+// 这一格是第几代算出来的。读端拿它和 `seasons.pointsSettledVersion` 比：
+// 有行落后就整份不可信（并发重算时慢的那份可能后落盘，见文件头）。
+const VERSION_FIELD = 'pointsVersion';
+
+/**
+ * 物化格式版本。老数据（单字段 `seasonPoints`）没有它，读端一律按未物化处理。
+ * 改字段结构时必须 +1，这是一次性的失效开关，不是计数器。
+ */
+const POINTS_SCHEMA = 2;
 
 /** 赛季文档的写计数器（积分代际）。 */
 function seasonVersionOf(season) {
@@ -80,20 +114,30 @@ function anchorOf(season) {
   return season && season.resetTime ? String(season.resetTime) : '';
 }
 
-/** 物化值是否跟得上事实。 */
+/**
+ * 物化值是否跟得上事实。
+ *
+ * 两个条件缺一不可：格式版本对得上（老数据回退）、代际对得上（事实没变过）。
+ */
 function isSettled(season) {
+  if (!season || Number(season.pointsSchemaVersion) !== POINTS_SCHEMA) return false;
   return settledVersionOf(season) === seasonVersionOf(season);
 }
 
-/** 会员行上的积分（缺字段按 0；脏值不往下传）。 */
-function pointsOfRow(row) {
-  const value = Number(row && row[POINTS_FIELD]);
+/** 会员行上本协会的积分（缺字段按 0；脏值不往下传）。 */
+function pointsOfRow(row, association) {
+  const map = row && row[POINTS_MAP_FIELD];
+  if (!map || typeof map !== 'object') return 0;
+  const value = Number(map[String(association)]);
   return Number.isFinite(value) && value > 0 ? value : 0;
 }
 
-/** 会员行上的物化锚点（从未物化过是空串）。 */
-function anchorOfRow(row) {
-  return row && typeof row[ANCHOR_FIELD] === 'string' ? row[ANCHOR_FIELD] : '';
+/** 会员行上本协会的物化锚点（从未物化过是空串）。 */
+function anchorOfRow(row, association) {
+  const map = row && row[ANCHOR_MAP_FIELD];
+  if (!map || typeof map !== 'object') return '';
+  const value = map[String(association)];
+  return typeof value === 'string' ? value : '';
 }
 
 /**
@@ -114,39 +158,28 @@ async function readSeason(ctx) {
  * 这是读路径的主入口：榜单视图、成绩页都已经拿到会员行了，直接把这批行喂进来。
  * 未结算（或没有行）返回 null，调用方据此回退实时聚合。
  *
+ * `association` 必须显式传：会员行是学校级的，行上按协会分键存放，
+ * 漏传就会取到别的协会的分（本轮 P0）。
+ *
  * @param {Object} season 赛季文档
  * @param {Array<Object>} rows 会员行（`schoolMembers` 文档）
+ * @param {string} association 当前协会
  * @returns {Map<string, number>|null}
  */
-function settledPointsOf(season, rows) {
+function settledPointsOf(season, rows, association) {
   if (!isSettled(season) || !Array.isArray(rows)) return null;
+  const generation = settledVersionOf(season);
   const map = new Map();
   for (const row of rows) {
     if (!row || typeof row.userId !== 'string' || !row.userId) continue;
-    map.set(row.userId, pointsOfRow(row));
+    // 行上的代际落后于场上的代际 = 有并发重算把旧快照写晚了。
+    // 这时**整份**都不可信（同一批写入可能只是部分落后），一律回退实时聚合。
+    // 没有这个字段的行是「从未物化过的 0 分」，不参与判断。
+    const marked = row[VERSION_FIELD];
+    if (marked !== undefined && marked !== null && Number(marked) !== generation) return null;
+    map.set(row.userId, pointsOfRow(row, association));
   }
   return map;
-}
-
-/**
- * 只取「这几个人」的物化积分（按主键批读，不整表读）。
- *
- * 个人主页、单人成绩这类只关心一个人的场景用它。返回值有两种「没有」：
- *   · `null` → 赛季未结算，调用方回退实时聚合；
- *   · Map 里查不到这个 userId → 这个人没有会员行（已转出），同样回退。
- *
- * @param {Object} ctx
- * @param {Object} season
- * @param {string[]} userIds
- * @returns {Promise<Map<string, number>|null>}
- */
-async function settledPointsFor(ctx, season, userIds) {
-  if (!isSettled(season)) return null;
-  const ids = [...new Set((Array.isArray(userIds) ? userIds : []).filter(id => typeof id === 'string' && id))];
-  if (ids.length === 0) return new Map();
-  const rows = await ctx.repo.forScope(ctx).schoolMembers
-    .listByIds(ids.map(id => schoolMemberKey(id, ctx.schoolId)));
-  return settledPointsOf(season, Array.isArray(rows) ? rows : []);
 }
 
 /**
@@ -163,6 +196,7 @@ async function settledPointsFor(ctx, season, userIds) {
  */
 async function refreshAssociationPoints(ctx, options = {}) {
   const scope = ctx.repo.forScope(ctx);
+  const association = String(ctx.association);
   const season = options.season || await readSeason(ctx);
   const version = seasonVersionOf(season);
   const anchor = anchorOf(season);
@@ -187,13 +221,14 @@ async function refreshAssociationPoints(ctx, options = {}) {
   for (const row of rows) {
     const userId = row && row.userId;
     if (typeof userId !== 'string' || !userId) continue;
-    const current = pointsOfRow(row);
-    const rowAnchor = anchorOfRow(row);
+    const current = pointsOfRow(row, association);
+    const rowAnchor = anchorOfRow(row, association);
     const computed = Number(pointsByUser.get(userId)) || 0;
     const wanted = computed > 0 ? computed : 0;
     if (wanted === 0) {
-      // 归零：只有「本来有分」或「带着别的赛季锚点」的行才需要写。
+      // 归零：只有「本协会本来有分」或「带着别的赛季锚点」的行才需要写。
       // 从未物化过的 0 分行一个都不写——否则首次上线要把全校会员写一遍。
+      // 注意只看**本协会**这两个 key：别的协会的分与本协会无关，不能顺手清零。
       if (!(current > 0 || (rowAnchor && rowAnchor !== anchor))) continue;
     } else if (current === wanted && rowAnchor === anchor) {
       continue;
@@ -201,31 +236,47 @@ async function refreshAssociationPoints(ctx, options = {}) {
     writes.push({ userId, points: wanted });
   }
 
-  let written = 0;
-  let failed = 0;
-  const patchOf = (item) => ({
-    // 用 update（读-合并-写）而不是 set：会员行同时承载学籍、学院、状态，
-    // 整行覆盖会把并发的学籍变更抹掉。
-    [POINTS_FIELD]: item.points,
-    [ANCHOR_FIELD]: anchor,
+  /**
+   * 只改本协会的两个 key，其余协会原样保留。
+   *
+   * 【为什么必须在事务内按「当前行」算 map】update 的合并粒度是整字段：
+   * 若用手上（可能几百毫秒前读到的）旧 map 整份写回，卡在另一个协会刚结算完
+   * 的窗口上就会把对方那一格抹掉——这正是本轮要修的跨协会覆盖。
+   */
+  const patchFor = (row, points) => ({
+    [POINTS_MAP_FIELD]: { ...((row && row[POINTS_MAP_FIELD]) || {}), [association]: points },
+    [ANCHOR_MAP_FIELD]: { ...((row && row[ANCHOR_MAP_FIELD]) || {}), [association]: anchor },
+    [VERSION_FIELD]: version,
     [UPDATED_FIELD]: nowIso,
   });
+
+  let written = 0;
+  let failed = 0;
+  let skipped = 0;
   const canTransact = typeof ctx.repo.transaction === 'function';
-  for (let i = 0; i < writes.length; i += (canTransact ? TX_ROWS : WRITE_BATCH)) {
-    const step = canTransact ? TX_ROWS : WRITE_BATCH;
+  const step = canTransact ? TX_ROWS : WRITE_BATCH;
+  for (let i = 0; i < writes.length; i += step) {
     const batch = writes.slice(i, i + step);
     if (canTransact) {
-      // 一个事务写完这一批：行数是「每人 2 个操作」，不会撞事务预算。
-      // 中途失败只丢这一批，`pointsSettledVersion` 因此不会对齐——读取端会
-      // 回退实时聚合，分数仍然正确，下一次写动作再补算。
+      // 一个事务写完这一批：每行「读快照 + update 的重读 + 写」= 3 个操作。
+      // 中途失败只丢这一批，代际不会对齐——读取端会回退实时聚合，分数仍然
+      // 正确，下一次写动作再补算（见下面 failed 的处理）。
       try {
-        await ctx.repo.transaction(async (tx) => {
+        const done = await ctx.repo.transaction(async (tx) => {
           const scoped = tx.forScope(ctx);
+          let count = 0;
           for (const item of batch) {
-            await scoped.schoolMembers.update(schoolMemberKey(item.userId, ctx.schoolId), patchOf(item));
+            const key = schoolMemberKey(item.userId, ctx.schoolId);
+            const current = await scoped.schoolMembers.getById(key);
+            // 行被并发删掉（转出）：没有可写的对象，也不算失败——他本来就不在榜上
+            if (!current) continue;
+            await scoped.schoolMembers.update(key, patchFor(current, item.points));
+            count += 1;
           }
+          return count;
         });
-        written += batch.length;
+        written += done;
+        skipped += batch.length - done;
       } catch (err) {
         failed += batch.length;
         console.error('[season-points] 会员行积分批量写入失败', batch.length, err && err.message);
@@ -233,8 +284,11 @@ async function refreshAssociationPoints(ctx, options = {}) {
       continue;
     }
     await Promise.all(batch.map(async (item) => {
+      const key = schoolMemberKey(item.userId, ctx.schoolId);
       try {
-        await scope.schoolMembers.update(schoolMemberKey(item.userId, ctx.schoolId), patchOf(item));
+        const current = await scope.schoolMembers.getById(key);
+        if (!current) { skipped += 1; return; }
+        await scope.schoolMembers.update(key, patchFor(current, item.points));
         written += 1;
       } catch (err) {
         // 单行写失败（例如刚被转出、行已不存在）不该拖垮整次重算
@@ -250,25 +304,31 @@ async function refreshAssociationPoints(ctx, options = {}) {
   // version 一并写回**：若期间有并发写把 version 推高了，读-写之间那一小段
   // 就会把代际写回旧值，于是 `pointsSettledVersion === version` 成立——刚好
   // 把「已经过期」伪装成「已结算」。update 只写这一个字段，撞车交给事务冲突。
+  //
+  // 【为什么有失败就不写标记】只要有一行没写进去，行上就是「半新半旧」。
+  // 此时对齐代际等于告诉读端「这份是准的」，读到的是旧分且不报错——
+  // 2026-11-07 审查的 P1 就是这条路径。宁可让它退回实时聚合（慢，但对）。
   let stale = false;
   const id = scopeKey({ schoolId: ctx.schoolId, association: ctx.association });
   const latestDoc = await ctx.repo.seasons.getById(id);
   const latest = latestDoc && latestDoc.schoolId === ctx.schoolId ? latestDoc : null;
   const latestVersion = latest ? seasonVersionOf(latest) : 0;
-  if (latestVersion !== version) {
+  if (latestVersion !== version || failed > 0) {
     stale = true;
   } else if (latest) {
-    await scope.seasons.update(id, { pointsSettledVersion: version });
+    await scope.seasons.update(id, {
+      pointsSettledVersion: version, pointsSchemaVersion: POINTS_SCHEMA,
+    });
   } else {
     // 赛季文档还不存在（从未重置过的新协会）：此刻没有并发版本可丢，直接建
     await ctx.repo.seasons.set(id, {
       _id: id, schoolId: ctx.schoolId, association: ctx.association,
       resetTime: null, anchorTime: null, seasonNumber: 1, version: 0,
-      pointsSettledVersion: version, updatedAt: nowIso,
+      pointsSettledVersion: version, pointsSchemaVersion: POINTS_SCHEMA, updatedAt: nowIso,
     });
   }
   return { ok: true, version, written, cleared: writes.filter(item => item.points === 0).length,
-    failed, stale, total: pointsByUser.size };
+    failed, skipped, stale, total: pointsByUser.size };
 }
 
 /**
@@ -316,18 +376,25 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
   }
 
   const anchor = anchorOf(season);
+  const association = String(ctx.association);
   const key = schoolMemberKey(userId, ctx.schoolId);
   const row = await tx.schoolMembers.getById(key);
-  if (!row || anchorOfRow(row) !== anchor) return { applied: false, needsRefresh: true };
+  if (!row || anchorOfRow(row, association) !== anchor) return { applied: false, needsRefresh: true };
 
   const nowIso = new Date(ctx.now || Date.now()).toISOString();
-  const next = Math.max(0, pointsOfRow(row) + amount);
+  const next = Math.max(0, pointsOfRow(row, association) + amount);
   await tx.schoolMembers.set(key, {
-    ...row, [POINTS_FIELD]: next, [ANCHOR_FIELD]: anchor, [UPDATED_FIELD]: nowIso,
+    ...row,
+    // 只改本协会那两格，别的协会原样带回（会员行是学校级的，见文件头）
+    [POINTS_MAP_FIELD]: { ...((row[POINTS_MAP_FIELD]) || {}), [association]: next },
+    [ANCHOR_MAP_FIELD]: { ...((row[ANCHOR_MAP_FIELD]) || {}), [association]: anchor },
+    [VERSION_FIELD]: seasonVersionOf(season) + 1,
+    [UPDATED_FIELD]: nowIso,
   });
   const version = seasonVersionOf(season) + 1;
   await tx.seasons.set(id, {
-    ...season, version, pointsSettledVersion: version, updatedAt: nowIso,
+    ...season, version, pointsSettledVersion: version,
+    pointsSchemaVersion: POINTS_SCHEMA, updatedAt: nowIso,
   });
   return { applied: true, needsRefresh: false };
 }
@@ -380,9 +447,12 @@ async function refreshAfterWrite(ctx) {
 
 module.exports = {
   WRITE_BATCH,
-  POINTS_FIELD,
-  ANCHOR_FIELD,
+  TX_ROWS,
+  POINTS_SCHEMA,
+  POINTS_MAP_FIELD,
+  ANCHOR_MAP_FIELD,
   UPDATED_FIELD,
+  VERSION_FIELD,
   seasonVersionOf,
   settledVersionOf,
   anchorOf,
@@ -391,7 +461,6 @@ module.exports = {
   anchorOfRow,
   readSeason,
   settledPointsOf,
-  settledPointsFor,
   refreshAssociationPoints,
   applyTrainingFactDelta,
   bumpSeasonVersion,

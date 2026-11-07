@@ -13,7 +13,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { guardRate, resetRateLimit, LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS,
-  kindOf, readCostOf, ACTION_READ_COST } = require('../cloudfunctions/data/src/core/rate-limit');
+  kindOf, readCostOf, ACTION_READ_COST, WRITE_READ_COST } = require('../cloudfunctions/data/src/core/rate-limit');
 
 /**
  * 成本为 1 的读动作：日预算的「按次」用例用它，免得被成本表（第十一轮 P1-2）
@@ -222,4 +222,53 @@ test('匿名日预算比登录账号更严', () => {
   const blocked = guardRate('', 'getSchoolDirectory', T0 + ANON_DAILY_LIMITS.read * 1000, { clientIp: '10.0.0.9' });
   assert.ok(blocked);
   assert.equal(blocked.scope, 'day');
+});
+
+/**
+ * 写动作附带的整表读（2026-11-07 审查 P3）
+ *
+ * 积分物化把「读三份事实」从读请求挪到了写请求（结算、取消训练）。按原来的
+ * 「写恒为 1 点」记账，这笔读配额被吃掉却看不见，告警一直滞后到配额打空。
+ */
+test('结算附带的整表读计入读预算：200 次后按读配额拒绝', () => {
+  resetRateLimit();
+  assert.equal(WRITE_READ_COST.finishSchoolEvent, 20, '结算按 20 点记');
+  // 每秒一次，避开秒级桶；每次 20 点，正好 200 次打满 DAILY_LIMITS.read
+  const times = Math.floor(DAILY_LIMITS.read / WRITE_READ_COST.finishSchoolEvent);
+  for (let i = 0; i < times; i += 1) {
+    assert.equal(guardRate('openid-settle', 'finishSchoolEvent', T0 + i * 1000), null,
+      `第 ${i + 1} 次结算应当放行`);
+  }
+  const blocked = guardRate('openid-settle', 'finishSchoolEvent', T0 + times * 1000);
+  assert.ok(blocked, '读配额打满后结算应按读预算被拒');
+  assert.equal(blocked.kind, 'read');
+  assert.equal(blocked.scope, 'day');
+  assert.match(blocked.message, /读取配额/);
+  assert.match(blocked.message, /结算/, '提示要点名是结算这类操作吃掉了读');
+});
+
+test('没登记成本的写动作不吃读预算（写恒为 1 次、读 0 点）', () => {
+  resetRateLimit();
+  // 先占满读预算的 3999/4000
+  for (let i = 0; i < DAILY_LIMITS.read - 1; i += 1) {
+    assert.equal(guardRate('openid-plain', PLAIN_READ, T0 + i * 1000), null);
+  }
+  // 普通写不受读预算影响
+  assert.equal(guardRate('openid-plain', 'startSchoolEvent', T0 + DAILY_LIMITS.read * 1000), null);
+  // 而结算这类附带读的写会被同一份额度拦住
+  const blocked = guardRate('openid-plain', 'finishSchoolEvent', T0 + (DAILY_LIMITS.read + 1) * 1000);
+  assert.ok(blocked);
+  assert.match(blocked.message, /读取配额/);
+});
+
+test('写动作的「次数」仍按次计，不被读成本放大', () => {
+  resetRateLimit();
+  // 同一秒内连点 3 次结算全部放行（写 3/秒），第 4 次按秒级拒绝
+  for (let i = 0; i < LIMITS.write; i += 1) {
+    assert.equal(guardRate('openid-burst', 'finishSchoolEvent', T0), null, `第 ${i + 1} 次放行`);
+  }
+  const blocked = guardRate('openid-burst', 'finishSchoolEvent', T0);
+  assert.ok(blocked);
+  assert.equal(blocked.kind, 'write', '按秒级写频率拒绝，而不是读预算');
+  assert.match(blocked.message, /频繁/);
 });

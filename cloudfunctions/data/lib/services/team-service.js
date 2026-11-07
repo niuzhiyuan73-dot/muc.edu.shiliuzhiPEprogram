@@ -36,6 +36,7 @@ const {
 } = require('../utils/constants.js');
 const { sportTypeOf, allAssociations, SPORT_TYPE } = require('../utils/associations.js');
 const { teamSportStrategyFor } = require('../utils/team-sport-rules.js');
+const { compareCode } = require('../utils/text-order.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -946,8 +947,8 @@ async function detachUserFromTeams(repo, { schoolId, userId, now, actorId } = {}
         const stamp = team => JSON.stringify([team.revision, team.captainId, team.memberCount, team.updatedAt, team.status]);
         const candidates = (await scoped.teamMembers.listByTeams([row.teamId]))
           .filter(item => item.userId !== userId && item.status === TEAM_MEMBER_STATUS.ACTIVE)
-          .sort((a, b) => String(a.joinedAt || '').localeCompare(String(b.joinedAt || ''))
-            || String(a.userId).localeCompare(String(b.userId)));
+          .sort((a, b) => compareCode(a.joinedAt, b.joinedAt)
+            || compareCode(a.userId, b.userId));
         // Each transaction checks at most 20 candidates (3 point reads each), below 100 operations.
         for (let offset = 0; offset < Math.max(1, candidates.length); offset += 20) {
           const batch = candidates.slice(offset, offset + 20);

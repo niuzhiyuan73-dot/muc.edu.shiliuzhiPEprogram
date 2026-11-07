@@ -42,6 +42,8 @@ const MANIFEST = [
   'services/meet-time.js',
   // 纯计算与常量
   'utils/constants.js',
+  // 排序键的确定性比较（2026-11-07）：编号/时间不得用 localeCompare
+  'utils/text-order.js',
   'utils/event-capacity.js',
   'utils/interface-view.js',
   'utils/associations.js',
