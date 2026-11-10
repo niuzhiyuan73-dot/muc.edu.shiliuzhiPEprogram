@@ -7,7 +7,7 @@
 - 自检：**3281 项用例通过 / 0 失败**（203 个测试文件）；`node tools/run-tests.js --concurrency 2` 全绿 46.5 秒（本机默认并发 8 在高负载下偶发单文件卡死，见[交接说明](docs/交接说明.md)的复跑方法）
 - 云端共享库：`npm run check:cloud-sync` → 100 个文件一致
 - 界面进度：F01–F17 已提交 `581104f`，F18 的个人赛程、待办、运动护照已提交；本次前端体验批次按用户授权验收后提交，提交号见 Git 历史。场地看板、校园赛历、成绩分享卡仍按原决定暂不做。见[个人体育中心说明](docs/个人体育中心-使用与实现说明.md)与[本批验收](docs/前端探索与现场体验优化-验收记录.md)
-- 数据源：默认**本地模拟**（`miniprogram/config.js` 的 `CLOUD_ENV_ID` 为空），填入环境 ID 即切云端，页面代码一行不改
+- 数据源：默认**本地模拟**（`miniprogram/config.js` 的 `CLOUD_ENV_ID` 为空；该文件不入库，先按第八节复制示例），填入环境 ID 即切云端，页面代码一行不改
 
 ---
 
@@ -206,6 +206,9 @@ python tools/md-to-docx.py docs/交接说明.md 交接说明.docx
 
 ## 八、首次部署三步
 
+0. **本地工程配置**：把 `project.config.example.json` 复制为 `project.config.json`，
+   填入自己的小程序 AppID；把 `miniprogram/config.example.js` 复制为
+   `miniprogram/config.js`。这两个正式文件含账号级信息，已列入 `.gitignore`，不入库。
 1. **填环境 ID**：`miniprogram/config.js` 的 `CLOUD_ENV_ID`。
 2. **建集合**：按 [云开发控制台操作指南](docs/云开发控制台操作指南.md) 第三节建 52 个集合，权限全部设为「所有用户不可读写」。
 3. **部署云函数**：`npm run sync:cloud` → 开发者工具右键 `cloudfunctions/data` →「上传并部署：云端安装依赖」→ 创建第一个校级管理员。

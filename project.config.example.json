@@ -1,7 +1,7 @@
 {
-  "description": "中央民族大学石榴籽体育管理小程序",
+  "description": "复制本文件为 project.config.json，把 appid 换成你自己的小程序 AppID（真实文件已 gitignore，不入库）",
   "projectname": "minzu-pickleball",
-  "appid": "wxedc0e3a4f08445df",
+  "appid": "",
   "compileType": "miniprogram",
   "miniprogramRoot": "miniprogram/",
   "cloudfunctionRoot": "cloudfunctions/",
