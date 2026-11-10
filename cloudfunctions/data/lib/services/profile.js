@@ -36,7 +36,6 @@ const IMMUTABLE_FIELDS = [
   'gender',
   'studentId',
   'college',
-  'phone',
   'points',
   'role',
   'status',

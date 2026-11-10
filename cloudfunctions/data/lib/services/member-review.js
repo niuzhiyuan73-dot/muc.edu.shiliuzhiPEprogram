@@ -418,7 +418,6 @@ function buildApplicationRow(application, ctx = {}) {
     genderText: GENDER_LABEL[application.gender] || '',
     studentId: application.studentId || '',
     college: application.college || '',
-    phone: application.phone || '',
     appliedAtText: formatDateTime(application.joinDate),
     statusLabel: tag.label,
     statusClass: tag.className,

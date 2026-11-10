@@ -318,7 +318,8 @@ test('buildApplicationRow —— 昵称逐层兜底，不渲染出 undefined', (
   const bare = buildApplicationRow({ _id: 'local_9', status: USER_STATUS.PENDING }, { actor: ADMIN });
   assert.strictEqual(bare.nickName, 'local_9');
   assert.strictEqual(bare.realName, '');
-  assert.strictEqual(bare.phone, '');
+  // 手机号已停止采集：即使存量申请单里还留着，也不该再下发到审批页
+  assert.strictEqual('phone' in bare, false, '审批行不再下发手机号');
 });
 
 test('buildApplicationRow —— 申请时间格式化成中文，未知状态不空白', () => {

@@ -273,7 +273,7 @@ def build(doc, lines):
         index += 1
 
 
-def setup(doc, title, subtitle):
+def setup(doc, title, subtitle, bare=False):
     section = doc.sections[0]
     section.page_height = Cm(29.7)
     section.page_width = Cm(21)
@@ -287,25 +287,30 @@ def setup(doc, title, subtitle):
     normal.font.size = Pt(10.5)
     normal._element.rPr.rFonts.set(qn("w:eastAsia"), BODY_EA)
 
-    head = doc.add_paragraph()
-    head.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    head.paragraph_format.space_after = Pt(2)
-    run = head.add_run("中央民族大学石榴籽体育管理小程序")
-    set_font(run, size=13, bold=True, color=MUTED, ea=HEAD_EA)
+    if not bare:
+        head = doc.add_paragraph()
+        head.alignment = WD_ALIGN_PARAGRAPH.CENTER
+        head.paragraph_format.space_after = Pt(2)
+        run = head.add_run("中央民族大学石榴籽体育管理小程序")
+        set_font(run, size=13, bold=True, color=MUTED, ea=HEAD_EA)
 
     banner = doc.add_paragraph()
     banner.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    banner.paragraph_format.space_after = Pt(10)
+    banner.paragraph_format.space_after = Pt(18 if bare else 10)
     run = banner.add_run(subtitle or title)
-    set_font(run, size=24, bold=True, color=ACCENT, ea=HEAD_EA)
+    set_font(run, size=22 if bare else 24, bold=True, color=ACCENT, ea=HEAD_EA)
 
 
 def main():
-    if len(sys.argv) < 2:
-        print("用法：python tools/md-to-docx.py <输入.md> [输出.docx]")
+    raw = sys.argv[1:]
+    bare = "--bare" in raw
+    args = [a for a in raw if not a.startswith("--")]
+    if len(args) < 1:
+        print("用法：python tools/md-to-docx.py [--bare] <输入.md> [输出.docx]")
+        print("  --bare  不输出项目名称小标题（用于对外签署的正式文书）")
         raise SystemExit(1)
-    source = Path(sys.argv[1])
-    out = Path(sys.argv[2]) if len(sys.argv) > 2 else source.with_suffix(".docx")
+    source = Path(args[0])
+    out = Path(args[1]) if len(args) > 1 else source.with_suffix(".docx")
 
     lines = source.read_text(encoding="utf-8").splitlines()
     title = ""
@@ -315,7 +320,7 @@ def main():
             break
 
     doc = Document()
-    setup(doc, title, title)
+    setup(doc, title, title, bare=bare)
     build(doc, lines)
     doc.save(out)
     print(f"已生成：{out}")

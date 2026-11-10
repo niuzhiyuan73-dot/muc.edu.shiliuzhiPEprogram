@@ -3,7 +3,7 @@
  * ============================================================
  * 这里放三件事，全部不依赖任何微信 API，因而可以在 Node 里直接测试：
  *
- *   1. 实名信息的校验——姓名、性别、学号、学院、联系方式
+ *   1. 实名信息的校验——姓名、性别、学号、学院
  *   2. 注册申请的组装——新账号一律是「待审核」，不能自己把自己激活
  *   3. 登录态判定——能不能录入成绩、要不要提示待审核、能不能看战绩
  *
@@ -60,12 +60,6 @@ const PROFILE_RULES = [
     test: (value) => COLLEGES.includes(value),
     message: '请选择所属学院',
   },
-  {
-    field: 'phone',
-    label: '联系方式',
-    test: (value) => /^1[3-9]\d{9}$/.test(value),
-    message: '请填写 11 位手机号',
-  },
 ];
 
 /**
@@ -85,7 +79,6 @@ function normalizeProfile(form) {
     gender: pickString(source.gender).toUpperCase(),
     studentId: pickString(source.studentId),
     college: pickString(source.college),
-    phone: pickString(source.phone),
     nickName: pickString(source.nickName),
     avatarUrl: pickString(source.avatarUrl),
   };
@@ -143,7 +136,6 @@ function buildAccount({ openId = '', profile = {}, now = new Date() }) {
     gender: p.gender,
     studentId: p.studentId,
     college: p.college,
-    phone: p.phone,
     points: 0,
     role: ROLE.MEMBER,
     // 关键：注册只产生申请，激活由管理员在后台完成

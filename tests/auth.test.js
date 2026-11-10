@@ -53,7 +53,6 @@ function validForm(overrides = {}) {
     gender: 'M',
     studentId: '2023001234',
     college: COLLEGES[0],
-    phone: '13800138000',
     ...overrides,
   };
 }
@@ -66,13 +65,12 @@ describe('validateProfile —— 实名信息校验', () => {
     assert.equal(result.firstError, '');
   });
 
-  test('五项必填全空时逐项报错，firstError 指向姓名', () => {
+  test('四项必填全空时逐项报错，firstError 指向姓名', () => {
     const result = validateProfile({});
     assert.equal(result.valid, false);
     assert.deepEqual(Object.keys(result.errors).sort(), [
       'college',
       'gender',
-      'phone',
       'realName',
       'studentId',
     ]);
@@ -96,7 +94,6 @@ describe('validateProfile —— 实名信息校验', () => {
       gender: 'M',
       studentId: '2023001234',
       college: COLLEGES[0],
-      phone: '13800138000',
       nickName: '',
       avatarUrl: '',
     });
@@ -122,12 +119,6 @@ describe('validateProfile —— 实名信息校验', () => {
     assert.equal(validateProfile(validForm({ college: COLLEGES[0] })).valid, true);
   });
 
-  test('手机号按 11 位、以 1 开头校验', () => {
-    assert.ok(validateProfile(validForm({ phone: '1380013800' })).errors.phone);
-    assert.ok(validateProfile(validForm({ phone: '23800138000' })).errors.phone);
-    assert.equal(validateProfile(validForm({ phone: '19912345678' })).valid, true);
-  });
-
   test('参数为空或非对象时安全返回，不抛异常', () => {
     for (const value of [undefined, null, '', 0, 'abc']) {
       const result = validateProfile(value);
@@ -143,7 +134,6 @@ describe('normalizeProfile —— 整形', () => {
       gender: '',
       studentId: '2023001234',
       college: '',
-      phone: '',
       nickName: '',
       avatarUrl: '',
     });
