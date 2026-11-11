@@ -28,9 +28,16 @@ Thumbs.db
 # Word 打开文档时生成的临时锁定文件
 ~$*.docx
 
-# 敏感文件：数据库导出、密钥等
+# 敏感文件：账号级配置、密钥证书、数据库导出
 *.env
-.env.local
+.env
+.env.*
+cloudbaserc.json
+.cloudbase/
+*.pem
+*.p12
+*.key
+*.cer
 backup/
 
 # 可重新生成的产物（跑一次命令就能重来，不入库）
@@ -46,10 +53,12 @@ backup/
 /docs/主体注册与商用路径备忘-*.md
 /主体注册与商用路径备忘*.docx
 
-# 本地工程配置：AppID 与环境 ID 是账号级信息，只在本地填
+# 小程序 AppID 与云开发环境 ID：账号级信息，只在本地填
 # 拉下仓库后把同名 *.example.* 复制成正式文件即可
-/project.config.json
-/miniprogram/config.js
+# 不锚定根目录，子目录里再出现同名文件也一并挡住
+project.config.json
+miniprogram/config.js
+miniprogram/config.local.js
 
 # 含真实联系方式或实验数据的表格，属个人资料，不入库
 /未定产品决策跟踪表.xlsx
