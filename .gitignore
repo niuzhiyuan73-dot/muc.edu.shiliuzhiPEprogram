@@ -60,6 +60,9 @@ project.config.json
 miniprogram/config.js
 miniprogram/config.local.js
 
+# 临时素材（未定是否入库的头像原图等）
+/石榴头像.png
+
 # 含真实联系方式或实验数据的表格，属个人资料，不入库
 /未定产品决策跟踪表.xlsx
 /单打评分实验记录*.xlsx

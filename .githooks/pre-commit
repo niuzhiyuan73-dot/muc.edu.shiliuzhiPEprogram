@@ -1,0 +1,10 @@
+#!/bin/sh
+# 提交前扫描账号级信息与个人资料
+# ------------------------------------------------------------
+# 安装：npm run hooks:install（把 core.hooksPath 指向 .githooks）
+# 规则：tools/pre-commit-check.cjs
+# 跳过：git commit --no-verify（确认误报时再用）
+#
+# 用 exec 直传，不额外起一层 shell：Windows 的 Git Bash 下少一层更稳。
+
+exec node tools/pre-commit-check.cjs

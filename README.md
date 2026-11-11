@@ -176,6 +176,8 @@ npm run test:watch        # 监听模式
 npm run test:py           # 导入工具的 Python 契约测试
 npm run sync:cloud        # 把纯逻辑镜像到 cloudfunctions/data/lib/
 npm run check:cloud-sync  # 只校验不写入（CI 用）
+npm run hooks:install     # 一次性：提交前钩子指向 .githooks（扫 AppID / 环境 ID / 手机号 / 私钥）
+npm run check:secrets     # 全仓体检，发布前过一遍
 node tools/acceptance-audit.cjs   # 验收探针
 node .workbuddy/skills/shilzi-doc-sync/scripts/doc-truth.js    # 文档真值：页面/action/集合/镜像
 node .workbuddy/skills/shilzi-doc-sync/scripts/doc-audit.js --cases=<npm test 的用例数>  # 文档数字校对
@@ -184,6 +186,12 @@ node .workbuddy/skills/shilzi-doc-sync/scripts/doc-audit.js --cases=<npm test �
 **施工约定 skill**：`.workbuddy/skills/` 下四份守则（施工总则、页面、云函数 action、验收留痕）
 加一份文档同步器，随代码入库。改动前先读 `shilzi-construction-guard`；每批收尾跑
 `doc-audit` 并按影响面重建 docx；只读审查、页面组件维护、已有接口和技能指令维护也按意图加载，入口见 `AGENTS.md`。
+
+**提交前钩子**：`npm run hooks:install` 把 `core.hooksPath` 指向 `.githooks/`，此后
+每次 `git commit` 都会先跑 `tools/pre-commit-check.cjs`——暂存区里出现小程序 AppID、
+云开发环境 ID、腾讯云密钥、私钥、手机号或身份证号就拦下并打印行号。`.gitignore` 挡不住
+`git add -f`，钩子按「路径 + 内容」双保险，法务文书与证书文件命中路径即拒。确认误报时
+用 `git commit --no-verify` 跳过；`npm run check:secrets` 会把已跟踪文件全扫一遍。
 
 `npm test` 走 `tools/run-tests.js`，而不是裸的 `node --test`：单个测试文件超过默认 8 分钟
 会被杀掉并点名，运行期间每 15 秒打一行「正在跑谁」，慢文件在总结里单独列出。

@@ -9,7 +9,9 @@
     "test:watch": "node --test --watch \"tests/**/*.test.js\"",
     "test:py": "python -m unittest tools.test_import_matches",
     "sync:cloud": "node tools/sync-cloud-lib.js",
-    "check:cloud-sync": "node tools/sync-cloud-lib.js --check"
+    "check:cloud-sync": "node tools/sync-cloud-lib.js --check",
+    "hooks:install": "git config core.hooksPath .githooks",
+    "check:secrets": "node tools/pre-commit-check.cjs --all"
   },
   "engines": {
     "node": ">=18"
