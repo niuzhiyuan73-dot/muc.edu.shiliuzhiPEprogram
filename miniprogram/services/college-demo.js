@@ -64,17 +64,17 @@ const LAW_COLLEGE = '法学院';
  * 顾清和（女），再补一名男队员，它才交得出名单、排得出阵。
  */
 const DEMO_MEMBERS = [
-  { realName: '顾清和', nickName: '清和', gender: 'F', college: '文学院', studentId: '20240099', phone: '13800000099' },
-  { realName: '周正阳', nickName: '正阳', gender: 'M', college: '文学院', studentId: '20240060', phone: '13800000060' },
-  { realName: '格根塔娜', nickName: '塔娜', gender: 'F', college: '体育学院', studentId: '20240051', phone: '13800000051' },
-  { realName: '苏日娜', nickName: '日娜', gender: 'F', college: '信息工程学院', studentId: '20240052', phone: '13800000052' },
-  { realName: '谭雨菲', nickName: '雨菲', gender: 'F', college: '理学院', studentId: '20240053', phone: '13800000053' },
-  { realName: '白晓棠', nickName: '晓棠', gender: 'F', college: '生命与环境科学学院', studentId: '20240054', phone: '13800000054' },
-  { realName: '石俊峰', nickName: '俊峰', gender: 'M', college: '法学院', studentId: '20240055', phone: '13800000055' },
-  { realName: '龙云飞', nickName: '云飞', gender: 'M', college: '中国少数民族语言文学学院', studentId: '20240056', phone: '13800000056' },
-  { realName: '陆文博', nickName: '文博', gender: 'M', college: '美术学院', studentId: '20240057', phone: '13800000057' },
-  { realName: '秦朗', nickName: '秦朗', gender: 'M', college: '音乐学院', studentId: '20240058', phone: '13800000058' },
-  { realName: '邵一鸣', nickName: '一鸣', gender: 'M', college: '哲学与宗教学院', studentId: '20240059', phone: '13800000059' },
+  { realName: '顾清和', nickName: '清和', gender: 'F', college: '文学院', studentId: '20240099' },
+  { realName: '周正阳', nickName: '正阳', gender: 'M', college: '文学院', studentId: '20240060' },
+  { realName: '格根塔娜', nickName: '塔娜', gender: 'F', college: '体育学院', studentId: '20240051' },
+  { realName: '苏日娜', nickName: '日娜', gender: 'F', college: '信息工程学院', studentId: '20240052' },
+  { realName: '谭雨菲', nickName: '雨菲', gender: 'F', college: '理学院', studentId: '20240053' },
+  { realName: '白晓棠', nickName: '晓棠', gender: 'F', college: '生命与环境科学学院', studentId: '20240054' },
+  { realName: '石俊峰', nickName: '俊峰', gender: 'M', college: '法学院', studentId: '20240055' },
+  { realName: '龙云飞', nickName: '云飞', gender: 'M', college: '中国少数民族语言文学学院', studentId: '20240056' },
+  { realName: '陆文博', nickName: '文博', gender: 'M', college: '美术学院', studentId: '20240057' },
+  { realName: '秦朗', nickName: '秦朗', gender: 'M', college: '音乐学院', studentId: '20240058' },
+  { realName: '邵一鸣', nickName: '一鸣', gender: 'M', college: '哲学与宗教学院', studentId: '20240059' },
 ];
 
 /**

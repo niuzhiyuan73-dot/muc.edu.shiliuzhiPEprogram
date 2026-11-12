@@ -4,6 +4,9 @@
   "private": true,
   "description": "中央民族大学石榴籽体育管理小程序",
   "scripts": {
+    "prepare": "node tools/setup-local-config.js",
+    "setup:config": "node tools/setup-local-config.js",
+    "pretest": "node tools/setup-local-config.js",
     "test": "node tools/run-tests.js",
     "test:node": "node --test \"tests/**/*.test.js\"",
     "test:watch": "node --test --watch \"tests/**/*.test.js\"",

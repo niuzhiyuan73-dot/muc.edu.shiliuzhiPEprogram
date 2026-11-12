@@ -89,7 +89,7 @@
   color: var(--color-text-secondary);
 }
 
-/* 学号、学院、手机号都换行排，窄屏也不至于挤成一团 */
+/* 学号、学院都换行排，窄屏也不至于挤成一团 */
 .application-meta {
   display: flex;
   flex-wrap: wrap;

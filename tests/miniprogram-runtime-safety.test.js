@@ -30,8 +30,23 @@ const FORBIDDEN = [
   { pattern: /\bprocess\s*\./, label: 'process.', why: '小程序运行时没有 process' },
   { pattern: /\bBuffer\s*[.(]/, label: 'Buffer', why: '小程序没有 Buffer' },
   { pattern: /__dirname|__filename/, label: '__dirname/__filename', why: '小程序没有模块目录概念' },
-  { pattern: /require\(\s*['"](node:|fs|path|crypto|os|child_process)/, label: "require('fs' 等 Node 内建)", why: '小程序不支持 Node 内建模块' },
 ];
+
+/**
+ * Node 内建模块的 require 单独查（第十七轮 P2-2）。
+ *
+ * 下面的 stripCommentsAndStrings 会把 `require('fs')` 洗成 `require('')`，
+ * 所以原先放在 FORBIDDEN 里的第 4 条规则**永远匹配不到**。这里只去注释、
+ * 保留字符串，在原始调用形态上判定。
+ */
+const NODE_BUILTIN_REQUIRE = /require\(\s*['"](node:|fs|path|crypto|os|child_process)[^'"]*['"]\s*\)/g;
+
+function findNodeBuiltinRequires(text) {
+  const withoutComments = text
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:\\])\/\/[^\n]*/g, '$1');
+  return [...withoutComments.matchAll(NODE_BUILTIN_REQUIRE)].map(match => match[1]);
+}
 
 function listJs(dir) {
   const out = [];
@@ -72,15 +87,26 @@ describe('小程序端不得使用 Node 专有 API', () => {
     for (const file of listJs(path.join(ROOT, 'miniprogram'))) {
       const rel = path.relative(ROOT, file).split(path.sep).join('/');
       if (ALLOWED.has(rel)) continue;
-      const code = stripCommentsAndStrings(fs.readFileSync(file, 'utf8'));
+      const source = fs.readFileSync(file, 'utf8');
+      const code = stripCommentsAndStrings(source);
       for (const rule of FORBIDDEN) {
         if (rule.pattern.test(code)) {
           offenders.push(`${rel} → ${rule.label}（${rule.why}）`);
         }
       }
+      for (const builtin of findNodeBuiltinRequires(source)) {
+        offenders.push(`${rel} → require('${builtin}'…)（小程序不支持 Node 内建模块）`);
+      }
     }
     assert.deepEqual(offenders, [],
       `这些文件会让真机在 require 阶段直接崩，本地测试却全绿：\n  ${offenders.join('\n  ')}`);
+  });
+
+  test('Node 内建 require 不会被「去字符串」步骤洗掉', () => {
+    assert.deepEqual(findNodeBuiltinRequires("const fs = require('fs');"), ['fs']);
+    assert.deepEqual(findNodeBuiltinRequires("const p = require('node:path');"), ['node:']);
+    assert.deepEqual(findNodeBuiltinRequires("// 文档说明：require('fs') 只是举例"), []);
+    assert.deepEqual(findNodeBuiltinRequires("const x = require('./local.js');"), []);
   });
 
   test('身份上下文缓存在没有 process 的环境里能加载，并自动关闭', () => {

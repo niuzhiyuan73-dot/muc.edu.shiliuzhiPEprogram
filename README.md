@@ -4,10 +4,10 @@
 
 - 当前进度：篮球五人制与实时计分已落地；足球 F0—F3 已完成，支持赛后报告与成绩；足球/篮球已有协会内“我的球队”累计统计页签
 - 前端体验：全部赛事已改为搜索 / 年份 / 状态筛选与分页；赛事签表增加“晋级之路”横向图谱；团队统计支持本机草稿恢复与单字段增量更新；首页个人区提供明确行动文案；运动护照增加已核验生涯节点
-- 自检：**3281 项用例通过 / 0 失败**（203 个测试文件）；`node tools/run-tests.js --concurrency 2` 全绿 46.5 秒（本机默认并发 8 在高负载下偶发单文件卡死，见[交接说明](docs/交接说明.md)的复跑方法）
+- 自检：**3298 项用例通过 / 0 失败**（205 个测试文件）；`npm test -- --concurrency 2` 全绿 42.8 秒（本机默认并发 8 在高负载下偶发单文件卡死，见[交接说明](docs/交接说明.md)的复跑方法）
 - 云端共享库：`npm run check:cloud-sync` → 100 个文件一致
 - 界面进度：F01–F17 已提交 `581104f`，F18 的个人赛程、待办、运动护照已提交；本次前端体验批次按用户授权验收后提交，提交号见 Git 历史。场地看板、校园赛历、成绩分享卡仍按原决定暂不做。见[个人体育中心说明](docs/个人体育中心-使用与实现说明.md)与[本批验收](docs/前端探索与现场体验优化-验收记录.md)
-- 数据源：默认**本地模拟**（`miniprogram/config.js` 的 `CLOUD_ENV_ID` 为空；该文件不入库，先按第八节复制示例），填入环境 ID 即切云端，页面代码一行不改
+- 数据源：默认**本地模拟**（`miniprogram/config.js` 的 `CLOUD_ENV_ID` 为空；该文件不入库，由 `npm run setup:config` 从 example 模板生成，`npm ci` / `npm test` 会自动执行，见第八节），填入环境 ID 即切云端，页面代码一行不改
 
 ---
 
@@ -170,14 +170,15 @@ tools/                  镜像同步、导入工具、文档生成、图标生�
 ## 七、常用命令
 
 ```bash
-npm test                  # 全量测试（逐文件隔离 + 单文件硬超时 + 进度心跳）
+npm run setup:config      # 从 example 生成两份本地配置（幂等，不覆盖已填的值）
+npm test                  # 全量测试（自动先生成配置，逐文件隔离 + 单文件硬超时 + 进度心跳）
 npm run test:node         # 原生 node --test，排查单个文件时用
 npm run test:watch        # 监听模式
 npm run test:py           # 导入工具的 Python 契约测试
 npm run sync:cloud        # 把纯逻辑镜像到 cloudfunctions/data/lib/
 npm run check:cloud-sync  # 只校验不写入（CI 用）
 npm run hooks:install     # 一次性：提交前钩子指向 .githooks（扫 AppID / 环境 ID / 手机号 / 私钥）
-npm run check:secrets     # 全仓体检，发布前过一遍
+npm run check:secrets     # 已跟踪文件体检，发布前过一遍
 node tools/acceptance-audit.cjs   # 验收探针
 node .workbuddy/skills/shilzi-doc-sync/scripts/doc-truth.js    # 文档真值：页面/action/集合/镜像
 node .workbuddy/skills/shilzi-doc-sync/scripts/doc-audit.js --cases=<npm test 的用例数>  # 文档数字校对
@@ -212,14 +213,16 @@ python tools/md-to-docx.py docs/交接说明.md 交接说明.docx
 
 依赖 `python-docx`（`pip install python-docx`）。
 
-## 八、首次部署三步
+## 八、首次部署四步
 
-0. **本地工程配置**：把 `project.config.example.json` 复制为 `project.config.json`，
-   填入自己的小程序 AppID；把 `miniprogram/config.example.js` 复制为
-   `miniprogram/config.js`。这两个正式文件含账号级信息，已列入 `.gitignore`，不入库。
-1. **填环境 ID**：`miniprogram/config.js` 的 `CLOUD_ENV_ID`。
-2. **建集合**：按 [云开发控制台操作指南](docs/云开发控制台操作指南.md) 第三节建 52 个集合，权限全部设为「所有用户不可读写」。
-3. **部署云函数**：`npm run sync:cloud` → 开发者工具右键 `cloudfunctions/data` →「上传并部署：云端安装依赖」→ 创建第一个校级管理员。
+1. **本地工程配置**：跑 `npm run setup:config`。`npm ci` 与 `npm test` 会自动执行它，
+   也可手动跑一次；它把两个 `*.example.*` 模板复制成 `project.config.json` 与
+   `miniprogram/config.js`，**已存在就跳过**，不会覆盖你填过的 AppID / 环境 ID。
+   这两个正式文件含账号级信息，已列入 `.gitignore`，不入库。干净克隆后直接 `npm test`
+   也能跑通，不必手工复制模板。
+2. **填环境 ID**：`miniprogram/config.js` 的 `CLOUD_ENV_ID`；`project.config.json` 填自己的小程序 AppID。
+3. **建集合**：按 [云开发控制台操作指南](docs/云开发控制台操作指南.md) 第三节建 52 个集合，权限全部设为「所有用户不可读写」。
+4. **部署云函数**：`npm run sync:cloud` → 开发者工具右键 `cloudfunctions/data` →「上传并部署：云端安装依赖」→ 创建第一个校级管理员。
 
 > **本批有存量账号迁移要求**：先按[安全与性能实施方案](docs/安全与性能优化-实施方案.md)备份迁移并补齐目录字段，按[索引清单](docs/数据库索引清单.md)第 2.4 节建新索引，再部署。
 

@@ -199,6 +199,10 @@ test('unified grant is tiered by identity and cross-school browsing is read-only
   assert.equal(remote.readOnly, true);
   assert.deepEqual(remote.grants, []);
   assert.ok(remote.members.some(m => m.userId === 'demo_buaa_member'));
+  // 第十七轮 P2-1：只读浏览者能看名单，但不该拿到外校的组织架构
+  assert.ok(remote.members.every(m => !('permission' in m) && !('permissionLabel' in m)
+    && !('managedCollegeId' in m) && !('managedCollegeName' in m)),
+  '跨校名录不得下发权限档位与管辖学院');
   assert.equal((await grant({ userId: 'demo_buaa_member', permission: 'collegeLeader', make: true, collegeId: 'c01' }, 'mock_openid_muc_admin', 'buaa')).data.ok, false);
   // 不能给自己指定权限
   assert.equal((await grant({ userId: 'platformAdmin', permission: 'schoolAdmin', make: true })).data.ok, false);

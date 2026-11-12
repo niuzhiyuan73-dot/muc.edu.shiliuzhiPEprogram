@@ -9,7 +9,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { routeIdCandidates, resolveRouteId } = require('../miniprogram/utils/route-query.js');
+const { routeIdCandidates, resolveRouteId, safeRouteId } = require('../miniprogram/utils/route-query.js');
 
 test('不含 % 的编号只有一个候选：不做无谓的解码', () => {
   assert.deepStrictEqual(routeIdCandidates('u06'), ['u06']);
@@ -51,4 +51,33 @@ test('resolveRouteId 按候选顺序探测，命中即返回', async () => {
 test('resolveRouteId 全部候选未命中时返回空 id', async () => {
   const miss = await resolveRouteId('sev:missing', async () => null);
   assert.deepStrictEqual(miss, { id: '', result: null });
+});
+
+/* ===== 第十七轮 P2：普通参数的安全解析（防畸形 query 白屏） ===== */
+
+test('safeRouteId 解正常编码值，行为与原先 decodeURIComponent 一致', () => {
+  assert.equal(safeRouteId('team%3Amuc'), 'team:muc');
+  assert.equal(safeRouteId('c01'), 'c01');
+  assert.equal(safeRouteId(''), '');
+  assert.equal(safeRouteId(null), '');
+});
+
+test('safeRouteId 遇畸形百分号回退原值，不抛 URIError', () => {
+  assert.equal(safeRouteId('100%'), '100%');
+  assert.equal(safeRouteId('a%ZZ'), 'a%ZZ');
+  assert.equal(safeRouteId('sev%3Amuc%'), 'sev%3Amuc%');
+});
+
+test('两个页面不再裸写 decodeURIComponent，统一走安全解析', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const files = [
+    'packageTeam/team-detail/team-detail.js',
+    'packageCollege/college-lineup/college-lineup.js',
+  ];
+  for (const rel of files) {
+    const code = fs.readFileSync(path.join(__dirname, '../miniprogram', rel), 'utf8');
+    assert.doesNotMatch(code, /decodeURIComponent\(/, `${rel} 应改用 safeRouteId`);
+    assert.match(code, /safeRouteId/, `${rel} 应引用安全解析工具`);
+  }
 });

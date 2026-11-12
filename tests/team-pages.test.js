@@ -113,6 +113,48 @@ test('组队列表 —— 接口抛错时给「请稍后重试」，不把异常
   assert.match(page.data.error, /稍后重试/);
 }));
 
+test('组队列表 —— 并发刷新时过期响应不覆盖新结果', () => {
+  const pending = [];
+  return withApi({
+    listTeams: payload => new Promise((resolve) => { pending.push({ payload, resolve }); }),
+  }, async () => {
+    const page = instantiate(loadPage('team-list/team-list.js'));
+    const first = page.onLoad();
+    await new Promise(resolve => setImmediate(resolve));
+    page.onInputKeyword({ detail: { value: '热浪' } });
+    const second = page.onSearch();
+    await new Promise(resolve => setImmediate(resolve));
+
+    assert.equal(pending.length, 2, '应有两次在途请求');
+    const fresh = { ...TEAM, teamId: 'tm_new', name: '新条件的结果' };
+    const stale = { ...TEAM, teamId: 'tm_old', name: '旧条件的结果' };
+    // 逆序返回：新的先到，旧的迟到——旧响应不许回写
+    pending[1].resolve({ ok: true, teams: [fresh], canManage: false });
+    pending[0].resolve({ ok: true, teams: [stale], canManage: false });
+    await Promise.all([first, second]);
+    assert.deepEqual(page.data.teams.map(row => row.teamId), ['tm_new']);
+  });
+});
+
+test('组队列表 —— 刷新失败清掉旧列表，不把旧数据配新错误', () => {
+  let fail = false;
+  return withApi({
+    listTeams: () => (fail
+      ? { ok: false, message: '加载失败' }
+      : { ok: true, teams: [TEAM], canManage: false, hasMore: true, nextOffset: 20, total: 21 }),
+  }, async () => {
+    const page = instantiate(loadPage('team-list/team-list.js'));
+    await page.onLoad();
+    assert.equal(page.data.teams.length, 1);
+    fail = true;
+    await page.refresh();
+    assert.deepEqual(page.data.teams, []);
+    assert.equal(page.data.hasMore, false);
+    assert.equal(page.data.nextOffset, 0);
+    assert.match(page.data.error, /加载失败/);
+  });
+});
+
 /* ============================================================
  * team-detail
  * ============================================================ */

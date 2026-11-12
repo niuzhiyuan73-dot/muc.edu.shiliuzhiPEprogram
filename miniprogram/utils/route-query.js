@@ -53,4 +53,26 @@ async function resolveRouteId(value, probe) {
   return { id: '', result: null };
 }
 
-module.exports = { routeIdCandidates, resolveRouteId };
+/**
+ * 安全解析**单个普通参数**（学院名、关键词等）：解码成功用解码值，
+ * 畸形百分号序列回退原值，不让 URIError 把 onLoad 打断成白屏。
+ *
+ * 【边界】复合编号（含 `%25` 的 schoolKey / 赛事编号）仍要用
+ * `routeIdCandidates` / `resolveRouteId` 按候选探测，并把命中的真实编号回传
+ * 页面实例；这里取解码值只是保持与原先 `decodeURIComponent` 一致的行为，
+ * 不替代探测。触发条件：若出现「已解码且本身含 %」的编号查不到，改为探测。
+ *
+ * @param {*} value query 里的原始值
+ * @returns {string} 解码值或原值
+ */
+function safeRouteId(value) {
+  const raw = typeof value === 'string' ? value : '';
+  if (!raw || !raw.includes('%')) return raw;
+  try {
+    return decodeURIComponent(raw);
+  } catch (err) {
+    return raw;
+  }
+}
+
+module.exports = { routeIdCandidates, resolveRouteId, safeRouteId };

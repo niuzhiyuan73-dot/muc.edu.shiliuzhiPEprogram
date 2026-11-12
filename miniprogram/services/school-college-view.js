@@ -56,6 +56,9 @@ const { describeLive } = require('./live-view.js');
 // 列表读端封顶的条数：与 school-college-service 同一常量，避免两处各写一个数。
 const { EVENT_LIST_MAX } = require('./school-college-service.js');
 
+/** 取齐最多翻几页，与 school-event-view.js:49 同口径：每页都是一次服务端整表读 */
+const INFINITE_FETCH_PAGES = 5;
+
 const asArray = value => (Array.isArray(value) ? value : []);
 const okOf = dto => Boolean(dto && dto.ok);
 
@@ -923,13 +926,17 @@ async function loadCollegeEventListRows(options = {}) {
   const all = [];
   let offset = 0;
   let dto;
+  // 【取齐必须有硬上限】服务端每翻一页都重复一次整表读，赛事一多就把请求
+  // 往超时上推；与赛事列表的 INFINITE_FETCH_PAGES 对齐（第十七轮 P3）。
+  let pages = 0;
   do {
     dto = await api.listCollegeEvents({ limit: EVENT_LIST_MAX, offset });
     if (!okOf(dto)) return { rows: [], canManage: false };
     all.push(...asArray(dto.events));
     if (dto.hasMore && !(dto.nextOffset > offset)) throw new Error('学院赛列表分页没有前进');
     offset = dto.nextOffset;
-  } while (dto.hasMore);
+    pages += 1;
+  } while (dto.hasMore && pages < INFINITE_FETCH_PAGES);
   const rows = all.map(row => ({
     ...row,
     // 置顶与发布 / 审核同一门槛（仅管理员），直接复用行里算好的 canManage

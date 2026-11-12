@@ -272,3 +272,14 @@ test('写动作的「次数」仍按次计，不被读成本放大', () => {
   assert.equal(blocked.kind, 'write', '按秒级写频率拒绝，而不是读预算');
   assert.match(blocked.message, /频繁/);
 });
+
+test('运动会 / 团队域整表读动作也登记了成本点（第十七轮 P2）', () => {
+  for (const action of [
+    'listMeetPublishedResults', 'listTeamEvents', 'getMyMeetHonors', 'getMeetStandings',
+  ]) {
+    assert.ok(ACTION_READ_COST[action] > 1, `${action} 不该与点读同价`);
+  }
+  for (const action of ['finishSportsMeet', 'settleTeamEvent']) {
+    assert.ok(WRITE_READ_COST[action] > 1, `${action} 附带的整表读要计入日预算`);
+  }
+});

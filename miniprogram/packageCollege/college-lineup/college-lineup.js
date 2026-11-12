@@ -28,6 +28,7 @@ const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { safeRouteId } = require('../../utils/route-query.js');
 
 Page({
   data: {
@@ -51,7 +52,7 @@ Page({
     this.tieId = query.tieId || '';
     this.eventId = query.eventId || '';
     // 替哪一侧排阵：管理员与协会负责人两侧都进得来，由详情页指明；缺省取本人学院
-    this.college = query.college ? decodeURIComponent(query.college) : '';
+    this.college = safeRouteId(query.college);
     return this.refresh();
   },
 
@@ -113,7 +114,8 @@ Page({
     } catch (err) {
       console.error('[college-lineup] 加载失败', err);
       this.loaded = true;
-      this.setData({ loading: false, error: '排阵页加载失败，请返回重试', themeClass: currentThemeClass() });
+      this.setData({ loading: false, error: '排阵页加载失败，请返回重试',
+        view: {}, themeClass: currentThemeClass() });
     }
   },
 

@@ -18,6 +18,7 @@ const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
 const { teamSportStrategyFor } = require('../../utils/team-sport-rules.js');
+const { safeRouteId } = require('../../utils/route-query.js');
 
 Page({
   data: {
@@ -55,7 +56,7 @@ Page({
     this.scope = { schoolId, association: associationScope.getAssociation() };
     this.setData({
       themeClass: currentThemeClass(),
-      teamId: query.teamId ? decodeURIComponent(query.teamId) : '',
+      teamId: safeRouteId(query.teamId),
     });
     return this.refresh();
   },
@@ -65,7 +66,8 @@ Page({
     try {
       const result = await space.forScope(this.scope).getTeam({ teamId: this.data.teamId });
       if (!result.ok) {
-        this.setData({ loading: false, error: result.message || '球队不存在' });
+        this.setData({ loading: false, error: result.message || '球队不存在',
+          team: null, members: [], pendingCount: 0 });
         return undefined;
       }
       this.setData({
@@ -81,7 +83,8 @@ Page({
       return undefined;
     } catch (err) {
       console.error('[team-detail] 加载失败', err);
-      this.setData({ loading: false, error: '球队加载失败，请稍后重试' });
+      this.setData({ loading: false, error: '球队加载失败，请稍后重试',
+        team: null, members: [], pendingCount: 0 });
       return undefined;
     }
   },

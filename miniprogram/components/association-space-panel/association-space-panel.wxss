@@ -159,7 +159,7 @@
 
 .space-state.is-canceled {
   background: #fdeeee;
-  color: #b23b3b;
+  color: var(--color-danger-text);
 }
 
 /* 详情报名区 */

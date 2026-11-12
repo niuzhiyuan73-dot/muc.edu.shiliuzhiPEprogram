@@ -43,7 +43,8 @@ const BLOCKED_PATHS = [
   { re: /^miniprogram\/config\.js$/, why: '含云开发环境 ID，应只留本地' },
   { re: /^法务文书\//, why: '法务文书含个人与学校信息' },
   { re: /\.(pem|p12|key|cer)$/i, why: '密钥或证书' },
-  { re: /(^|\/)\.env(\.|$)/, why: '环境变量文件' },
+  // `.env.example` 是模板，不该被当成真实环境变量文件拦下
+  { re: /(^|\/)\.env(\.|$)/, why: '环境变量文件', unless: (file) => /\.example/i.test(file) },
   { re: /(^|\/)cloudbaserc\.json$/, why: 'CloudBase 配置含 envId' },
 ];
 
@@ -52,9 +53,21 @@ function looksLikePlaceholder(value) {
   return /x{4,}|X{4,}|<|>|\u586b|\u4f60\u7684|your|example|xxx/i.test(value);
 }
 
-/** 测试用的假号码（含四位以上连号）不算泄漏 */
+/**
+ * 测试 / 文档里的假号码不算泄漏。
+ *
+ * 【为什么按内容判，而不是按路径放行】（第十七轮 P2-1）
+ * 原先整条 `tests/` 路径、以及路径里带 mock / demo / seed / example 的文件
+ * 都跳过手机号规则，于是把真实号码写进 `school-mock.js` 或任何带 demo
+ * 字样的文档都不会被拦。现在一律看号码本身：只放行明确的假号形状，
+ * 不放行号段，避免放过真号。
+ */
 function looksLikeFakePhone(number) {
-  return /(\d)\1{3,}/.test(number);
+  const digits = String(number);
+  if (/(\d)\1{3,}/.test(digits)) return true; // 四位以上连号
+  // 公认示例号：明确列出，不放行号段，避免放过真号
+  if (/^(?:13800138000|13900139000|13812345678|13912345678)$/.test(digits)) return true;
+  return false;
 }
 
 /**
@@ -91,8 +104,8 @@ const CONTENT_RULES = [
   {
     name: '手机号',
     re: /\b1[3-9]\d{9}\b/g,
+    // 不再按路径豁免：假号由 looksLikeFakePhone 判定，真号在任何文件都要拦
     usable: (m) => !looksLikeFakePhone(m[0]),
-    skip: (path) => /(^|\/)(tests?|fixtures?)\//.test(path) || /(mock|demo|seed|example)/i.test(path),
   },
 ];
 
@@ -112,9 +125,18 @@ function git(args) {
   return execFileSync('git', args, { encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
 }
 
-/** 取暂存区里的文件列表（新增/修改/改名，不含删除） */
+/**
+ * 取暂存区里的文件列表（新增 / 修改 / 改名 / 类型变更，不含删除）。
+ *
+ * 【为什么要带 R/T】（第十七轮 P2-1）
+ * 原来用 `--diff-filter=ACM`，`git mv` 产生的 R（重命名）状态不在列表里：
+ * 把含敏感信息的文件改名后提交，路径规则与内容规则都扫不到，是
+ * `--no-verify` 之外的静默通道。R 取新路径，T 覆盖文件类型变更。
+ */
+const STAGED_DIFF_FILTER = 'ACMRT';
+
 function stagedFiles() {
-  const out = git(['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z']).toString('utf8');
+  const out = git(['diff', '--cached', '--name-only', `--diff-filter=${STAGED_DIFF_FILTER}`, '-z']).toString('utf8');
   return out.split('\0').filter(Boolean);
 }
 
@@ -169,7 +191,8 @@ function scanText(file, text) {
 function scanFile(file, buffer) {
   const hits = [];
 
-  const blocked = BLOCKED_PATHS.find((item) => item.re.test(file));
+  const blocked = BLOCKED_PATHS.find((item) => item.re.test(file)
+    && !(item.unless && item.unless(file)));
   if (blocked) hits.push({ file, line: 0, name: '受保护路径', value: blocked.why });
 
   if (!buffer || buffer.length > MAX_BYTES || isBinaryByExt(file)) return hits;
@@ -208,10 +231,10 @@ function main() {
   }
 
   const hits = files.flatMap((file) => scanFile(file, reader(file)));
-  return report(hits, all ? '全仓检查：' : '提交前扫描：');
+  return report(hits, all ? '已跟踪文件检查：' : '提交前扫描：');
 }
 
-module.exports = { scanText, scanFile, mask, looksLikeFakePhone, looksLikePlaceholder };
+module.exports = { scanText, scanFile, mask, looksLikeFakePhone, looksLikePlaceholder, STAGED_DIFF_FILTER };
 
 if (require.main === module) {
   try {

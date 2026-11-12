@@ -91,6 +91,12 @@ const ACTION_READ_COST = Object.freeze({
   listCollegeEvents: 10,
   listSchoolMatches: 10,
   listTrainings: 10,
+  // 运动会 / 团队域整表读（第十七轮 P2）：成本表此前只覆盖 school-space 域，
+  // 这四个动作按 1 点计，等于最贵的接口与点读同价。按读量级保守取值。
+  listMeetPublishedResults: 20, // 一次 Promise.all 整表读 6 个集合，结果行约 10 页
+  listTeamEvents: 20,           // 历届赛事 + 全部报名快照两份整表，且全量下发
+  getMyMeetHonors: 10,          // 一届约 800 条荣誉整表读后筛本人
+  getMeetStandings: 10,         // 学院 / 名次 / 发布 / 总榜 4 集合整表读
 });
 
 /**
@@ -116,6 +122,9 @@ const WRITE_READ_COST = Object.freeze({
   removeTrainingRegistration: 2,
   // 重置只推代际、不重算
   resetSchoolSeason: 1,
+  // 运动会 / 团队域写动作附带的整表读（第十七轮 P2），此前全表只覆盖 school-space 域
+  finishSportsMeet: 20, // 事务外整表读 publications + entries（一届约 960 条）
+  settleTeamEvent: 10,  // 除 listByEvent 下推外仍读全部球队取名
 });
 
 /**

@@ -129,7 +129,7 @@ Page({
     } catch (err) {
       console.error('[association] 协会清单加载失败', err);
       this.loaded = true;
-      this.setData({ loading: false, error: '协会列表加载失败，请下拉重试' });
+      this.setData({ loading: false, error: '协会列表加载失败，请下拉重试', associations: [] });
     }
   },
 

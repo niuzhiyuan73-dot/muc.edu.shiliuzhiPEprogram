@@ -48,6 +48,10 @@ Page({
   },
 
   onLoad(options = {}) {
+    // 请求序号（第十七轮 P1）：搜索 / 切「我的球队」/ 建队成功后刷新会并发，
+    // 只认最后一次的结果，慢的旧响应不许回写；unloaded 兜住离开页面后的在途请求。
+    this.loadEpoch = 0;
+    this.unloaded = false;
     if (options.mine === '1') this.setData({ mineOnly: true });
     const schoolId = schoolSession.getSchoolId() || LEGACY_SCHOOL_ID;
     const association = associationScope.getAssociation();
@@ -61,6 +65,10 @@ Page({
 
   /** 取列表。失败时给一句人话，不把异常抛到页面上 */
   async refresh() {
+    const epoch = (this.loadEpoch || 0) + 1;
+    this.loadEpoch = epoch;
+    // 过期响应 / 已卸载页面一律不回写：旧条件的结果不能盖掉新条件
+    const stale = () => epoch !== this.loadEpoch || this.unloaded;
     this.setData({ loading: true, error: '', loadingMore: false });
     try {
       const result = await space.forScope(this.scope).listTeams({
@@ -69,8 +77,11 @@ Page({
         limit: this.pageSize,
         offset: 0,
       });
+      if (stale()) return undefined;
       if (!result.ok) {
-        this.setData({ loading: false, error: result.message || '球队列表加载失败' });
+        // 失败要清掉旧数据：留着旧列表配新错误，用户会以为刚才那次成功了
+        this.setData({ loading: false, error: result.message || '球队列表加载失败',
+          teams: [], hasMore: false, nextOffset: 0, total: 0 });
         return undefined;
       }
       this.setData({
@@ -79,10 +90,16 @@ Page({
       });
       return undefined;
     } catch (err) {
+      if (stale()) return undefined;
       console.error('[team-list] 加载失败', err);
-      this.setData({ loading: false, error: '球队列表加载失败，请稍后重试' });
+      this.setData({ loading: false, error: '球队列表加载失败，请稍后重试',
+        teams: [], hasMore: false, nextOffset: 0, total: 0 });
       return undefined;
     }
+  },
+
+  onUnload() {
+    this.unloaded = true;
   },
 
   /**
@@ -91,6 +108,8 @@ Page({
    */
   async onMore() {
     if (this.data.loading || this.data.loadingMore || !this.data.hasMore) return undefined;
+    const epoch = this.loadEpoch;
+    const stale = () => epoch !== this.loadEpoch || this.unloaded;
     this.setData({ loadingMore: true });
     try {
       const result = await space.forScope(this.scope).listTeams({
@@ -99,6 +118,7 @@ Page({
         limit: this.pageSize,
         offset: this.data.nextOffset,
       });
+      if (stale()) return undefined; // 期间整页刷新过，这一页属于旧列表
       if (!result.ok) {
         this.setData({ loadingMore: false, notice: result.message || '加载更多失败', noticeError: true });
         return undefined;
@@ -111,6 +131,7 @@ Page({
       });
       return undefined;
     } catch (err) {
+      if (stale()) return undefined;
       console.error('[team-list] 加载更多失败', err);
       this.setData({ loadingMore: false, notice: '加载更多失败，请稍后重试', noticeError: true });
       return undefined;

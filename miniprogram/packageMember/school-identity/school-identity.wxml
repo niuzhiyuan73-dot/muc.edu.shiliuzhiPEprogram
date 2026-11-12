@@ -68,8 +68,8 @@
       <view wx:for="{{members}}" wx:key="userId" class="member-row">
         <view class="member-main">
           <view class="applicant-name">{{item.nickName}}</view>
-          <view class="hint member-meta">学籍：{{item.collegeName || '学院待补充'}} · {{item.permissionLabel}}</view>
-          <view wx:if="{{item.managedCollegeName}}" class="hint">管理：{{item.managedCollegeName}}</view>
+          <view class="hint member-meta">学籍：{{item.collegeName || '学院待补充'}}<block wx:if="{{!readOnly}}"> · {{item.permissionLabel}}</block></view>
+          <view wx:if="{{!readOnly && item.managedCollegeName}}" class="hint">管理：{{item.managedCollegeName}}</view>
         </view>
         <button wx:if="{{grants.length && item.userId !== user.userId}}" size="mini" data-user-id="{{item.userId}}" disabled="{{submitting}}" bindtap="onGrant">指定权限</button>
       </view>

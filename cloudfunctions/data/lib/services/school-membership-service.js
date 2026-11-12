@@ -636,26 +636,28 @@ function createSchoolHandlers({ claimKey }) {
     );
     const roleById = new Map(roles.map(row => [row._id, row]));
     const membershipById = new Map(memberships.map(row => [row._id, row]));
-    const members = rows.map(row => ({
-      userId: row.userId,
-      nickName: (userById.get(row.userId) || {}).nickName || '会员',
-      collegeId: row.collegeId || '',
-      collegeName: collegeName(row.collegeId),
-      managedCollegeId: membershipById.get(schoolMembershipKey(row.userId, ctx))?.status === 'active'
-        && membershipById.get(schoolMembershipKey(row.userId, ctx))?.role === 'staff'
-        ? membershipById.get(schoolMembershipKey(row.userId, ctx)).collegeId || '' : '',
-      managedCollegeName: membershipById.get(schoolMembershipKey(row.userId, ctx))?.status === 'active'
-        && membershipById.get(schoolMembershipKey(row.userId, ctx))?.role === 'staff'
-        ? collegeName(membershipById.get(schoolMembershipKey(row.userId, ctx)).collegeId) : '',
-      permission: permissionOf(
-        roleById.get(schoolRoleKey(row.userId, ctx.schoolId)),
-        membershipById.get(schoolMembershipKey(row.userId, ctx)),
-      ),
-      permissionLabel: permissionLabelOf(
-        roleById.get(schoolRoleKey(row.userId, ctx.schoolId)),
-        membershipById.get(schoolMembershipKey(row.userId, ctx)),
-      ),
-    }));
+    const members = rows.map(row => {
+      const membership = membershipById.get(schoolMembershipKey(row.userId, ctx));
+      const isCollegeStaff = membership?.status === 'active' && membership?.role === 'staff';
+      const item = {
+        userId: row.userId,
+        nickName: (userById.get(row.userId) || {}).nickName || '会员',
+        collegeId: row.collegeId || '',
+        collegeName: collegeName(row.collegeId),
+      };
+      // 【跨校只读不发组织架构】（第十七轮 P2-1）
+      // 任何有效平台账号都能读外校名录，但「谁有管理档位、管哪个学院」属于授权
+      // 信息：会话接口早已按 manageable 置空同一批字段，这里对齐口径，避免只读
+      // 浏览者分页枚举外校管理员名单。本校仍按原样下发。
+      if (!readOnly) {
+        item.managedCollegeId = isCollegeStaff ? membership.collegeId || '' : '';
+        item.managedCollegeName = isCollegeStaff ? collegeName(membership.collegeId) : '';
+        const role = roleById.get(schoolRoleKey(row.userId, ctx.schoolId));
+        item.permission = permissionOf(role, membership);
+        item.permissionLabel = permissionLabelOf(role, membership);
+      }
+      return item;
+    });
     return ok({
       ok: true,
       members,

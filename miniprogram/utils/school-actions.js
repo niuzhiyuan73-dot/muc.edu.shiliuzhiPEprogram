@@ -27,7 +27,7 @@
  * ============================================================
  */
 
-/** 学校身份（`forSchoolIdentity` 声明，13 个）。 */
+/** 学校身份（`forSchoolIdentity` 声明，14 个）。 */
 const SCHOOL_IDENTITY_ACTIONS = Object.freeze([
   'registerSchoolAccount',    'applySchoolMembership',    'reviewSchoolMembership',
   'getMySchoolMembership',    'getSchoolApplications',    'getSchoolDirectory',
@@ -37,7 +37,7 @@ const SCHOOL_IDENTITY_ACTIONS = Object.freeze([
   'getMySportsDashboard',
 ]);
 
-/** 协会空间（`forAssociationSpace` 声明，81 个）。 */
+/** 协会空间（`forAssociationSpace` 声明，119 个）。 */
 const SCHOOL_SPACE_ACTIONS = Object.freeze([
   'listAssociationGroups',        'getAssociationGroup',          'createAssociationGroup',
   'updateAssociationGroup',       'addAssociationGroupMembers',   'removeAssociationGroupMember',
