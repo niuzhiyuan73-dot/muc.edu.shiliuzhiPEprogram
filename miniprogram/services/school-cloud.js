@@ -72,7 +72,8 @@ function forSchoolIdentity(input) {
   });
 }
 
-/** 协会空间客户端：分组与成员名录，动作名与云端 school-request 注册的一致。 */function forAssociationSpace(input) {
+/** 协会空间客户端：分组与成员名录，动作名与云端 school-request 注册的一致。 */
+function forAssociationSpace(input) {
   const request = requestFor(schoolScope(input));
   return Object.freeze({
     listAssociationGroups: payload => request('listAssociationGroups', payload),

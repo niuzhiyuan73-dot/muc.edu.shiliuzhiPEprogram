@@ -217,6 +217,15 @@ describe('derivePlacements —— 名次按赛制推导', () => {
     assert.equal(result.ok, false);
   });
 
+  test('单人循环赛没有可打的比赛，直接按积分表给名次', () => {
+    // 第十八轮审查 P3：allDecided([]) 为 false，单人组会永远卡在「还没打完」。
+    const event = { _id: 'rr1', format: EVENT_FORMAT.ROUND_ROBIN };
+    const draw = { groups: [{ group: 0, entries: ['u1'] }] };
+    const result = derivePlacements({ event, draw, matches: [] });
+    assert.equal(result.ok, true, result.message);
+    assert.deepEqual(result.results, [{ userId: 'u1', placement: 1 }]);
+  });
+
   test('小组赛：出线者按淘汰成绩、未出线者按小组名次续排', () => {
     const event = { _id: 'gk2', format: EVENT_FORMAT.GROUP_KNOCKOUT, advancePerGroup: 1, bronzeMode: EVENT_BRONZE_MODE.TIED };
     const draw = {

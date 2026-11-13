@@ -54,8 +54,8 @@ const ratedMatch = (id, a, b, seq) => ({
   },
 });
 
-function fixture() {
-  return createSchoolMemoryRepo({
+function seedOf() {
+  return {
     schools: [{ _id: SCHOOL, schoolId: SCHOOL, name: '中央民族大学', status: 'active' }],
     users,
     schoolMembers,
@@ -95,7 +95,12 @@ function fixture() {
       { _id: 'reg_o1', schoolId: SCHOOL, association: ASSOC, trainingId: 'tr_1', userId: 'u_other', status: 'checked_in' },
       { _id: 'reg_o2', schoolId: SCHOOL, association: ASSOC, trainingId: 'tr_1', userId: 'u_rival', status: 'checked_in' },
     ],
-  });
+  };
+}
+
+/** 默认夹具；传 overrides 可替换某一类集合（如把 matches 换成上百条）。 */
+function fixture(overrides = {}) {
+  return createSchoolMemoryRepo({ ...seedOf(), ...overrides });
 }
 
 /**
@@ -181,4 +186,23 @@ test('训练报名按人下推后，训练积分仍算得对', async () => {
   assert.equal(data.ok, true, data.message);
   // 一条签到（2 分）+ 赛事第一名（按赛事分规则），至少要有训练那 2 分
   assert.ok(Number(data.user.points) >= 2, `训练积分不能因为下推而丢失，实际 ${data.user.points}`);
+});
+
+test('个人主页按页读比赛：单页不超过 99 条，场次多时继续翻页', async () => {
+  // 第十八轮审查 P2：原实现把 PROFILE_MATCH_FETCH=500 直接交给分页原语，
+  // 云端会拼出 limit(501)——越过平台 100 条上限，要么报错要么被截断。
+  const repo = fixture({
+    matches: Array.from({ length: 150 }, (_, i) => ratedMatch(`m_mine_${i}`, 'u_me', 'u_rival', i + 10)),
+  });
+  const calls = spyScope(repo);
+
+  await callProfile(repo, { userId: 'u_me' });
+
+  const pages = calls.filter(c => c.key === 'matches' && c.method === 'listPage');
+  assert.ok(pages.length >= 2, `150 场应分页读取，实际只读了 ${pages.length} 页`);
+  for (const call of pages) {
+    assert.ok(call.args[0].limit <= 99,
+      `单页必须夹到 99 条（多取 1 条判 hasMore），实际 ${call.args[0].limit}`);
+  }
+  assert.deepEqual(pages.map(call => call.args[0].offset), [0, 99], '偏移量应按上一页条数前进');
 });

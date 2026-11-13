@@ -687,7 +687,12 @@ function derivePlacements({ event, draw, matches } = {}) {
     const item = (draw.groups || [])[0];
     if (!item) return { ok: false, results: [], message: '还没有分组信息' };
     const groupMatches = list.filter((match) => match && match.group === item.group);
-    if (!allDecided(groupMatches)) {
+    // 【单人组为什么直接算已定】（第十八轮审查 P3）
+    // `allDecided([])` 为 false（「一场都没打」不能算打完），而单人循环赛本来就没有
+    // 可打的比赛，于是名次永远推不出来。只有「参赛者不超过 1 人」才跳过这道闸门；
+    // 三人组零比赛仍然按「还没打完」处理（不要把空台账当成已完赛）。
+    const entryCount = Array.isArray(item.entries) ? item.entries.length : 0;
+    if (entryCount > 1 && !allDecided(groupMatches)) {
       return { ok: false, results: [], message: '循环赛还没打完，名次尚未确定' };
     }
     const rows = computeStandings({ entries: item.entries || [], matches: groupMatches });

@@ -35,7 +35,7 @@ const KEYS = ['users', 'schools', 'schoolAssociations', 'colleges', 'schoolMembe
   // 团队运动（篮球/足球/排球）：球队 / 队员 / 赛事 / 报名 / 比赛 / 统计，
   // 与个人赛彻底分开，按「学校 + 协会」归属（与云端 SCOPED 同口径）
   'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-  // 运动会：学校级业务，与协会无关。12 个集合一律以 schoolId + meetId 归属，
+  // 运动会：学校级业务，与协会无关。14 个集合一律以 schoolId + meetId 归属，
   // 范围校验走 forMeet（与云端 attachSchoolRepository 同口径）。
   ...MEET_COLLECTIONS,
   // 学院部长授权：学校级常设角色，一院一条。
@@ -414,6 +414,14 @@ function createSchoolMemoryRepo(seed = {}) {
     };
     repo.exchangeSignups.listByEvent = async eventId => (await repo.exchangeSignups.list()).filter(doc => doc.eventId === eventId);
     repo.exchangeMatches.listByEvent = async eventId => (await repo.exchangeMatches.list()).filter(doc => doc.eventId === eventId);
+    // 按人反查会籍：契约写在 repository.js（`memberships.listByUser`），云端一直有实现，
+    // 模拟端此前只在 tests/helpers/memory-repo.js 里有——学校维度用的是本文件，
+    // 于是「服务调它」会在本地 TypeError（第十八轮审查 P3）。补上，两端口径一致。
+    // userId 只应是会话里的本人编号，不作为跨校浏览入口。
+    repo.memberships.listByUser = async userId => {
+      if (typeof userId !== 'string' || !userId) return [];
+      return (await repo.memberships.list()).filter(doc => doc.userId === userId);
+    };
     // 顶层同样按赛事取子集：业务里既有 ctx.repo.forScope(...).matches.listByEvent，
     // 也有直接 ctx.repo.matches.listByEvent 的写法，两处都要有（与云端同口径）。
     for (const key of EVENT_SCOPED) {

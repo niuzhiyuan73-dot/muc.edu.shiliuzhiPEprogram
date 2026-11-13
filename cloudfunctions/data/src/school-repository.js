@@ -14,7 +14,7 @@ const SCHOOL_COLLECTIONS = ['schools', 'schoolAssociations', 'colleges', 'school
   // 团队运动（篮球/足球/排球）6 个集合：与个人赛彻底分开，同样按
   // 「学校 + 协会」双维度归属。比赛与统计**绝不写 matches / memberRatings**。
   'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-  // 运动会 12 个集合：学校级业务，不属于任何协会。基础读写挂在这里，
+  // 运动会 14 个集合：学校级业务，不属于任何协会。基础读写挂在这里，
   // 范围校验走 forMeet（{schoolId, meetId}），不能混进下面的 SCOPED_COLLECTIONS
   // ——那一组会注入 association 字段，把运动会错挂到协会上。
   ...MEET_COLLECTIONS,
@@ -448,7 +448,8 @@ function buildScoped(repo, io, inTx, options) {
       return pageOfCollection(io, scope, key, options);
     };
   }
-  return result;}
+  return result;
+}
 
 function attachSchoolRepository(repo, io, inTx) {
   repo.personalSports = { readPage: (source, auth, query) => {
@@ -495,6 +496,17 @@ function attachSchoolRepository(repo, io, inTx) {
       return io.query(key, { schoolId: scope.schoolId, meetId: scope.meetId });
     };
   }
+  // ── 跨校邀请赛：按赛事取报名 / 对阵 ──────────────────────────────
+  //
+  // 【为什么这两个原语**不能**按 ctx 的学校拼范围】（第十八轮审查 P2）
+  // 跨校赛的每一行归属的是**主办校**（写入时 `schoolId: event.schoolId`），而读它的人
+  // 可能来自参赛校或平台管理员——调用方的 schoolId 与行的 schoolId 本来就不同。
+  // 若像 forScope 那样拼 `ctx.schoolId`，参赛校会读到空列表，等于把功能改坏。
+  //
+  // 因此范围校验只能落在**调用方**：先按 `eventId` 取赛事并过 `eventMatches` /
+  // `canSee` / `managesExchange`，再用这条原语取行。这条纪律由
+  // `tests/top-level-list-guard.test.js` 的静态扫描守护（要求调用点所在函数里
+  // 出现授权判据），不要在没有授权的地方直接调它。
   repo.exchangeSignups.listByEvent = eventId => io.query('exchangeSignups', { eventId });
   repo.exchangeMatches.listByEvent = eventId => io.query('exchangeMatches', { eventId });
 

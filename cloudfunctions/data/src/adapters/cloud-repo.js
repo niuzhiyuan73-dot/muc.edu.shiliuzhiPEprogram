@@ -33,6 +33,15 @@ const PAGE_SIZE = 100;
 /** 列表只返回一页文档；总数在数据库聚合，不能为了数字把台账翻回应用层。 */
 async function readMatchPage(scope, schoolScope, options) {
   const { filter = {}, limit, offset = 0, cursor = null } = options;
+  // 【为什么夹到 PAGE_SIZE − 1】（第十八轮审查 P2）
+  // 下面要多取 1 条判 hasMore，而云开发单次查询上限就是 PAGE_SIZE（100 条，见
+  // 文件头与 top()）。原实现直接用调用方的 limit：个人主页传 500 就变成
+  // limit(501)——平台要么截断（hasMore 恒 false，战绩静默少一段），要么直接报错。
+  // 需要更多只能由调用方按页续读，不能靠放大单次 limit。
+  const rawLimit = Number(limit);
+  const size = Number.isFinite(rawLimit) && rawLimit >= 0
+    ? Math.min(Math.floor(rawLimit), PAGE_SIZE - 1)
+    : 20;
   const collection = () => scope.collection(COLLECTIONS.matches).aggregate();
   const rowsOf = result => result.list || result.data || [];
   const count = async where => {
@@ -44,7 +53,7 @@ async function readMatchPage(scope, schoolScope, options) {
   const pendingFilter = { ...filter, status: MATCH_STATUS.PENDING };
   const pendingPromise = count(matchListWhere(schoolScope, pendingFilter));
   const totalPromise = filter.status === MATCH_STATUS.PENDING ? pendingPromise : count(where);
-  const pagePromise = limit === 0 ? Promise.resolve([]) : (async () => {
+  const pagePromise = size === 0 ? Promise.resolve([]) : (async () => {
     // 兼容任意非负 offset；超出结果集直接返回，避免把巨大的 skip 传给数据库。
     if (!cursor && offset > 0 && offset >= await totalPromise) return [];
     let query = collection().match(pageWhere).sort({ matchTime: -1, _id: -1 });
@@ -53,13 +62,13 @@ async function readMatchPage(scope, schoolScope, options) {
     // 多取一条判 hasMore（2026-10-26 第四轮审查 P-8）：原来靠再一次 `count(游标条件)`
     // 回答「还有没有下一页」，那是本接口的第三个聚合计数，且同样随台账线性增长。
     // 「多取 1 条」是分页的标准做法，一页的边界本来就由这一条决定。
-    return rowsOf(await query.limit(limit + 1).end());
+    return rowsOf(await query.limit(size + 1).end());
   })();
   const [fetched, total, pendingCount] = await Promise.all([pagePromise, totalPromise, pendingPromise]);
-  const rows = fetched.slice(0, limit);
-  // limit=0 是「只要计数」的调用（首页数量），此时没有「多取的那条」可判，
+  const rows = fetched.slice(0, size);
+  // size=0 是「只要计数」的调用（首页数量），此时没有「多取的那条」可判，
   // 退回用总数判断，行为与改造前一致。
-  const hasMore = limit === 0 ? total > offset : fetched.length > limit;
+  const hasMore = size === 0 ? total > offset : fetched.length > size;
   return { rows, total, pendingCount, hasMore };
 }
 

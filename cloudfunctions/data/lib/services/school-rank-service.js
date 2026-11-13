@@ -83,6 +83,40 @@ const RANK_SEARCH_LIMIT = 50;
  */
 const PROFILE_MATCH_FETCH = 500;
 
+/**
+ * 单页条数：必须比适配器的单次上限（100）少 1。
+ *
+ * 服务端要多取 1 条判 hasMore，`limit(101)` 会越过平台上限（第十八轮审查 P2）。
+ * 105 场的重度选手因此是 2 次分页读，而不是一次 501 条的巨查询。
+ */
+const PROFILE_MATCH_PAGE = 99;
+
+/**
+ * 取本人参与过的比赛，按页读到上限为止。
+ *
+ * 【为什么不再一次要 500 条】云端单次查询上限 100 条，原实现传 500 会被截断
+ * （hasMore 恒 false、Elo 链静默少一段）或直接报错。分页读每页 ≤ 99 条，
+ * 总量仍封顶在 PROFILE_MATCH_FETCH（口径见上方注释）。
+ *
+ * @param {Object} scopeRepo 受范围仓储
+ * @param {string} userId
+ * @returns {Promise<Array<Object>>}
+ */
+async function loadProfileMatches(scopeRepo, userId) {
+  const rows = [];
+  let offset = 0;
+  for (;;) {
+    const page = await scopeRepo.matches.listPage({
+      filter: { userId }, limit: PROFILE_MATCH_PAGE, offset,
+    });
+    const batch = Array.isArray(page.rows) ? page.rows : [];
+    rows.push(...batch);
+    if (!page.hasMore || rows.length >= PROFILE_MATCH_FETCH || batch.length === 0) break;
+    offset += batch.length;
+  }
+  return rows.slice(0, PROFILE_MATCH_FETCH);
+}
+
 /** 前三名的奖牌样式，其余为空串（与 rank-view.MEDALS 一致）。 */
 const MEDALS = ['gold', 'silver', 'bronze'];
 
@@ -938,9 +972,9 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
     return ok({ ok: false, found: false, message: '没有找到这位会员' });
   }
 
-  // 只读「我参与过的」比赛，并按与整范围视图同一口径连成 Elo 链
-  const myMatches = await scopeRepo.matches.listPage({ filter: { userId }, limit: PROFILE_MATCH_FETCH });
-  const matches = ratedMatchesOf(myMatches.rows);
+  // 只读「我参与过的」比赛，并按与整范围视图同一口径连成 Elo 链。
+  // 分页读到上限为止：单次 500 条会越过平台 100 条上限（第十八轮审查 P2）。
+  const matches = ratedMatchesOf(await loadProfileMatches(scopeRepo, userId));
 
   // 积分与荣誉所需的赛事 / 训练事实：整表但量级小（events 2~3 页、训练 1 页），
   // 训练报名按人下推。赛事分要挂到「我」的最后一场上，故在拿到 matches 之后做。

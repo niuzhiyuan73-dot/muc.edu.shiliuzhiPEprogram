@@ -283,3 +283,50 @@ test('运动会 / 团队域整表读动作也登记了成本点（第十七轮 P
     assert.ok(WRITE_READ_COST[action] > 1, `${action} 附带的整表读要计入日预算`);
   }
 });
+
+test('个人主页与荣誉的整表读也登记了成本点（第十八轮 P1）', () => {
+  // 个人主页单次最多回放 500 场本人比赛 + 整表 events + 6 次点读；
+  // 荣誉整表读 events。按 1 点计等于给「最贵的接口」开绿灯。
+  assert.ok(ACTION_READ_COST.getSchoolMemberProfile > 1, '个人主页不该与点读同价');
+  assert.ok(ACTION_READ_COST.getSchoolMemberHonors > 1, '荣誉不该与点读同价');
+});
+
+test('成本表只能登记白名单里的动作，且成本为正整数', () => {
+  const { SCHOOL_IDENTITY_ACTIONS, SCHOOL_SPACE_ACTIONS,
+    SCHOOL_EXCHANGE_ACTIONS, SCHOOL_MEET_ACTIONS } = require('../miniprogram/utils/school-actions');
+  const known = new Set([...SCHOOL_IDENTITY_ACTIONS, ...SCHOOL_SPACE_ACTIONS,
+    ...SCHOOL_EXCHANGE_ACTIONS, ...SCHOOL_MEET_ACTIONS]);
+  for (const [action, cost] of Object.entries(ACTION_READ_COST)) {
+    assert.ok(known.has(action), `成本表里的 ${action} 不在 202 白名单：登记了也永远命不中`);
+    assert.ok(Number.isInteger(cost) && cost > 0, `${action} 的成本必须是正整数`);
+  }
+  for (const [action, cost] of Object.entries(WRITE_READ_COST)) {
+    assert.ok(known.has(action), `写读成本表里的 ${action} 不在 202 白名单`);
+    assert.ok(Number.isInteger(cost) && cost >= 0, `${action} 的附带读成本必须是非负整数`);
+  }
+});
+
+test('RATE_LIMIT=on 可在测试环境打开限流，用真实消耗验证成本表', () => {
+  // NODE_ENV=test 默认整体关闭限流，成本表在测试里永远走不到——上一轮
+  // 5 个 action 名写错就是这么漏的（第十八轮 P3）。这里显式打开验证一次。
+  const previous = process.env.RATE_LIMIT;
+  process.env.RATE_LIMIT = 'on';
+  try {
+    resetRateLimit();
+    const action = 'getSchoolMemberProfile';
+    const cost = ACTION_READ_COST[action];
+    // 日预算按成本点扣：刚好用满的次数 = floor(DAILY_LIMITS.read / cost)
+    const fits = Math.floor(DAILY_LIMITS.read / cost);
+    // 每次间隔一秒，避开秒级桶，只考察日预算（与既有日预算用例同口径）。
+    for (let i = 0; i < fits; i += 1) {
+      assert.equal(guardRate('openid-cost', action, T0 + i * 1000), null, `第 ${i + 1} 次应当放行`);
+    }
+    const blocked = guardRate('openid-cost', action, T0 + fits * 1000);
+    assert.ok(blocked, `成本点必须真的从日预算里扣：${action} 应在第 ${fits + 1} 次被拒`);
+    assert.equal(blocked.kind, 'read');
+  } finally {
+    if (previous === undefined) delete process.env.RATE_LIMIT;
+    else process.env.RATE_LIMIT = previous;
+    resetRateLimit();
+  }
+});

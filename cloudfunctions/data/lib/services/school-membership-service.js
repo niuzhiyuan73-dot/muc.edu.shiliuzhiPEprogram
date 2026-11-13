@@ -283,8 +283,17 @@ function createSchoolHandlers({ claimKey }) {
     const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
     if (payload.decision === 'reject' && !reason) return ok(refused('驳回必须填写理由'));
     if (reason.length > 500) return ok(refused('审核理由过长'));
-    const priorMembers = payload.decision === 'approve'
-      ? await ctx.repo.forScope(ctx).schoolMembers.list() : [];
+    // 【学号判重只查「这个学号」】（第十八轮审查 P2）
+    // 与首次入会审批（本文件 129-139）同一把尺子：原先这里 `schoolMembers.list()`
+    // 把整校名册读回来再 some()，5000 人的学校每次转校审批 = 50 页 RPC，而这次读
+    // 不提供任何额外保护——并发判重的真防线是事务内的 studentIdClaims。
+    // 这条兄弟分支当时漏改，现在补上：先点读申请单取学号，再按字段窄查。
+    const transferTargetId = payload.decision === 'approve'
+      ? schoolMemberKey(payload.userId, ctx.schoolId) : '';
+    const transferTarget = transferTargetId
+      ? await ctx.repo.forScope(ctx).schoolMembers.getById(transferTargetId) : null;
+    const priorMembers = transferTarget && transferTarget.studentId
+      ? await ctx.repo.forScope(ctx).schoolMembers.listByStudentId(transferTarget.studentId) : [];
 
     const result = await ctx.repo.transaction(async tx => {
       const fresh = await freshContext(tx, ctx);

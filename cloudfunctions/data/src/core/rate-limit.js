@@ -97,6 +97,13 @@ const ACTION_READ_COST = Object.freeze({
   listTeamEvents: 20,           // 历届赛事 + 全部报名快照两份整表，且全量下发
   getMyMeetHonors: 10,          // 一届约 800 条荣誉整表读后筛本人
   getMeetStandings: 10,         // 学院 / 名次 / 发布 / 总榜 4 集合整表读
+  // 个人主页（第十八轮审查 P1）：单次最多回放 500 场本人比赛 + 整表 events，
+  // 再加名册 / 角色 / 会籍 / 学院 / 评级计数 6 次点读。此前按 1 点计，
+  // 而门槛只是「在册会员」——4000 点日预算等于放行 4000 次 × 500 条文档读，
+  // 是全站日配额（5 万）的几十倍。按读量级保守取 60。
+  getSchoolMemberProfile: 60,
+  // 荣誉：整表读 events 后按人筛，与 getMeetStandings 同一量级。
+  getSchoolMemberHonors: 10,
 });
 
 /**
@@ -192,7 +199,12 @@ const DAY_MS = 86400000;
 const TZ_OFFSET_MS = 8 * 3600 * 1000;
 
 function disabled() {
-  return process.env.RATE_LIMIT === 'off' || process.env.NODE_ENV === 'test';
+  // 【为什么要有 on】（第十八轮审查 P3）：NODE_ENV=test 一律关掉限流，导致成本表
+  // 在测试里**永远走不到**——上一轮 5 个 action 名写错、登记了也命不中，就是这么漏的。
+  // RATE_LIMIT=on 允许单条用例显式打开，用真实消耗验证成本表与日预算。
+  if (process.env.RATE_LIMIT === 'off') return true;
+  if (process.env.RATE_LIMIT === 'on') return false;
+  return process.env.NODE_ENV === 'test';
 }
 
 /** 这个动作算读还是算写。未知动作按写处理（严格优先）。 */

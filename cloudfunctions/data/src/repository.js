@@ -130,7 +130,7 @@ const COLLECTIONS = {
   teamEventEntries: COLLECTION.TEAM_EVENT_ENTRIES,
   teamMatches: COLLECTION.TEAM_MATCHES,
   teamMatchStats: COLLECTION.TEAM_MATCH_STATS,
-  // 运动会：12 个集合均为「学校 + 运动会」双维度归属（无协会），
+  // 运动会：14 个集合均为「学校 + 运动会」双维度归属（无协会），
   // 由 school-repository.js 的 forMeet 校验写入范围。
   sportsMeets: COLLECTION.SPORTS_MEETS,
   sportsMeetEvents: COLLECTION.SPORTS_MEET_EVENTS,

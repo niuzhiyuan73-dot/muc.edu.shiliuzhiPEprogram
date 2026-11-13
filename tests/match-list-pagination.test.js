@@ -118,14 +118,27 @@ test('云端一万场比赛只回传本页文档及计数，不逐页读取历�
   const db = cloudDatabase(Array.from({ length: 10000 }, (_, i) => match(String(i).padStart(5, '0'))));
   const page = await createRepo(db).forScope(SCOPE).matches.listPage({ filter: {}, limit: 100 });
   assert.equal(page.total, 10000);
-  assert.equal(page.rows.length, 100);
+  // 单页夹到 99：多取 1 条判 hasMore，101 会越过平台单次查询上限（第十八轮审查 P2）。
+  assert.equal(page.rows.length, 99);
   assert.equal(page.hasMore, true);
   assert.equal(db.calls.length, 3, '一页查询 + 两个 count，次数不随台账增长');
   // 一页查询多取 1 条判 hasMore（2026-10-26 第四轮审查 P-8），另两个 count 各回 1 条。
-  assert.equal(db.calls.reduce((sum, call) => sum + call.returned, 0), 103);
+  assert.equal(db.calls.reduce((sum, call) => sum + call.returned, 0), 102);
   const data = db.calls.find(call => call.stages.some(([stage]) => stage === 'limit'));
   assert.deepEqual(data.stages.find(([stage]) => stage === 'sort')[1], { matchTime: -1, _id: -1 });
-  assert.equal(data.stages.find(([stage]) => stage === 'limit')[1], 101, '取 limit + 1 条，多一条只用于判 hasMore');
+  assert.equal(data.stages.find(([stage]) => stage === 'limit')[1], 100,
+    '取 size + 1 条（size 上限 99），多一条只用于判 hasMore，绝不越过平台 100 条上限');
+});
+
+test('调用方要 500 条也只回一页，不会拼出超上限的查询', async () => {
+  // 个人主页原先把 PROFILE_MATCH_FETCH=500 直接交给分页原语（第十八轮审查 P2）：
+  // 云端会出现 limit(501)，要么被截断（hasMore 恒 false、战绩少一段）要么报错。
+  const db = cloudDatabase(Array.from({ length: 1200 }, (_, i) => match(String(i).padStart(5, '0'))));
+  const page = await createRepo(db).forScope(SCOPE).matches.listPage({ filter: {}, limit: 500 });
+  assert.equal(page.rows.length, 99);
+  assert.equal(page.hasMore, true);
+  const data = db.calls.find(call => call.stages.some(([stage]) => stage === 'limit'));
+  assert.ok(data.stages.find(([stage]) => stage === 'limit')[1] <= 100);
 });
 
 test('列表服务只调用分页原语与一次比分批读，保留归属校验、顺序及首帧比分', async () => {

@@ -533,3 +533,36 @@ test('未登录只放行两个公开动作，其余一律要求登录', async ()
     assert.match(res.message, /请先登录/, `${action} 应给出「请先登录」而不是别的错`);
   }
 });
+
+test('转校审批的学号判重按字段窄查，不再读整校名册（第十八轮 P2）', async () => {
+  const repo = fixture();
+  await join(repo, 'new1', 'muc', 'MUC001');
+  const applied = (await request(repo, 'applySchoolTransfer',
+    { collegeId: 'c01', studentId: 'BUAA001' }, 'new1', 'buaa')).data;
+  assert.equal(applied.ok, true, applied.message);
+
+  // 记录受范围仓储上「怎么读名册」：整表 list 还是按学号窄查
+  const calls = [];
+  const rawForScope = repo.forScope.bind(repo);
+  repo.forScope = (input) => {
+    const surface = rawForScope(input);
+    const members = surface.schoolMembers;
+    for (const method of ['list', 'listByStudentId', 'getById']) {
+      const original = members[method];
+      if (typeof original !== 'function') continue;
+      members[method] = (...args) => {
+        calls.push(method);
+        return original.apply(members, args);
+      };
+    }
+    return surface;
+  };
+
+  const approved = (await request(repo, 'reviewSchoolTransfer',
+    { userId: 'new1', decision: 'approve', revision: applied.account.revision },
+    'mock_openid_buaa_admin', 'buaa')).data;
+  assert.equal(approved.ok, true, approved.message);
+  assert.ok(!calls.includes('list'),
+    '转校审批不允许整校读名册：5000 人是 50 页 RPC，与入会审批同一把尺子');
+  assert.ok(calls.includes('listByStudentId'), '学号判重应按字段窄查（索引 schoolId + studentId）');
+});
