@@ -131,7 +131,7 @@ test('日预算按账号隔离，别人刷满不影响我', () => {
   assert.equal(guardRate('openid-fresh', 'getSchoolRanking', T0 + DAILY_LIMITS.read * 1000), null);
 });
 
-test('轮询接口不计入日预算，正常观众不会被误封', () => {
+test('轮询使用独立日预算，正常观众不会耗尽普通读额度', () => {
   resetRateLimit();
   const rounds = DAILY_LIMITS.read + 10;
   for (let i = 0; i < rounds; i += 1) {

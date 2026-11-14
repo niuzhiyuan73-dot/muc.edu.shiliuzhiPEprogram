@@ -39,9 +39,16 @@ async function unchangedEvent(tx, snapshot) {
   return Number(current.revision || 0) === Number(snapshot.revision || 0);
 }
 
+/** 项目变更同时推进届次内容版本，供收尾事务用常数次读取核对。 */
 async function touchEvent(tx, eventKey) {
   const doc = await tx.sportsMeetEvents.getById(eventKey);
-  if (doc) await tx.sportsMeetEvents.set(eventKey, { ...doc, revision: Number(doc.revision || 0) + 1 });
+  if (doc) {
+    await tx.sportsMeetEvents.set(eventKey, { ...doc, revision: Number(doc.revision || 0) + 1 });
+    const meet = await tx.sportsMeets.getById(doc.meetId);
+    if (meet) await tx.sportsMeets.set(doc.meetId, {
+      ...meet, contentRevision: Number(meet.contentRevision || 0) + 1,
+    });
+  }
 }
 
 /**

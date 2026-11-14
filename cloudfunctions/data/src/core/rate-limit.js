@@ -50,7 +50,7 @@ const LIMITS = Object.freeze({ read: 8, write: 3 });
  * 【数值怎么来的】
  * 5 万 / 每请求约 8 次读 ≈ 6000 个请求是理论上限。取 4000 留出余量：
  * 单个账号最多消耗约 3.2 万次读（64% 配额），刷不空全校。
- * 正常使用远低于此——一次页面操作 1~3 个请求，轮询另有豁免（见 POLL_ACTIONS）。
+ * 正常使用远低于此——一次页面操作 1~3 个请求，轮询使用独立日预算（见 POLL_ACTIONS）。
  * 写 1500：判球 10 场 = 500 次，加报名/审核仍有余量。
  *
  * 【为什么还是进程内】
@@ -145,6 +145,13 @@ const WRITE_READ_COST = Object.freeze({
  * @returns {number} ≥ 1 的整数
  */
 function readCostOf(action, payload) {
+  if (POLL_ACTIONS.has(action)) {
+    const validIds = (Array.isArray(payload && payload.matchIds) ? payload.matchIds : [])
+      .filter(id => typeof id === 'string' && id);
+    // 团队服务先去重再限量；个人服务先截取 50 项，必须按各自实际读集合计费。
+    const ids = new Set(action === 'getTeamLiveScores' ? validIds : validIds.slice(0, 50));
+    return Math.max(1, Math.min(50, ids.size)) * (action === 'getTeamLiveScores' ? 3 : 1);
+  }
   const base = ACTION_READ_COST[action];
   if (!base) return 1;
   if (action === 'listSchoolMembers' && payload
@@ -153,14 +160,15 @@ function readCostOf(action, payload) {
 }
 
 /**
- * 轮询动作：不计入日预算。
+ * 轮询动作：使用独立的按场次数加权日预算。
  *
- * 【为什么豁免】这类接口每 2 秒一拍，看一场一小时的比赛就是 1800 次请求；
- * 而它每次只花 1 次读（`_.in` 批读 + 上下文缓存），打不空配额。
- * 不豁免的话，正常观众会被日预算误封——那是把安全措施变成故障。
- * **新增轮询接口必须来这里登记**，否则它会被当普通读吃掉预算。
+ * 单场两小时篮球约 3600 次轮询，按三个集合计 10800 点。
+ * 独立额度为 12000 点，批量场次数增加时同比扣点，普通读写另计。
+ * 新增轮询接口需登记动作及成本估算。
  */
 const POLL_ACTIONS = new Set(['getSchoolLiveScores', 'getTeamLiveScores']);
+/** 独立观赛日预算，按批量场次数计，团队轮询按三个集合估算。 */
+const POLL_DAILY_LIMIT = 12000;
 
 /**
  * 匿名桶的阈值（每「来源」每秒）。
@@ -235,8 +243,7 @@ function sweepDaily(day) {
 /**
  * 日预算判定。
  *
- * 轮询动作直接放行且**不计数**（见 POLL_ACTIONS：看一场比赛就是 1800 次请求，
- * 每次只 1 次读，计进来只会误封正常观众）。
+ * 轮询动作计入独立观赛额度，普通读写继续使用各自的日预算。
  *
  * @param {string} key 桶键
  * @param {'read'|'write'} kind
@@ -247,15 +254,22 @@ function sweepDaily(day) {
  * @returns {null|{message:string, kind:string, limit:number, scope:string}}
  */
 function guardDaily(key, kind, action, nowMs, anon, cost = 1, extraRead = 0) {
-  if (POLL_ACTIONS.has(action)) return null;
   const day = dayOf(nowMs);
   const limit = (anon ? ANON_DAILY_LIMITS : DAILY_LIMITS)[kind];
   const readLimit = (anon ? ANON_DAILY_LIMITS : DAILY_LIMITS).read;
   let row = daily.get(key);
   if (!row || row.day !== day) {
     sweepDaily(day);
-    row = { day, read: 0, write: 0 };
+    row = { day, read: 0, write: 0, poll: 0 };
     daily.set(key, row);
+  }
+  if (POLL_ACTIONS.has(action)) {
+    row.poll += Math.max(1, Math.floor(cost) || 1);
+    if (row.poll > POLL_DAILY_LIMIT) return {
+      message: '今日实时观赛读取额度已用尽，请明天再试',
+      kind: 'read', limit: POLL_DAILY_LIMIT, scope: 'day',
+    };
+    return null;
   }
   // 先把读成本记上（读动作按成本表，写动作按它附带的整表读）。
   const readCost = (kind === 'read' ? Math.max(1, Math.floor(cost) || 1) : 0)
@@ -349,5 +363,5 @@ function resetRateLimit() {
 
 module.exports = {
   guardRate, resetRateLimit, kindOf, readCostOf, ACTION_READ_COST,
-  LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS, POLL_ACTIONS, dayOf, WRITE_READ_COST,
+  LIMITS, ANON_LIMITS, DAILY_LIMITS, ANON_DAILY_LIMITS, POLL_ACTIONS, POLL_DAILY_LIMIT, dayOf, WRITE_READ_COST,
 };

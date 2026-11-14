@@ -341,9 +341,9 @@ async function refreshAssociationPoints(ctx, options = {}) {
  *   · 赛季还没物化（首次上线 / 重置后 / 上次重算失败）——行上的值不可信；
  *   · 行上锚点与当前赛季不一致（跨赛季残留、或会员行刚建）；
  *   · 会员行不存在（已转出）。
- * 三种情况都返回 `needsRefresh`，由调用方在事务外跑 `refreshAfterWrite`。
+ * 三种情况都在事务内推进事实版本并返回 `needsRefresh`，调用方随后重算。
  *
- * 【为什么能安全地不用 bumpSeasonVersion】本函数在**同一个事务**里把
+ * 增量成功时，本函数在**同一个事务**里把
  * `version` 与 `pointsSettledVersion` 一起 +1：事实、行上的值、代际三者
  * 原子地同时前进，读取端不会看到「分变了但还说是已结算」的中间态。
  *
@@ -360,7 +360,10 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
   const id = scopeKey({ schoolId: ctx.schoolId, association: ctx.association });
   const doc = await tx.seasons.getById(id);
   const season = doc && doc.schoolId === ctx.schoolId ? doc : null;
-  if (!season || !isSettled(season)) return { applied: false, needsRefresh: true };
+  if (!season || !isSettled(season)) {
+    await bumpSeasonVersion(tx, ctx, new Date(ctx.now));
+    return { applied: false, needsRefresh: true };
+  }
 
   // 不在本赛季的事实不改变本赛季的分（与 factsInSeason 同一把尺子）
   const resetMs = season.resetTime ? new Date(season.resetTime).getTime() : NaN;

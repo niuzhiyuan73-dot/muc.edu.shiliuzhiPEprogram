@@ -8,7 +8,7 @@ const { canManageMeet } = require('./meet-permission');
 const { legacyRoleOf } = require('./school-actor');
 const { canConfirm, needsScore } = require('./match-record');
 const { formatDateTime } = require('../utils/format');
-const { meetPublicationKey } = require('../utils/meet-scope');
+const { meetPublicationKey, meetResultRowKey } = require('../utils/meet-scope');
 const { SOURCES, DIRECTIONS, PAGE_MAX } = require('./personal-sports-query');
 const ok = data => ({ ok: true, data });
 const refuse = message => ok({ ok: false, message, resetRequired: true });
@@ -101,7 +101,7 @@ function baseItem(source, row, section, auth, ctx) {
       { id: match.sportFormat === 'football11' ? match._id : match.eventId, matchId: match._id });
   } else if (['meetSchedule', 'meetJudge', 'judgeDraft', 'meetResult'].includes(source)) {
     const slot = row.hubSession;
-    item.key = source === 'meetResult' ? `passport:meet:${row._id}` : source === 'judgeDraft' ? `tasks:judge:${row._id}` : `schedule:meet:${slot._id}`;
+    item.key = source === 'meetResult' ? `passport:meet:${meetResultRowKey(row.publicationKey, row.entryKey)}` : source === 'judgeDraft' ? `tasks:judge:${row._id}` : `schedule:meet:${slot._id}`;
     item.title = `${row.hubMeet.name || '运动会'} · ${event?.name || '项目'}`;
     item.subtitle = source === 'meetResult' ? row.hubPublication.roundLabel || '' : [slot?.roundLabel || slot?.round, slot?.index ? `第 ${slot.index} 场` : ''].filter(Boolean).join(' · ');
     item.roles = [source === 'meetSchedule' ? '参赛' : source === 'meetResult' ? '正式成绩记录' : '裁判'];

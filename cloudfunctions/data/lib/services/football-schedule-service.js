@@ -4,14 +4,14 @@ const { buildSchoolContext } = require('./school-context');
 const { schoolAssociationKey, schoolMemberKey } = require('../utils/school');
 const { matchMinutes } = require('../utils/football-report');
 const { teamSportStrategyFor } = require('../utils/team-sport-rules');
+const { parseMeetTime } = require('./meet-time');
 const ok = data => ({ ok: true, data });
 const fail = message => ({ ok: false, message });
 const scoped = (row, ctx) => row && row.schoolId === ctx.schoolId && row.association === ctx.association;
 function parseTime(value) {
   if (value == null || value === '') return null;
   if (typeof value !== 'string') return undefined;
-  const input = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(value) ? `${value.replace(' ', 'T')}:00+08:00` : value;
-  const n = Date.parse(input);
+  const n = parseMeetTime(value);
   return Number.isFinite(n) ? new Date(n).toISOString() : undefined;
 }
 function conflicts(matches, events) {

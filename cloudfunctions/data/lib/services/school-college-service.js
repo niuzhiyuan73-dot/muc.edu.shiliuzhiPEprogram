@@ -486,6 +486,20 @@ async function submitCollegeEntry(payload = {}, ctx) {
   const actor = legacyActorOf(ctx, dir);
   const { collegeId, college } = resolveCollege(payload, dir);
   const members = memberMapOf(dir);
+  const snapshot = await ctx.repo.forScope(ctx).collegeEvents.getById(payload.eventId);
+  const audience = readAudience(snapshot);
+  const witnesses = new Map();
+  if (audience.audienceMode === 'groups') {
+    const checked = buildCollegeEntryRecord({ ...payload, college },
+      { event: snapshot, actor, members: dir.members, colleges: dir.collegeNames, now: ctx.now });
+    if (!checked.ok) return ok(refused(checked.message));
+    await Promise.all(checked.record.members.map(async userId => {
+      const relations = await ctx.repo.forScope(ctx).associationGroupMembers.listByUser(userId);
+      const witness = relations.find(row => row.status === GROUP_MEMBER_STATUS.ACTIVE
+        && audience.audienceGroupIds.includes(row.groupId));
+      if (witness) witnesses.set(userId, witness.groupId);
+    }));
+  }
 
   const result = await inTransaction(ctx, dir, async (tx, actor, fresh) => {
     const doc = await tx.collegeEvents.getById(payload.eventId);
@@ -500,16 +514,20 @@ async function submitCollegeEntry(payload = {}, ctx) {
 
     // 小组限制（B6-b / G08）：名单里**每一位**都须命中赛事限定的小组，
     // 仅一人不符合即整份提交失败；学院负责人本人入组不能替代选手资格。
-    const audience = readAudience(doc);
+    if (Number(doc.revision || 0) !== Number(snapshot && snapshot.revision || 0)) {
+      return refused('赛事或报名已变化，请刷新后重试');
+    }
     if (audience.audienceMode === 'groups') {
       for (const memberId of built.record.members) {
-        let hit = false;
-        for (const groupId of audience.audienceGroupIds) {
-          const rel = await tx.associationGroupMembers.getById(
-            associationGroupMemberKey(groupId, memberId, ctx));
-          if (rel && rel.status === GROUP_MEMBER_STATUS.ACTIVE) { hit = true; break; }
+        const groupId = witnesses.get(memberId);
+        if (!groupId) return refused('名单中有成员不在赛事限定的小组内，请调整名单');
+        const rel = await tx.associationGroupMembers.getById(
+          associationGroupMemberKey(groupId, memberId, ctx));
+        if (!rel || rel.status !== GROUP_MEMBER_STATUS.ACTIVE
+          || rel.schoolId !== ctx.schoolId || rel.association !== ctx.association
+          || rel.userId !== memberId || rel.groupId !== groupId) {
+          return refused('成员的小组资格已变化，请刷新后重试');
         }
-        if (!hit) return refused('名单中有成员不在赛事限定的小组内，请调整名单');
       }
     }
 
@@ -527,6 +545,9 @@ async function submitCollegeEntry(payload = {}, ctx) {
       updatedAt: nowIso,
     };
     await tx.collegeEntries.set(key, entry);
+    await tx.collegeEvents.set(doc._id, {
+      ...doc, revision: Number(doc.revision || 0) + 1, updatedAt: nowIso,
+    });
     await tx.audit.append({ _id: collegeEntryAuditKey(doc._id, collegeId, 'submitCollegeEntry', entry.revision),
       action: 'submitCollegeEntry', schoolId: ctx.schoolId, association: ctx.association,
       actorId: ctx.actorId, eventId: doc._id, collegeId, at: nowIso });
@@ -550,6 +571,7 @@ async function reviewCollegeEntry(payload = {}, ctx) {
     const doc = await tx.collegeEvents.getById(payload.eventId);
     if (!isCollegeEventDoc(doc) || !belongsToSchoolScope(doc, ctx)) return refused('学院赛不存在');
 
+    if (doc.status !== COLLEGE_EVENT_STATUS.SIGNUP) return refused('名单已经锁定，不能再审核');
     const key = collegeEntryKey(doc._id, collegeId, ctx);
     const entry = await tx.collegeEntries.getById(key);
     // 审核权与旧栈同一门槛：仅管理员；退回必须给理由。
@@ -567,6 +589,9 @@ async function reviewCollegeEntry(payload = {}, ctx) {
       updatedAt: nowIso,
     };
     await tx.collegeEntries.set(key, next);
+    await tx.collegeEvents.set(doc._id, {
+      ...doc, revision: Number(doc.revision || 0) + 1, updatedAt: nowIso,
+    });
     await tx.audit.append({ _id: collegeEntryAuditKey(doc._id, collegeId, `reviewCollegeEntry-${checked.status}`, next.revision),
       action: 'reviewCollegeEntry', schoolId: ctx.schoolId, association: ctx.association,
       actorId: ctx.actorId, eventId: doc._id, collegeId, status: checked.status, at: nowIso });
@@ -610,6 +635,7 @@ async function drawCollegeEvent(payload = {}, ctx) {
   const result = await inTransaction(ctx, dir, async (tx, actor) => {
     const current = await tx.collegeEvents.getById(payload.eventId);
     if (!isCollegeEventDoc(current) || !belongsToSchoolScope(current, ctx)) return refused('学院赛不存在');
+    if (Number(current.revision || 0) !== Number(event.revision || 0)) return refused('报名名单已变化，请刷新后重试');
     // 事务内复查状态：并发两次抽签只落一次。
     if (current.status !== COLLEGE_EVENT_STATUS.SIGNUP) return refused('只能在报名阶段抽签');
     // 事务内复查权限：请求飞在路上时被撤掉管理员角色，这一次抽签就不算数（F2 同类）

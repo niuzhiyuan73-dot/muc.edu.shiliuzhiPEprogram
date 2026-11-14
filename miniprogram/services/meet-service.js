@@ -928,8 +928,11 @@ async function finishSportsMeet(payload = {}, ctx) {
     if (current.status === MEET_STATUS.FINISHED) {
       return ok({ meet: meetSummary(current), finished: false });
     }
-    if (!await unchanged(tx, 'sportsMeetEvents', events)
-      || !await unchanged(tx, 'sportsMeetPublications', publications)) return refused('成绩数据已变化，请刷新后重试');
+    if (Number(current.contentRevision || 0) !== Number(meet.contentRevision || 0)
+      || scheduleRevisionOf(current) !== scheduleRevisionOf(meet)
+      || Number(current.version || 0) !== Number(meet.version || 0)) {
+      return refused('成绩或赛程数据已变化，请刷新后重试');
+    }
     const now = fresh.now instanceof Date ? fresh.now.toISOString() : String(fresh.now);
     const next = {
       ...current,

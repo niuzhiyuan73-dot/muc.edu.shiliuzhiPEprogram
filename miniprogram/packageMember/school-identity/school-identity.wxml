@@ -62,7 +62,7 @@
         </view>
       </view>
     </view>
-    <view wx:if="{{members.length}}" class="card">
+    <view wx:if="{{members.length || memberHasMore}}" class="card">
       <view class="card-title">{{schoolName}} · 成员 {{memberTotal}} 人</view>
       <view wx:if="{{readOnly}}" class="hint">正在浏览外校，成员信息只读，不能指定权限。</view>
       <view wx:for="{{members}}" wx:key="userId" class="member-row">
@@ -73,6 +73,7 @@
         </view>
         <button wx:if="{{grants.length && item.userId !== user.userId}}" size="mini" data-user-id="{{item.userId}}" disabled="{{submitting}}" bindtap="onGrant">指定权限</button>
       </view>
+      <view wx:if="{{!members.length && memberHasMore}}" class="hint">正在跳过失效记录，请继续加载成员。</view>
       <!-- 名册分页：一页 50 人（回包体积有上限，见 getSchoolMembers 的说明） -->
       <button wx:if="{{memberHasMore}}" size="mini" class="btn btn-ghost" disabled="{{memberLoadingMore}}" bindtap="onLoadMoreMembers">{{memberLoadingMore ? '加载中…' : '加载更多'}}</button>
     </view>

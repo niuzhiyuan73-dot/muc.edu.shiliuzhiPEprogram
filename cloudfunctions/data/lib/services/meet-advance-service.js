@@ -990,6 +990,7 @@ async function resetMeetDraw(payload = {}, ctx) {
   return ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
     if (!liveMeet(fresh)) return refused('运动会不存在或已删除');
+    if (!await unchanged(tx, 'sportsMeetEvents', [event])) return refused('项目或成绩已变化，请刷新后重试');
     const currentEvent = await tx.sportsMeetEvents.getById(eventKey);
     if (!currentEvent) return refused('项目组别不存在或不属于本届运动会');
     if (!canManageMeet(fresh) && !isChiefJudge(fresh, await tx.sportsMeets.getById(fresh.meetId))) {

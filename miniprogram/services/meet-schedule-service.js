@@ -50,7 +50,7 @@ const SCORE_SUBMITTED = 'submitted';
 /**
  * 单事务最多使用 90 次读写，给仓储 100 次护栏留余量。
  * 上下文最多 5 读，m 名裁判资格 2m 读；每场 assignment 2m 次读写，
- * 加场次点读/写回及 touchEvent 点读/写回共 4 次。按 5 + 2m + n(2m+4) 分批。
+ * 加场次点读/写回及 touchEvent 与届次版本点读/写回共 6 次。按 5 + 2m + n(2m+6) 分批。
  * 50 人连一个场次都无法放进同一事务，因此裁判也要切批（每批最多 20 人）。
  */
 const JUDGE_OPERATION_BUDGET = 90;
@@ -402,7 +402,7 @@ async function assignMeetJudges(payload = {}, ctx) {
   }
   const maxJudges = judgeBatches[0].length;
   const perBatch = Math.max(1, Math.floor(
-    (JUDGE_OPERATION_BUDGET - 5 - 2 * maxJudges) / (2 * maxJudges + 4)
+    (JUDGE_OPERATION_BUDGET - 5 - 2 * maxJudges) / (2 * maxJudges + 6)
   ));
   let created = 0;
   let existed = 0;

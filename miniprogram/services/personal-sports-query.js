@@ -137,12 +137,19 @@ function queryPlan(source, auth, query = {}) {
     key = 'schoolMembers'; stages.push(['match', { schoolId: auth.schoolId, status: auth.canReviewMembers ? 'pending' : '__not_authorized__' }]);
     time = fallback('$updatedAt', '$appliedAt');
   } else if (source === 'meetResult') {
-    key = 'sportsMeetResultRows'; stages.push(['match', { schoolId: auth.schoolId, userIds: uid, status: 'result' }]);
+    key = 'sportsMeetPublications';
+    stages.push(['match', { schoolId: auth.schoolId, status: 'published', 'rows.userIds': uid }]);
     meetParents(false);
-    stages.push(...join('sportsMeetPublications', 'publicationKey', 'hubPublication'));
-    stages.push(['match', expr(and(eq('$hubPublication.schoolId', auth.schoolId), eq('$hubPublication.meetId', '$meetId'),
-      eq('$hubPublication.eventKey', '$eventKey'), eq('$hubPublication.status', 'published'), eq('$hubPublication.version', '$version')))]);
-    time = '$hubPublication.publishedAt';
+    stages.push(['unwind', { path: '$rows' }]);
+    stages.push(['match', { 'rows.userIds': uid, 'rows.status': 'result' }]);
+    stages.push(['addFields', {
+      publicationKey: '$_id', entryKey: '$rows.entryKey',
+      rank: '$rows.rank', userIds: '$rows.userIds', collegeId: '$rows.collegeId',
+      hubPublication: { official: '$official', roundLabel: '$roundLabel' },
+    }]);
+    // 保持原明细行主键，升级前发出的游标仍使用同一排序边界。
+    id = { $concat: ['mtrow:', '$_id', ':', '$rows.entryKey'] };
+    time = '$publishedAt';
   }
   if (!key) throw new Error('未知个人体育数据源');
   if (section === 'schedule' && !source.endsWith('Waiting')) {
@@ -162,7 +169,7 @@ function queryPlan(source, auth, query = {}) {
   stages.push(['sort', { __hubTime: direction, __hubId: direction }], ['limit', limit + 1]);
   const fields = ['_id', 'schoolId', 'association', 'eventId', 'collegeEventId', 'tieId', 'collegeId', 'teamId', 'teamA', 'teamB',
     'matchTime', 'location', 'winner', 'scoreA', 'scoreB', 'status', 'outcome', 'referee', 'refereeId', 'recorderId', 'recorder',
-    'revision', 'sportFormat', 'meetId', 'eventKey', 'sessionKey', 'rank', 'version', 'reason', 'transferFrom', 'results', '__hubTime', '__hubId',
+    'revision', 'sportFormat', 'meetId', 'eventKey', 'sessionKey', 'rank', 'entryKey', 'publicationKey', 'version', 'reason', 'transferFrom', 'results', '__hubTime', '__hubId',
     ...['title', 'name', 'location', 'rounds'].map(field => `hubEvent.${field}`), 'hubCollegeEvent.title', 'hubCollegeEvent.location',
     ...['_id', 'eventId', 'teamA', 'teamB', 'matchTime', 'location', 'status', 'sportFormat', 'refereeId', 'recorderId'].map(field => `hubMatch.${field}`),
     ...['_id', 'venue', 'roundLabel', 'round', 'index', 'status'].map(field => `hubSession.${field}`),
@@ -181,6 +188,7 @@ function evaluate(value, row) {
   const [op] = Object.keys(value); const args = evaluate(value[op], row);
   if (op === '$ifNull') return args[0] == null ? args[1] : args[0];
   if (op === '$eq') return args[0] === args[1];
+  if (op === '$concat') return args.join('');
   if (op === '$ne') return args[0] !== args[1];
   if (op === '$in') return Array.isArray(args[1]) && args[1].includes(args[0]);
   if (op === '$and') return args.every(Boolean);

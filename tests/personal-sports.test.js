@@ -151,11 +151,12 @@ test('护照只用已确认比分、已发布名次和当前发布版本；不�
   const publicationKey = meetPublicationKey('meet', 'ev', 'slot');
   const f = fixture({ ...meetDocs(), matches: [personal('confirmed', { status: 1, winner: 'A', scoreA: [11], scoreB: [2] }), personal('pending', { winner: 'A' })],
     events: [{ _id: 'honor', ...SCOPE, title: '单打杯', status: 2, finishedAt: AT, results: [{ userId: 'u', placement: 2 }, { userId: 'v', placement: 1 }] }],
-    sportsMeetPublications: [{ _id: publicationKey, schoolId: 'muc', meetId: 'meet', eventKey: 'ev', status: 'published', version: 2, official: false, publishedAt: AT }],
+    sportsMeetPublications: [{ _id: publicationKey, schoolId: 'muc', meetId: 'meet', eventKey: 'ev', status: 'published', version: 2, official: false, publishedAt: AT,
+      rows: [{ entryKey: 'entry', userIds: ['u'], status: 'result', rank: 1 }] }],
     sportsMeetResultRows: [1, 2].map(version => ({ _id: `result${version}`, schoolId: 'muc', meetId: 'meet', eventKey: 'ev', publicationKey, userIds: ['u'], status: 'result', version, rank: 1 })) });
   const result = await f.call({ section: 'passport' });
   assert.equal(result.items.length, 3); assert.ok(!result.items.some(row => row.key.includes('pending') || row.key.includes('result1')));
-  assert.equal(result.items.find(row => row.key === 'passport:meet:result2').honor, false);
+  assert.equal(result.items.find(row => row.association === 'meet').honor, false);
   assert.equal(result.items.find(row => row.proof === '已发布个人名次').honor, true);
   assert.doesNotMatch(JSON.stringify(result), /成长值|经验值|总积分/);
 });
@@ -199,7 +200,7 @@ test('云数据库聚合契约：每个来源先限定学校/本人或授权，�
   const auth = { schoolId: 'muc', userId: 'u', associations: ['pkb', 'bk'], managedAssociations: ['bk'], collegeScopes: [{ association: 'pkb', collegeId: 'B' }], canReviewMembers: true };
   for (const source of Object.values(SOURCES).flat()) {
     const trace = [];
-    const supported = new Set(['eq', 'neq', 'in', 'and', 'or', 'ifNull', 'gte', 'lte', 'size', 'cond', 'first']);
+    const supported = new Set(['eq', 'neq', 'in', 'and', 'or', 'ifNull', 'gte', 'lte', 'size', 'cond', 'first', 'concat']);
     const aggregate = new Proxy({}, { get: (_obj, op) => supported.has(op)
       ? args => ({ [`$${String(op)}`]: args }) : undefined });
     const api = new Proxy({}, { get: (_obj, method) => method === 'end' ? async () => ({ list: [{ _id: 'one' }, { _id: 'two' }] }) : value => { trace.push([method, value]); return api; } });
