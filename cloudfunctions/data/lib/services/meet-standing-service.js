@@ -1,8 +1,8 @@
 /**
  * 学院总榜与个人荣誉（B8）
  * ============================================================
- * 学院总分与荣誉都在**发布成绩的同一个事务里**累加（见 meet-score-service 的
- * publishMeetResults），所以这里只做读取与排序，不再现算一遍。
+ * 学院总分在发布事务中累加，个人荣誉从当前正式发布快照读取。
+ * 派生荣誉索引写入失败或并发重发时，展示仍与正式结果一致。
  *
  * 【为什么读快照而不是实时聚合】
  * 一届的结果行可能上千（40 学院 × 90+ 项目组别 × 每项若干条）。每次打开总榜都
@@ -127,15 +127,15 @@ async function getMeetStandings(payload = {}, ctx) {
 /**
  * 我的荣誉。
  *
- * 荣誉按参赛记录存（一条记录可能对应多名队员），所以这里按 userIds 过滤。
- * 一届荣誉上限约 800 条，一次 list 后本地过滤，读取端可接受。
+ * 按正式发布快照的参赛记录读取，一条记录可对应多名队员。
+ * 直接按 userIds 过滤，避免派生索引未更新时显示旧名次。
  */
 async function getMyMeetHonors(payload = {}, ctx) {
   if (!meetReadable(ctx) || !ctx.meetId || !ctx.actorId) return refused('请先登录');
 
-  const [meet, honors, events] = await Promise.all([
+  const [meet, publications, events] = await Promise.all([
     ctx.repo.sportsMeets.getById(ctx.meetId),
-    ctx.repo.forMeet(scopeOf(ctx)).sportsMeetHonors.list(),
+    ctx.repo.forMeet(scopeOf(ctx)).sportsMeetPublications.list(),
     listAliveEvents(ctx.repo.forMeet(scopeOf(ctx)).sportsMeetEvents),
   ]);
   if (!meet || meet.schoolId !== ctx.schoolId || meet.status === 'deleted') {
@@ -146,6 +146,12 @@ async function getMyMeetHonors(payload = {}, ctx) {
   const offset = Math.max(0, Number(payload.offset) || 0);
   const limit = Math.min(PAGE_MAX, Math.max(1, Number(payload.limit) || 50));
 
+  const honors = publications
+    .filter(doc => doc.status === 'published' && doc.official !== false)
+    .flatMap(doc => (doc.rows || []).map(row => ({
+      ...row, schoolId: ctx.schoolId, meetId: ctx.meetId,
+      eventKey: doc.eventKey, publishedAt: doc.publishedAt,
+    })));
   const mine = honors
     .filter((doc) => doc && doc.schoolId === ctx.schoolId && doc.meetId === ctx.meetId)
     .filter((doc) => Array.isArray(doc.userIds) && doc.userIds.includes(ctx.actorId))

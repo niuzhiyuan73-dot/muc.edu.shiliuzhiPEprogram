@@ -3,7 +3,7 @@ const { buildSchoolContext } = require('./school-context.js');
 const { loadColleges } = require('./college-directory.js');
 const {
   canSchoolAction, canReadSchool, canGrantPermission, grantablePermissions,
-  isPlatformAdminCtx, permissionOf, permissionLabelOf, PERMISSION, PERMISSION_LABEL,
+  isPlatformAdminCtx, isLocalActiveMember, permissionOf, permissionLabelOf, PERMISSION, PERMISSION_LABEL,
 } = require('./school-permission.js');
 const { buildSchoolApplication, buildSchoolAccount } = require('./school-member.js');
 const { buildProfilePatch } = require('./profile.js');
@@ -618,13 +618,34 @@ function createSchoolHandlers({ claimKey }) {
       return ok({ ok: false, members: [], grants: [], readOnly: false,
         total: 0, hasMore: false, nextCursor: '', message: '没有读取该校成员的权限' });
     }
-    const readOnly = Boolean(ctx.actor.primarySchoolId && ctx.actor.primarySchoolId !== ctx.schoolId);
+    const readOnly = !isLocalActiveMember(ctx) && !isPlatformAdminCtx(ctx);
     const limit = Number.isInteger(payload.limit) && payload.limit > 0
       ? Math.min(payload.limit, ROSTER_PAGE_MAX) : ROSTER_PAGE;
     const afterId = typeof payload.cursor === 'string' ? payload.cursor : '';
     const scoped = ctx.repo.forScope(ctx);
-    const page = await scoped.schoolMembers.listByStatus(SCHOOL_MEMBER_STATUS.ACTIVE, { limit, afterId });
-    const rows = page.rows;
+    // 在学籍游标上续读有效账号，保留旧游标和未迁移搜索字段的兼容性。
+    const rows = [];
+    let cursor = afterId;
+    let hasMore = true;
+    let scanned = 0;
+    while (rows.length <= limit && hasMore && scanned < 200) {
+      const batch = await scoped.schoolMembers.listByStatus(SCHOOL_MEMBER_STATUS.ACTIVE,
+        { limit: Math.min(limit + 1, 200 - scanned), afterId: cursor });
+      scanned += batch.rows.length;
+      const users = await ctx.repo.users.listByIds(batch.rows.map(row => row.userId));
+      const active = new Set(users.filter(user => user.platformStatus === PLATFORM_STATUS.ACTIVE
+        && user.primarySchoolId === ctx.schoolId).map(user => user._id));
+      for (const row of batch.rows) {
+        cursor = row._id;
+        if (active.has(row.userId)) rows.push(row);
+        if (rows.length > limit) break;
+      }
+      hasMore = batch.hasMore;
+      if (!batch.rows.length) break;
+    }
+    const page = { hasMore: rows.length > limit || hasMore,
+      nextCursor: rows.length > limit ? rows[limit - 1]._id : cursor };
+    rows.splice(limit);
     // 学院名走 Map（原先 find 在循环里，2026-10-21 审查 P2-7）；
     // 角色与 membership 只按这一页的人批读，不再整表取。
     const [colleges, roles, memberships, total] = await Promise.all([
@@ -672,7 +693,7 @@ function createSchoolHandlers({ claimKey }) {
       members,
       total,
       hasMore: Boolean(page.hasMore),
-      nextCursor: page.hasMore && rows.length ? rows[rows.length - 1]._id : '',
+      nextCursor: page.hasMore ? page.nextCursor : '',
       grants: readOnly ? [] : grantOptions(ctx),
       readOnly,
       message: '',

@@ -68,7 +68,7 @@ const WRITE_BATCH = 20;
  * （176 人的双打签表就是 176 行）。一行一个事务在云开发上是「一行一次
  * 独立事务」：往返 100 多次，请求很容易撞到 3 秒超时。事务内每行是
  * 「读快照 + 读当前 + 写」3 个操作，预算 100（见 cloud-repo 的
- * TX_OPERATION_BUDGET），取 25 行 = 75 操作，留足余量。
+ * TX_OPERATION_BUDGET），取 25 行 = 75 操作，另加一次赛季版本读取。
  *
  * 【为什么每行要读两次】第一次读（`getById`）拿本事务快照，用来在
  * `seasonPointsByAssociation` 这份 map 上只改**本协会**那一个 key；第二次是
@@ -84,15 +84,14 @@ const POINTS_MAP_FIELD = 'seasonPointsByAssociation';
 const ANCHOR_MAP_FIELD = 'pointsAnchorByAssociation';
 // 最后一次写入时间（与协会无关，只用于排查「这行是什么时候被写过」）。
 const UPDATED_FIELD = 'pointsUpdatedAt';
-// 这一格是第几代算出来的。读端拿它和 `seasons.pointsSettledVersion` 比：
-// 有行落后就整份不可信（并发重算时慢的那份可能后落盘，见文件头）。
-const VERSION_FIELD = 'pointsVersion';
+// 每个协会独立记录最近更新版本，未变化的行允许保留较早版本。
+const VERSION_FIELD = 'pointsVersionByAssociation';
 
 /**
  * 物化格式版本。老数据（单字段 `seasonPoints`）没有它，读端一律按未物化处理。
  * 改字段结构时必须 +1，这是一次性的失效开关，不是计数器。
  */
-const POINTS_SCHEMA = 2;
+const POINTS_SCHEMA = 3;
 
 /** 赛季文档的写计数器（积分代际）。 */
 function seasonVersionOf(season) {
@@ -172,11 +171,11 @@ function settledPointsOf(season, rows, association) {
   const map = new Map();
   for (const row of rows) {
     if (!row || typeof row.userId !== 'string' || !row.userId) continue;
-    // 行上的代际落后于场上的代际 = 有并发重算把旧快照写晚了。
-    // 这时**整份**都不可信（同一批写入可能只是部分落后），一律回退实时聚合。
-    // 没有这个字段的行是「从未物化过的 0 分」，不参与判断。
-    const marked = row[VERSION_FIELD];
-    if (marked !== undefined && marked !== null && Number(marked) !== generation) return null;
+    // 每批重算在事务内核对事实版本，旧任务不能覆盖新版本。
+    // 未变化的行可保留较早版本，读到较新版本则回退到事实聚合。
+    const marked = row[VERSION_FIELD] && row[VERSION_FIELD][String(association)];
+    if (marked !== undefined && Number(marked) > generation) return null;
+    if (pointsOfRow(row, association) > 0 && anchorOfRow(row, association) !== anchorOf(season)) return null;
     map.set(row.userId, pointsOfRow(row, association));
   }
   return map;
@@ -246,7 +245,7 @@ async function refreshAssociationPoints(ctx, options = {}) {
   const patchFor = (row, points) => ({
     [POINTS_MAP_FIELD]: { ...((row && row[POINTS_MAP_FIELD]) || {}), [association]: points },
     [ANCHOR_MAP_FIELD]: { ...((row && row[ANCHOR_MAP_FIELD]) || {}), [association]: anchor },
-    [VERSION_FIELD]: version,
+    [VERSION_FIELD]: { ...((row && row[VERSION_FIELD]) || {}), [association]: version },
     [UPDATED_FIELD]: nowIso,
   });
 
@@ -264,6 +263,8 @@ async function refreshAssociationPoints(ctx, options = {}) {
       try {
         const done = await ctx.repo.transaction(async (tx) => {
           const scoped = tx.forScope(ctx);
+          const currentSeason = await tx.seasons.getById(scopeKey(ctx));
+          if (seasonVersionOf(currentSeason) !== version) throw new Error('积分事实已变化，请重算');
           let count = 0;
           for (const item of batch) {
             const key = schoolMemberKey(item.userId, ctx.schoolId);
@@ -288,6 +289,8 @@ async function refreshAssociationPoints(ctx, options = {}) {
       try {
         const current = await scope.schoolMembers.getById(key);
         if (!current) { skipped += 1; return; }
+        const latestSeason = await readSeason(ctx);
+        if (seasonVersionOf(latestSeason) !== version) throw new Error('积分事实已变化，请重算');
         await scope.schoolMembers.update(key, patchFor(current, item.points));
         written += 1;
       } catch (err) {
@@ -298,35 +301,26 @@ async function refreshAssociationPoints(ctx, options = {}) {
     }));
   }
 
-  // 收尾对齐代际：先重读赛季，version 变了就放弃（说明期间又有写，物化已过期）
-  //
-  // 【为什么用 update 而不是「读出来再整份 set」】整份 set 会把**这次读到的
-  // version 一并写回**：若期间有并发写把 version 推高了，读-写之间那一小段
-  // 就会把代际写回旧值，于是 `pointsSettledVersion === version` 成立——刚好
-  // 把「已经过期」伪装成「已结算」。update 只写这一个字段，撞车交给事务冲突。
+  // 收尾在同一事务里重读并发布代际，避免读写之间发生新的事实变更。
   //
   // 【为什么有失败就不写标记】只要有一行没写进去，行上就是「半新半旧」。
   // 此时对齐代际等于告诉读端「这份是准的」，读到的是旧分且不报错——
   // 2026-11-07 审查的 P1 就是这条路径。宁可让它退回实时聚合（慢，但对）。
   let stale = false;
   const id = scopeKey({ schoolId: ctx.schoolId, association: ctx.association });
-  const latestDoc = await ctx.repo.seasons.getById(id);
-  const latest = latestDoc && latestDoc.schoolId === ctx.schoolId ? latestDoc : null;
-  const latestVersion = latest ? seasonVersionOf(latest) : 0;
-  if (latestVersion !== version || failed > 0) {
-    stale = true;
-  } else if (latest) {
-    await scope.seasons.update(id, {
-      pointsSettledVersion: version, pointsSchemaVersion: POINTS_SCHEMA,
-    });
-  } else {
-    // 赛季文档还不存在（从未重置过的新协会）：此刻没有并发版本可丢，直接建
-    await ctx.repo.seasons.set(id, {
-      _id: id, schoolId: ctx.schoolId, association: ctx.association,
-      resetTime: null, anchorTime: null, seasonNumber: 1, version: 0,
+  if (failed > 0) stale = true;
+  else await ctx.repo.transaction(async tx => {
+    const latest = await tx.seasons.getById(id);
+    if (seasonVersionOf(latest) !== version) {
+      stale = true;
+      return;
+    }
+    await tx.seasons.set(id, {
+      ...(latest || { _id: id, schoolId: ctx.schoolId, association: ctx.association,
+        resetTime: null, anchorTime: null, seasonNumber: 1, version: 0 }),
       pointsSettledVersion: version, pointsSchemaVersion: POINTS_SCHEMA, updatedAt: nowIso,
     });
-  }
+  });
   return { ok: true, version, written, cleared: writes.filter(item => item.points === 0).length,
     failed, skipped, stale, total: pointsByUser.size };
 }
@@ -379,7 +373,12 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
   const association = String(ctx.association);
   const key = schoolMemberKey(userId, ctx.schoolId);
   const row = await tx.schoolMembers.getById(key);
-  if (!row || anchorOfRow(row, association) !== anchor) return { applied: false, needsRefresh: true };
+  const marked = row && row[VERSION_FIELD] && row[VERSION_FIELD][association];
+  if (!row || anchorOfRow(row, association) !== anchor
+      || marked !== undefined && Number(marked) > seasonVersionOf(season)) {
+    await bumpSeasonVersion(tx, ctx, new Date(ctx.now));
+    return { applied: false, needsRefresh: true };
+  }
 
   const nowIso = new Date(ctx.now || Date.now()).toISOString();
   const next = Math.max(0, pointsOfRow(row, association) + amount);
@@ -388,7 +387,7 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
     // 只改本协会那两格，别的协会原样带回（会员行是学校级的，见文件头）
     [POINTS_MAP_FIELD]: { ...((row[POINTS_MAP_FIELD]) || {}), [association]: next },
     [ANCHOR_MAP_FIELD]: { ...((row[ANCHOR_MAP_FIELD]) || {}), [association]: anchor },
-    [VERSION_FIELD]: seasonVersionOf(season) + 1,
+    [VERSION_FIELD]: { ...(row[VERSION_FIELD] || {}), [association]: seasonVersionOf(season) + 1 },
     [UPDATED_FIELD]: nowIso,
   });
   const version = seasonVersionOf(season) + 1;

@@ -199,7 +199,9 @@ test('云数据库聚合契约：每个来源先限定学校/本人或授权，�
   const auth = { schoolId: 'muc', userId: 'u', associations: ['pkb', 'bk'], managedAssociations: ['bk'], collegeScopes: [{ association: 'pkb', collegeId: 'B' }], canReviewMembers: true };
   for (const source of Object.values(SOURCES).flat()) {
     const trace = [];
-    const aggregate = new Proxy({}, { get: (_obj, op) => args => ({ [`$${String(op)}`]: args }) });
+    const supported = new Set(['eq', 'neq', 'in', 'and', 'or', 'ifNull', 'gte', 'lte', 'size', 'cond', 'first']);
+    const aggregate = new Proxy({}, { get: (_obj, op) => supported.has(op)
+      ? args => ({ [`$${String(op)}`]: args }) : undefined });
     const api = new Proxy({}, { get: (_obj, method) => method === 'end' ? async () => ({ list: [{ _id: 'one' }, { _id: 'two' }] }) : value => { trace.push([method, value]); return api; } });
     const db = { collection: name => { assert.ok(name); return { aggregate: () => api }; } };
     const result = await readPersonalSportsPage(db, { aggregate }, source, auth, { asOf: NOW.toISOString(), limit: 1 });

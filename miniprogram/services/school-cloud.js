@@ -62,7 +62,7 @@ function forSchoolIdentity(input) {
     getSchoolDirectory: () => request('getSchoolDirectory'),
     getSchoolIdentitySession: () => request('getSchoolIdentitySession'),
     getMySportsDashboard: payload => request('getMySportsDashboard', payload),
-    getSchoolMembers: () => request('getSchoolMembers'),
+    getSchoolMembers: payload => request('getSchoolMembers', payload),
     grantSchoolPermission: payload => request('grantSchoolPermission', payload),
     updateSchoolProfile: payload => request('updateSchoolProfile', payload),
     // 转校：申请 / 目标学校审批 / 申请人撤回（原学校无需同意）

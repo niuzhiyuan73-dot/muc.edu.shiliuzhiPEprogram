@@ -7,7 +7,8 @@ function compileExpression(value, aggregate) {
   if (!value || typeof value !== 'object') return value;
   const keys = Object.keys(value);
   if (keys.length === 1 && keys[0][0] === '$') {
-    const name = keys[0].slice(1);
+    const operator = keys[0].slice(1);
+    const name = operator === 'ne' ? 'neq' : operator;
     if (typeof aggregate[name] !== 'function') throw new Error(`不支持的聚合表达式：${name}`);
     return aggregate[name](compileExpression(value[keys[0]], aggregate));
   }

@@ -262,7 +262,7 @@ test('重算按事务分批：45 个有分的人只开 2 次事务，而不是 4
 
   const result = await seasonPoints.refreshAssociationPoints(await ctxOf(repo));
   assert.equal(result.written, 45, '45 行都要写');
-  assert.equal(txs, 2, '30 行一个事务，45 行 = 2 次');
+  assert.equal(txs, 3, '45 行分两批写入，再用一个事务核对并发布版本');
   const rows = await Promise.all(ids.slice(0, 2).map(id => repo.schoolMembers.getById(schoolMemberKey(id, 'muc'))));
   assert.ok(rows.every(row => row.seasonPointsByAssociation.pkb > 0), '每行都拿到分');
 });
@@ -406,7 +406,7 @@ test('旧的单字段物化数据不被信任：缺格式版本一律回退', as
   assert.equal(mine.points, 82, '旧字段的数字不被采信，按事实重算');
 });
 
-test('行上的代际落后于赛季代际：整份不可信，回退实时聚合', async () => {
+test('会员行出现尚未发布的较新版本时回退实时聚合', async () => {
   const repo = fixture();
   await repo.events.set('e1', {
     _id: 'e1', schoolId: 'muc', association: 'pkb', title: 'e1', status: EVENT_STATUS.FINISHED,
@@ -425,12 +425,12 @@ test('行上的代际落后于赛季代际：整份不可信，回退实时聚�
 
   // 模拟「并发重算里慢的那份后落盘」：这一行还停在上一代
   await repo.schoolMembers.update(schoolMemberKey('demo_muc_member', 'muc'), {
-    pointsVersion: Number(season.pointsSettledVersion) - 1,
+    pointsVersionByAssociation: { pkb: Number(season.pointsSettledVersion) + 1 },
   });
   const dirty = trackReads(repo);
   const stats = await call(repo, 'getSchoolMemberStats', { top: 5 }, { actor: 'demo_muc_member' });
   const mine = (stats.top || []).find(item => item.userId === 'demo_muc_member');
-  assert.ok(dirty.events >= 1, '有行落后就回退实时聚合（读赛事）');
+  assert.ok(dirty.events >= 1, '有未发布的新版本就回退实时聚合（读赛事）');
   assert.equal(mine.points, 82, '回退后分数仍正确');
 });
 

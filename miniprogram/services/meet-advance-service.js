@@ -652,6 +652,10 @@ async function drawMeetBracket(payload = {}, ctx) {
     recomputeBracket(matches, totalRounds);
   }
 
+  // 每场一次读和一次写，另预留身份、项目与赛程版本操作。
+  if (matches.length * 2 + 12 > 100) {
+    return refused('本赛制场次超过单次编排容量（最多44场），请减少队伍或改用分组/淘汰赛');
+  }
   return ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
     if (!liveMeet(fresh)) return refused('运动会不存在或已删除');

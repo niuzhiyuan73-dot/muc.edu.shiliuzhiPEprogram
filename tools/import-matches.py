@@ -36,7 +36,8 @@ import argparse
 import hashlib
 import json
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
+from decimal import Decimal, InvalidOperation
 
 try:
     from openpyxl import Workbook, load_workbook
@@ -155,8 +156,11 @@ def parse_int(value):
     if not text:
         return None
     try:
-        return int(float(text))
-    except ValueError:
+        number = Decimal(text)
+        if not number.is_finite() or number != number.to_integral_value():
+            return None
+        return int(number)
+    except (InvalidOperation, ValueError, OverflowError):
         return None
 
 
@@ -177,7 +181,10 @@ def parse_scores(value):
         if piece == "":
             return None, "比分里有空的局（逗号多写了？）"
         try:
-            scores.append(int(float(piece)))
+            score = parse_int(piece)
+            if score is None:
+                raise ValueError()
+            scores.append(score)
         except ValueError:
             return None, f"比分「{piece}」不是数字"
 
@@ -211,8 +218,11 @@ def parse_score_columns(cell_a, cell_b):
                 return None, None, f"「{pair}」缺少冒号，应写成 11:9"
             left, _, right = pair.partition(":")
             try:
-                score_a.append(int(float(left.strip())))
-                score_b.append(int(float(right.strip())))
+                a, b = parse_int(left.strip()), parse_int(right.strip())
+                if a is None or b is None:
+                    raise ValueError()
+                score_a.append(a)
+                score_b.append(b)
             except ValueError:
                 return None, None, f"比分「{pair}」里不是数字"
         return score_a, score_b, ""
@@ -319,7 +329,10 @@ def iso_utc(match_time):
     '...+00:00'——毫秒位与后缀都不一样，算出来的哈希自然对不上。
     这里手工拼出 JS 的那个形状，让两边的自然键逐字节相同。
     """
-    moment = datetime.fromisoformat(match_time).astimezone(timezone.utc)
+    moment = datetime.fromisoformat(match_time)
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone(timedelta(hours=8)))
+    moment = moment.astimezone(timezone.utc)
     return moment.strftime("%Y-%m-%dT%H:%M:%S.") + f"{moment.microsecond // 1000:03d}Z"
 
 

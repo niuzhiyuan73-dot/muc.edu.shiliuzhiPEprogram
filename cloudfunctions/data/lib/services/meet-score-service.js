@@ -971,21 +971,25 @@ async function publishMeetResults(payload = {}, ctx) {
   return ok({ warning: committed.data.warning, publication: result });
 }
 
-/** 派生索引每批写多少条：只影响网络往返次数，不受事务预算约束 */
+/** 每批并发写入数，每条以独立事务核对版本并写入。 */
 const RESULT_DETAIL_BATCH = 10;
 
 /**
- * 批量写文档（非事务，可并发）。发布之后的派生索引用它。
+ * 发布之后并发维护派生索引，每条事务只读写同一主键并拒绝版本回退。
  *
  * @param {Object} collection 集合接口（需有 set）
  * @param {Array<[string, Object]>} entries [主键, 文档]
  * @returns {Promise<boolean>} 全部写入成功返回 true
  */
-async function writeDetailBatch(collection, entries) {
+async function writeDetailBatch(repo, key, entries) {
   for (let i = 0; i < entries.length; i += RESULT_DETAIL_BATCH) {
     const slice = entries.slice(i, i + RESULT_DETAIL_BATCH);
     try {
-      await Promise.all(slice.map(([key, doc]) => collection.set(key, doc)));
+      await Promise.all(slice.map(([id, doc]) => repo.transaction(async tx => {
+        const current = await tx[key].getById(id);
+        if (current && Number(current.version) > Number(doc.version)) return;
+        await tx[key].set(id, doc);
+      })));
     } catch (err) {
       console.warn('[meet] 成绩明细写入失败', err && (err.message || err));
       return false;
@@ -997,7 +1001,7 @@ async function writeDetailBatch(collection, entries) {
 /**
  * 发布之后的派生索引：结果行 + 个人荣誉。
  *
- * 【为什么必须在事务外】（2026-10-22 大用户量复查 W-0）
+ * 【为什么分离发布事务】（2026-10-22 大用户量复查 W-0）
  * 这两张表都是「一条报名一条」。26 个学院满员的田赛项目是 52 条报名，
  * 光它们就是 104 个事务操作，加学院总榜的 52 个，必然撞云端事务预算（约 100）——
  * 报错文案是「事务读写总操作预算不足：请缩小本次处理范围」，管理员只会看到
@@ -1015,7 +1019,7 @@ async function writeMeetResultDetail({
   const rowEntries = rows.map((row) => [meetResultRowKey(publicationKey, row.entryKey), {
     schoolId, meetId, eventKey, publicationKey, version, ...row, updatedAt: now,
   }]);
-  if (!await writeDetailBatch(repo.sportsMeetResultRows, rowEntries)) return false;
+  if (!await writeDetailBatch(repo, 'sportsMeetResultRows', rowEntries)) return false;
 
   if (!official) return true;
 
@@ -1047,7 +1051,7 @@ async function writeMeetResultDetail({
       version, publishedAt: now, updatedAt: now,
     }]);
   }
-  return writeDetailBatch(repo.sportsMeetHonors, honorEntries);
+  return writeDetailBatch(repo, 'sportsMeetHonors', honorEntries);
 }
 
 /**

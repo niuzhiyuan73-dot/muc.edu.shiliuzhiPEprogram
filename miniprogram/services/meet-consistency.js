@@ -105,7 +105,7 @@ function publishedRowsOf(publication, rows) {
   const hit = (Array.isArray(rows) ? rows : []).filter(
     (row) => row.publicationKey === publication._id && Number(row.version) === version,
   );
-  if (hit.length > 0) return hit;
+  if (!Array.isArray(publication.rows) || hit.length > 0 && hit.length === Number(publication.rowCount)) return hit;
   const digest = Array.isArray(publication.rows) ? publication.rows : [];
   return digest.map((row) => ({
     ...row,

@@ -37,7 +37,7 @@ Page({
     const version = this.loadVersion = (this.loadVersion || 0) + 1;
     const schoolId = this.data.schoolId;
     const api = service.forSchoolIdentity({ schoolId, association: this.data.association });
-    this.update({ loading: true, error: '', applications: [], canReview: false, canApply: false,
+    this.update({ loading: true, memberLoadingMore: false, memberCursor: '', memberHasMore: false, error: '', applications: [], canReview: false, canApply: false,
       members: [], grants: [], readOnly: false, canTransfer: false, transferPending: false,
       user: null, account: null, statusText: '', applicationsHasMore: false, grantEditor: null });
     try {

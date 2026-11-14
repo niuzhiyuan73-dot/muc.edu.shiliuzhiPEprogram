@@ -628,5 +628,20 @@ class TestNaturalKey(ImportTestCase):
         self.assertNotEqual(documents[0]["_id"], documents[1]["_id"])
 
 
+
+
+class TestReview19Parsing(unittest.TestCase):
+    def test_fractional_and_nonfinite_scores_are_rejected(self):
+        for value in ['11.9', 'nan', 'inf', '-inf']:
+            self.assertIsNone(im.parse_int(value))
+            self.assertIsNone(im.parse_scores(value)[0])
+            self.assertIsNone(im.parse_score_columns(value + ':9', '')[0])
+        self.assertEqual(im.parse_int('11.0'), 11)
+
+    def test_naive_dates_are_beijing_and_explicit_offsets_preserved(self):
+        self.assertEqual(im.iso_utc('2026-04-08T18:00:00'), '2026-04-08T10:00:00.000Z')
+        self.assertEqual(im.iso_utc('2026-04-08T18:00:00+08:00'), '2026-04-08T10:00:00.000Z')
+        self.assertEqual(im.iso_utc('2026-04-08T18:00:00+00:00'), '2026-04-08T18:00:00.000Z')
+
 if __name__ == "__main__":
     unittest.main()
