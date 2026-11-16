@@ -3,7 +3,6 @@ const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createSchoolSeed, createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { buildSchoolApplication } = require('../miniprogram/services/school-member');
-const { perSchoolScope } = require('../miniprogram/services/school-scope');
 const { canSchoolAction } = require('../miniprogram/services/school-permission');
 const { buildSchoolContext } = require('../cloudfunctions/data/src/core/school-context');
 const S = require('../miniprogram/utils/school');
@@ -145,20 +144,4 @@ test('context rejects unknown or disabled organizations and corrupt role ownersh
   assert.equal(ctx.schoolRole, null);
   const guest = await buildSchoolContext({ repo, scope: MUC });
   assert.equal(canSchoolAction(guest, 'participate', MUC), false);
-});
-
-test('bound in-memory buckets preserve scope across interleaved awaits', async () => {
-  const state = perSchoolScope(() => ({ values: [] }));
-  const a = state.forScope(MUC);
-  const b = state.forScope(BUAA);
-  await Promise.all([
-    (async () => { a.values.push('a1'); await Promise.resolve(); a.values.push('a2'); })(),
-    (async () => { b.values.push('b1'); await Promise.resolve(); b.values.push('b2'); })(),
-  ]);
-  assert.deepEqual(a.values, ['a1', 'a2']);
-  assert.deepEqual(b.values, ['b1', 'b2']);
-  assert.deepEqual(state.forScope({ ...MUC, association: 'tt' }).values, []);
-  state.clear(MUC);
-  assert.deepEqual(state.forScope(MUC).values, []);
-  assert.deepEqual(state.forScope(BUAA).values, ['b1', 'b2']);
 });

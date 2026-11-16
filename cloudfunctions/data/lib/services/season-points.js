@@ -58,9 +58,6 @@
 const { schoolMemberKey, scopeKey } = require('../utils/school.js');
 const { aggregatePoints } = require('./school-points-service.js');
 
-/** 单批写入条数：与团队域批量入口同一档，避免一次请求里排几百个写。 */
-const WRITE_BATCH = 20;
-
 /**
  * 一个事务里最多写几行会员行。
  *
@@ -252,53 +249,33 @@ async function refreshAssociationPoints(ctx, options = {}) {
   let written = 0;
   let failed = 0;
   let skipped = 0;
-  const canTransact = typeof ctx.repo.transaction === 'function';
-  const step = canTransact ? TX_ROWS : WRITE_BATCH;
-  for (let i = 0; i < writes.length; i += step) {
-    const batch = writes.slice(i, i + step);
-    if (canTransact) {
-      // 一个事务写完这一批：每行「读快照 + update 的重读 + 写」= 3 个操作。
-      // 中途失败只丢这一批，代际不会对齐——读取端会回退实时聚合，分数仍然
-      // 正确，下一次写动作再补算（见下面 failed 的处理）。
-      try {
-        const done = await ctx.repo.transaction(async (tx) => {
-          const scoped = tx.forScope(ctx);
-          const currentSeason = await tx.seasons.getById(scopeKey(ctx));
-          if (seasonVersionOf(currentSeason) !== version) throw new Error('积分事实已变化，请重算');
-          let count = 0;
-          for (const item of batch) {
-            const key = schoolMemberKey(item.userId, ctx.schoolId);
-            const current = await scoped.schoolMembers.getById(key);
-            // 行被并发删掉（转出）：没有可写的对象，也不算失败——他本来就不在榜上
-            if (!current) continue;
-            await scoped.schoolMembers.update(key, patchFor(current, item.points));
-            count += 1;
-          }
-          return count;
-        });
-        written += done;
-        skipped += batch.length - done;
-      } catch (err) {
-        failed += batch.length;
-        console.error('[season-points] 会员行积分批量写入失败', batch.length, err && err.message);
-      }
-      continue;
+  for (let i = 0; i < writes.length; i += TX_ROWS) {
+    const batch = writes.slice(i, i + TX_ROWS);
+    // 一个事务写完这一批：每行「读快照 + update 的重读 + 写」= 3 个操作。
+    // 中途失败只丢这一批，代际不会对齐——读取端会回退实时聚合，分数仍然
+    // 正确，下一次写动作再补算（见下面 failed 的处理）。
+    try {
+      const done = await ctx.repo.transaction(async (tx) => {
+        const scoped = tx.forScope(ctx);
+        const currentSeason = await tx.seasons.getById(scopeKey(ctx));
+        if (seasonVersionOf(currentSeason) !== version) throw new Error('积分事实已变化，请重算');
+        let count = 0;
+        for (const item of batch) {
+          const key = schoolMemberKey(item.userId, ctx.schoolId);
+          const current = await scoped.schoolMembers.getById(key);
+          // 行被并发删掉（转出）：没有可写的对象，也不算失败——他本来就不在榜上
+          if (!current) continue;
+          await scoped.schoolMembers.update(key, patchFor(current, item.points));
+          count += 1;
+        }
+        return count;
+      });
+      written += done;
+      skipped += batch.length - done;
+    } catch (err) {
+      failed += batch.length;
+      console.error('[season-points] 会员行积分批量写入失败', batch.length, err && err.message);
     }
-    await Promise.all(batch.map(async (item) => {
-      const key = schoolMemberKey(item.userId, ctx.schoolId);
-      try {
-        const current = await scope.schoolMembers.getById(key);
-        if (!current) { skipped += 1; return; }
-        const latestSeason = await readSeason(ctx);
-        if (seasonVersionOf(latestSeason) !== version) throw new Error('积分事实已变化，请重算');
-        await scope.schoolMembers.update(key, patchFor(current, item.points));
-        written += 1;
-      } catch (err) {
-        // 单行写失败（例如刚被转出、行已不存在）不该拖垮整次重算
-        failed += 1;
-        console.error('[season-points] 会员行积分写入失败', item.userId, err && err.message);
-      }
-    }));
   }
 
   // 收尾在同一事务里重读并发布代际，避免读写之间发生新的事实变更。
@@ -448,7 +425,6 @@ async function refreshAfterWrite(ctx) {
 }
 
 module.exports = {
-  WRITE_BATCH,
   TX_ROWS,
   POINTS_SCHEMA,
   POINTS_MAP_FIELD,

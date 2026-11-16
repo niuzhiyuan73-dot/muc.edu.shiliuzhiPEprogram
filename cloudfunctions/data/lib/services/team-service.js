@@ -239,17 +239,6 @@ async function loadTeam(repo, ctx, teamId) {
   return inScope(team, ctx) ? team : null;
 }
 
-/** 本范围的队员关系，按队分组，避免 N 次点读 */
-async function membershipMap(repo) {
-  const rows = await repo.teamMembers.list();
-  const map = new Map();
-  for (const row of rows) {
-    if (!map.has(row.teamId)) map.set(row.teamId, []);
-    map.get(row.teamId).push(row);
-  }
-  return map;
-}
-
 /* ============================================================
  * 读
  * ============================================================ */
@@ -364,12 +353,13 @@ async function getTeam(payload = {}, ctx) {
   // 按队下推（2026-10-29 第十一轮审计 P3）：原先是把本协会全部队员读回来再
   // filter，球队越多越亏；`listByTeams` 走 teamId 条件查询，只取这一队。
   const rows = await ctx.repo.forScope(ctx).teamMembers.listByTeams([team._id]);
+  const memberDir = await buildDirectory(ctx, rows.map(row => row.userId));
   const membership = rows.find(row => row.userId === ctx.actorId);
 
   const visible = rows
     .filter(row => row.status === TEAM_MEMBER_STATUS.ACTIVE
       || (manage && row.status !== TEAM_MEMBER_STATUS.LEFT))
-    .map(row => memberRow(row, dir))
+    .map(row => memberRow(row, memberDir))
     .sort((a, b) => {
       if (a.role !== b.role) return a.role === 'captain' ? -1 : 1;
       return String(a.name).localeCompare(String(b.name), 'zh-Hans-CN');
@@ -677,10 +667,11 @@ async function archiveTeam(payload = {}, ctx) {
 
 /** 本协会里属于该学院的在册会员（院队候选池：负责人从这里挑人） */
 async function collegeCandidates(ctx, collegeId, dir) {
-  const memberships = await ctx.repo.forScope(ctx).memberships.list();
+  const memberships = await ctx.repo.forScope(ctx).memberships.listCollegeMembers(collegeId);
   const inCollege = new Set(memberships
     .filter(row => row.status === 'active' && row.collegeId === collegeId)
     .map(row => row.userId));
+  dir = await buildDirectory(ctx, [...inCollege]);
   const platformActive = new Set(dir.activeMemberIds || []);
   return (dir.members || [])
     .filter(user => inCollege.has(user._id) && platformActive.has(user._id))
@@ -764,7 +755,8 @@ async function getCollegeTeam(payload = {}, ctx) {
   const manage = canManageTeam(ctx, team, ctx.actorId);
   const membership = rows.find(row => row.userId === ctx.actorId);
   const active = rows.filter(row => isActiveMember(row));
-  const members = active.map(row => memberRow(row, dir))
+  const memberDir = await buildDirectory(ctx, active.map(row => row.userId));
+  const members = active.map(row => memberRow(row, memberDir))
     .sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-Hans-CN'));
 
   return ok({

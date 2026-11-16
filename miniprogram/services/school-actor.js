@@ -6,7 +6,7 @@
  * 里，且是字符串。若每个服务各推一遍，口径迟早分叉，所以推导只留这一处：
  *
  *   · legacyRoleOf   —— S2 角色 → 旧栈 ROLE 数值；
- *   · buildDirectory —— 一次读齐本范围的在册名单、会员档案与学院改名表；
+ *   · buildDirectory —— 按当前操作编号读取会员档案与学院目录；
  *   · recordOptions  —— 权限判定的公共入参；
  *   · legacyActorOf  —— 组装旧栈纯判定要的「账号」对象。
  *
@@ -24,112 +24,23 @@ const { permissionOf, isPlatformAdminCtx, PERMISSION } = require('./school-permi
 const { loadColleges } = require('./college-directory.js');
 const { ROLE, USER_STATUS } = require('../utils/constants.js');
 const { PLATFORM_STATUS, collegeKey, schoolMemberKey } = require('../utils/school.js');
-const contextCache = require('./context-cache.js');
-
-/* ============================================================
- * 全校名册目录的短 TTL 缓存
- * ============================================================
- * 【为什么值得缓存】（2026-10-29 第十一轮审计 P1-1）
- * `buildDirectory` / `buildCollegeDirectory` 要做同一件事：读**全校**在册成员
- * （`schoolMembers.list()`）再按编号批读**全校**账号（`users.listByIds`）。一所
- * 2000 人的学校，这就是 20 页 + 20 页 = 40 次 RPC、4000 条文档，而它挂在球队
- * 列表/详情、录分入口、赛程指派面板、赛事抽签等 14 处读路径上，首页还会对每个
- * 协会各触发一次。云端按读条数计费，这是当前最大的一笔固定开销。
- *
- * 【为什么 TTL 取 5 秒，而不是像学院目录那样 60 秒】
- * 学院是纯字典（业务代码零写入点），名册目录不是：它会因为入会审批、转校、任免
- * 而变化，并且它的 `activeMemberIds` 参与**权限与资格判定**。5 秒与
- * `context-cache` 的上下文窗口取齐——同一个页面连发十几个请求能被吃掉，
- * 「撤权不生效」的窗口却不会比现状更长。
- *
- * 【失效靠代际号，不靠时间戳】
- * 写动作执行完会 `invalidateAll()`（见 school-request 的 finally），它顺带把
- * 代际号 +1，这里的所有条目立即作废。按范围失效（判球类）**不**递增代际，
- * 因为那类写不碰学籍 —— 否则一场 50 球的比赛会连续打掉全校目录缓存。
- *
- * 【测试与小程序的默认值】
- * `context-cache.stats().ttlMs` 在单元测试与小程序运行时都是 0（见该模块
- * `readTtl` 的说明），所以这里自然关闭：测试每一步都读最新数据，小程序端本来
- * 也不跑这条路径。要验证缓存行为时用 `__setTtlForTest` 显式打开。
- * ============================================================ */
-const DIRECTORY_TTL_MS = 5000;
-const DIRECTORY_MAX_SCHOOLS = 200;
-/** repo → Map<schoolId, { docs, generation, expiresAt }> */
-const directoryStores = new WeakMap();
-
-function directoryCacheEnabled() {
-  return contextCache.stats().ttlMs > 0;
-}
-
-function readDirectoryCache(repo, schoolId, generation) {
-  const perRepo = directoryStores.get(repo);
-  if (!perRepo) return null;
-  const hit = perRepo.get(schoolId);
-  if (!hit) return null;
-  // 代际变了 = 期间发生过写动作，整批作废（比逐条推时间更直白）。
-  if (hit.generation !== generation || hit.expiresAt <= Date.now()) {
-    perRepo.delete(schoolId);
-    return null;
+/** 只装载当前操作涉及的会员；选人入口显式分页，不建立全校名册缓存。 */
+async function loadDirectoryDocs(ctx, options = {}) {
+  const scoped = ctx.repo.forScope(ctx);
+  const supplied = Array.isArray(options) ? options : options.userIds || [];
+  let page = null;
+  if (!Array.isArray(options) && options.page) {
+    page = await scoped.schoolMembers.listDirectoryPage({ ...options.page, limit: 50 });
   }
-  return hit.docs;
-}
-
-function writeDirectoryCache(repo, schoolId, generation, docs) {
-  let perRepo = directoryStores.get(repo);
-  if (!perRepo) {
-    perRepo = new Map();
-    directoryStores.set(repo, perRepo);
-  }
-  perRepo.set(schoolId, { docs, generation, expiresAt: Date.now() + DIRECTORY_TTL_MS });
-  if (perRepo.size > DIRECTORY_MAX_SCHOOLS) perRepo.clear();
-}
-
-/**
- * 读一次「本校在册成员 + 账号 + 学院目录」，两端共用。
- *
- * 缓存里存的是**文档与派生 Map**：调用方沿用项目既定纪律「只读不改」，
- * 需要改就 spread 出新的（与 context-cache 同一条约定）。
- *
- * @param {Object} ctx 请求级上下文（事务内请勿使用缓存语义：事务仓储是另一个
- *        实例，WeakMap 天然不命中，读的是一致快照）
- * @returns {Promise<{members:Array<Object>, colleges:Array<Object>, userById:Map<string,Object>}>}
- */
-async function loadDirectoryDocs(ctx) {
-  const repo = ctx.repo;
-  const schoolId = String(ctx.schoolId || '');
-  const enabled = directoryCacheEnabled() && Boolean(schoolId);
-  const startedGeneration = enabled ? contextCache.currentGeneration() : 0;
-  if (enabled) {
-    const hit = readDirectoryCache(repo, schoolId, startedGeneration);
-    if (hit) return hit;
-  }
-  const [members, colleges] = await Promise.all([
-    repo.forScope(ctx).schoolMembers.list(),
-    loadColleges(ctx),
+  const ids = [...new Set([ctx.actorId, ...supplied, ...(page ? page.members.map(row => row.userId) : [])]
+    .filter(id => typeof id === 'string' && id))];
+  const [members, colleges, users] = await Promise.all([
+    ids.length ? scoped.schoolMembers.listByIds(ids.map(id => schoolMemberKey(id, ctx.schoolId))) : [],
+    loadColleges(ctx), ids.length ? ctx.repo.users.listByIds(ids) : [],
   ]);
-  // 账号按在册成员的编号批量取。原先是 ctx.repo.users.list()——users 是平台级
-  // 集合（不带 schoolId），一次要把**全平台所有学校**的账号读回来建 Map，
-  // 而本函数是每个协会页面的必经之路（2026-10-21 审查 P0-1）。
-  const users = await repo.users.listByIds(members.map(item => item.userId));
-  const docs = Object.freeze({
-    members,
-    colleges,
-    userById: new Map(users.map(item => [item._id, item])),
-  });
-  // 与 context-cache 的 C-1 同一条判据：读过程跨了多次 await，期间若有写动作做了
-  // 整体失效（代际已变），这份快照就是失效前的，不能写回，否则「清了也没清干净」。
-  if (enabled && contextCache.currentGeneration() === startedGeneration) {
-    writeDirectoryCache(repo, schoolId, startedGeneration, docs);
-  }
-  return docs;
+  return { members, colleges, userById: new Map(users.map(row => [row._id, row])), page };
 }
 
-/**
- * S2 角色 → 旧栈 ROLE 数值，供旧栈纯判定复用。
- * 校级管理员 / 协会负责人 / 平台管理员按「管理员」；学院负责人按「学院职员」。
- * @param {Object} ctx
- * @returns {number}
- */
 function legacyRoleOf(ctx) {
   if (isPlatformAdminCtx(ctx)) return ROLE.ADMIN;
   const permission = permissionOf(ctx && ctx.schoolRole, ctx && ctx.membership);
@@ -145,7 +56,7 @@ function managementCollegeId(ctx) {
 }
 
 /**
- * 一次读齐本范围的在册名单、会员档案与学院改名表，供权限判定、展示与抽签复用。
+ * 按当前操作编号读取会员档案与学院目录，供权限判定、展示与抽签复用。
  *
  * members 是**会员档案**（含 gender），抽签算种子、配对要用；memberIds 是在册编号，
  * 供 match-record 的阵容校验。user 表是全局的，这里只取本范围在册会员那几份。
@@ -163,16 +74,17 @@ function managementCollegeId(ctx) {
  * @param {Object} ctx
  * @returns {Promise<{memberIds:string[], activeMemberIds:string[], members:Array<Object>, actorCollege:string, collegeIdOf:function(string):string, collegeNameById:function(string):string, collegeOf:function(string):string}>}
  */
-async function buildDirectory(ctx) {
-  const { members, colleges, userById } = await loadDirectoryDocs(ctx);
+async function buildDirectory(ctx, options = {}) {
+  const { members, colleges, userById, page } = await loadDirectoryDocs(ctx, options);
   const nameByCollegeId = new Map(colleges.map(item => [item.collegeId, item.name]));
   const collegeIdOf = new Map(members.map(item => [item.userId, item.collegeId]));
   const active = members.filter(item => item.status === 'active');
   const activeUsers = active.filter(item => {
     const user = userById.get(item.userId);
-    return Boolean(user && user.platformStatus === PLATFORM_STATUS.ACTIVE);
+    return Boolean(user && user.platformStatus === PLATFORM_STATUS.ACTIVE && user.primarySchoolId === ctx.schoolId);
   });
   return {
+    page,
     memberIds: active.map(item => item.userId),
     activeMemberIds: activeUsers.map(item => item.userId),
     members: active.map(item => userById.get(item.userId)).filter(Boolean),
@@ -188,7 +100,7 @@ async function buildDirectory(ctx) {
 }
 
 /**
- * 一次读齐本校的**学院目录**与在册会员，供学院赛（名单制）复用旧栈纯校验。
+ * 读取本校学院目录与当前操作涉及的会员，供学院赛（名单制）复用纯校验。
  * ============================================================
  * 旧栈学院赛认「学院全名」，且有效学院写死在全局 `COLLEGES`。学校维度要求
  * 每校一份独立目录（改为稳定 `collegeId`），所以这里把本校 colleges 表读出来，
@@ -209,8 +121,8 @@ async function buildDirectory(ctx) {
  *   actorCollege:string, actorCollegeId:string,
  * }>}
  */
-async function buildCollegeDirectory(ctx) {
-  const { members, colleges, userById } = await loadDirectoryDocs(ctx);
+async function buildCollegeDirectory(ctx, options = {}) {
+  const { members, colleges, userById, page } = await loadDirectoryDocs(ctx, options);
   const nameById = new Map(colleges.map(item => [item.collegeId, item.name]));
   const idByName = new Map(colleges.map(item => [item.name, item.collegeId]));
   const collegeIdOfMember = new Map(members.map(item => [item.userId, item.collegeId]));
@@ -218,6 +130,7 @@ async function buildCollegeDirectory(ctx) {
   const collegeIdOf = userId => collegeIdOfMember.get(userId) || '';
   const collegeOf = userId => nameById.get(collegeIdOfMember.get(userId)) || '';
   return {
+    page,
     colleges: colleges.slice(),
     collegeNames: colleges.map(item => item.name),
     collegeIdOf,
@@ -225,11 +138,10 @@ async function buildCollegeDirectory(ctx) {
     collegeNameById: collegeId => nameById.get(collegeId) || '',
     collegeIdByName: name => idByName.get(name) || '',
     memberIds: active.map(item => item.userId),
-    // 会员档案补「学院全名 + 可用状态」，与旧栈校验所需形状对齐（status 恒 ACTIVE：
-    // 离校 / 停用者已被 active 过滤掉，走不到这里）。
+    // 仅给当前本校在册、平台可用的账号补学院全名与数字 ACTIVE 状态。
     members: active.map(item => {
       const user = userById.get(item.userId);
-      if (!user) return null;
+      if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) return null;
       return { ...user, college: nameById.get(item.collegeId) || '', status: USER_STATUS.ACTIVE };
     }).filter(Boolean),
     actorCollege: collegeOf(ctx.actorId),

@@ -202,9 +202,11 @@ function myRegistrationDTO(reg) {
 
 /** 事务外：列某人当前 active 的小组 ID（用于详情页算报名资格说明） */
 async function activeGroupIdsOf(repo, ctx, userId) {
-  const rows = await repo.forScope(ctx).associationGroupMembers.list();
-  return rows.filter(row => row.userId === userId && row.status === GROUP_MEMBER_STATUS.ACTIVE)
-    .map(row => row.groupId);
+  const scoped = repo.forScope(ctx);
+  const rows = await scoped.associationGroupMembers.listByUser(userId);
+  const groups = await Promise.all([...new Set(rows.map(row => row.groupId))].map(id => scoped.associationGroups.getById(id)));
+  const available = new Set(groups.filter(row => row && row.status !== 'deleted').map(row => row._id));
+  return rows.filter(row => row.status === GROUP_MEMBER_STATUS.ACTIVE && available.has(row.groupId)).map(row => row.groupId);
 }
 
 /**
@@ -217,7 +219,10 @@ async function hitGroupsInTx(tx, ctx, userId, audience) {
   const hits = [];
   for (const groupId of normalized.audienceGroupIds) {
     const rel = await tx.associationGroupMembers.getById(associationGroupMemberKey(groupId, userId, ctx));
-    if (rel && rel.status === GROUP_MEMBER_STATUS.ACTIVE) hits.push(groupId);
+    if (rel && rel.status === GROUP_MEMBER_STATUS.ACTIVE) {
+          const group = await tx.associationGroups.getById(groupId);
+          if (group && group.status !== 'deleted' && belongsToSchoolScope(group, ctx)) hits.push(groupId);
+        }
   }
   return hits;
 }

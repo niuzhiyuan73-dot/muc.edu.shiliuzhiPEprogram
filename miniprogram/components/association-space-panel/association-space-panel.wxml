@@ -136,6 +136,7 @@
         wx:for-item="group"
         class="card space-group {{group.archived ? 'is-archived' : ''}}"
       >
+        <view wx:if="{{group.cleanupPending}}" class="error-message">小组已关闭，请继续完成成员清理</view>
         <view class="space-group-head">
           <view class="space-group-name">
             {{group.name}}<text wx:if="{{group.joined}}" class="rank-me-tag">已加入</text>
@@ -148,9 +149,9 @@
           <button wx:if="{{group.canReadRoster}}" class="btn btn-outline space-mini" data-groupid="{{group.groupId}}" bindtap="onToggleGroupDetail">
             {{openGroupId === group.groupId ? '收起名单' : '查看名单'}}
           </button>
-          <button wx:if="{{group.joined && !group.archived}}" class="btn btn-danger space-mini"
+          <button wx:if="{{group.joined && !group.archived && !group.cleanupPending}}" class="btn btn-danger space-mini"
             data-groupid="{{group.groupId}}" bindtap="onLeaveGroup" disabled="{{groupBusy}}">退出</button>
-          <button wx:if="{{canManage && !group.archived}}" class="btn btn-outline space-mini"
+          <button wx:if="{{canManage && !group.archived && !group.cleanupPending}}" class="btn btn-outline space-mini"
             data-groupid="{{group.groupId}}" data-revision="{{group.revision}}" bindtap="onToggleEdit"
             disabled="{{groupBusy}}">{{editingId === group.groupId ? '取消编辑' : '编辑'}}</button>
           <button wx:if="{{canManage && !group.archived}}" class="btn btn-outline space-mini"
@@ -159,7 +160,7 @@
           <!-- 删除不按 archived 过滤：归档的组也要能删掉，否则它永远占着组名与列表 -->
           <button wx:if="{{canManage}}" class="btn btn-danger space-mini"
             data-groupid="{{group.groupId}}" data-revision="{{group.revision}}" bindtap="onDeleteGroup"
-            disabled="{{groupBusy}}">删除</button>
+            disabled="{{groupBusy}}">{{group.cleanupPending ? '继续清理' : '删除'}}</button>
         </view>
 
         <!-- 编辑表单：管理者改组名 / 说明，提交带版本号 -->

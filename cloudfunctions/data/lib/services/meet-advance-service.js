@@ -805,7 +805,8 @@ async function setMeetMatchWinner(payload = {}, ctx) {
     const previous = sessions.find((row) => row._id === match.sessionKey);
     const before = previous || {};
     const sameEntry = JSON.stringify(before.entryKeys || []) === JSON.stringify(match.entryKeys);
-    if (!expandedSize && sameEntry && (before.winnerEntryKey || '') === match.winnerEntryKey) continue;
+    if (previous && sameEntry && (before.winnerEntryKey || '') === match.winnerEntryKey
+      && (before.roundLabel || '') === (match.roundLabel || '')) continue;
     changed.push(match);
   }
 

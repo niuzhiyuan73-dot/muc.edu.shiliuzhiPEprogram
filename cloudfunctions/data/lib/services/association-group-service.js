@@ -30,21 +30,13 @@ const { permissionLabelOf } = require('./school-permission.js');
 const {
   schoolKey, schoolMemberKey, schoolRoleKey, schoolMembershipKey, belongsToSchoolScope,
   associationGroupKey, associationGroupMemberKey, associationGroupNameKey,
-  SCHOOL_MEMBER_STATUS, PLATFORM_STATUS,
+  SCHOOL_MEMBER_STATUS, PLATFORM_STATUS, schoolAssociationKey,
 } = require('../utils/school.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
 
-/**
- * 单次创建/批量添加的成员上限。更多成员分批添加，不静默截断。
- *
- * 【为什么是 30，不是 50】（2026-10-21 云端容量对齐）
- * 建小组 / 批量加人都在**一个事务**里跑，每名成员约 3 次操作（1 写 + 2 读）。
- * 云开发事务总操作数上限约 100（见 cloud-repo.js 的 TX_OPERATION_BUDGET），
- * 50 人就是约 150 次——超出上限，本地内存仓储无此约束所以一直没暴露。
- * 30 人约 90 次，留出余量；要更多人就分几批加。
- */
+/** 单次请求最多30人；创建在一个事务内，添加按20人分批。 */
 const MAX_MEMBERS_PER_WRITE = 30;
 const MAX_NAME_LENGTH = 30;
 const MAX_DESCRIPTION_LENGTH = 300;
@@ -123,7 +115,7 @@ async function assertEligibleMembers(tx, ctx, userIds) {
 function groupSummary(group, joined) {
   return {
     groupId: group._id, name: group.name, description: group.description || '',
-    status: group.status, memberCount: Number(group.memberCount || 0),
+    status: group.status, cleanupPending: Boolean(group.cleanupPending), memberCount: Number(group.memberCount || 0),
     revision: Number(group.revision || 1),
     createdAt: group.createdAt || null, updatedAt: group.updatedAt || null, joined: Boolean(joined),
   };
@@ -197,11 +189,10 @@ async function listAssociationGroups(payload = {}, ctx) {
       message: '没有读取协会空间的权限' });
   }
   const canManage = canManageAssociationSpace(ctx);
-  // 已删除的组不再出现：删掉一个组之后列表必须立刻少一条，否则用户看到的
-  // 仍然是一个点不开、改不动、也删不掉的幽灵卡片。
+  // 普通成员不见已删除组；管理员保留待清理记录，便于重进页面后恢复删除。
   const rows = (await ctx.repo.forScope(ctx).associationGroups.list())
-    .filter(row => isGroupDoc(row) && row.status !== GROUP_STATUS.DELETED);
-  const mine = new Set((await ctx.repo.forScope(ctx).associationGroupMembers.list())
+    .filter(row => isGroupDoc(row) && (row.status !== GROUP_STATUS.DELETED || canManage && row.cleanupPending));
+  const mine = new Set((await ctx.repo.forScope(ctx).associationGroupMembers.listByUser(ctx.actorId))
     .filter(row => row.userId === ctx.actorId && row.status === GROUP_MEMBER_STATUS.ACTIVE)
     .map(row => row.groupId));
 
@@ -225,7 +216,7 @@ async function listAssociationGroups(payload = {}, ctx) {
 
   return ok({ ok: true, canManage, hasMore, nextCursor,
     groups: page.map(group => ({ ...groupSummary(group, mine.has(group._id)),
-      canReadRoster: canManage || mine.has(group._id) })), message: '' });
+      canReadRoster: !group.cleanupPending && (canManage || mine.has(group._id)) })), message: '' });
 }
 
 async function getAssociationGroup(payload = {}, ctx) {
@@ -272,6 +263,7 @@ async function createAssociationGroup(payload = {}, ctx) {
     // 用户再点一次创建是常事，此时要真的重建，而不是把一个删掉的组当幂等结果返回
     // （那会提示「已创建」但列表里什么都没有）。未删除的旧组仍按原来的幂等口径处理。
     const removedBefore = isGroupDoc(existing) && existing.status === GROUP_STATUS.DELETED;
+    if (removedBefore && existing.cleanupPending) return refused('小组删除清理尚未完成，请先重试删除');
     if (isGroupDoc(existing) && !removedBefore) {
       return existing.fingerprint === fingerprint
         ? { ok: true, group: groupSummary(existing, members.ids.includes(fresh.actorId)), message: '' }
@@ -372,20 +364,31 @@ async function addAssociationGroupMembers(payload = {}, ctx) {
   if (typeof payload.groupId !== 'string' || !payload.groupId) return ok(refused('缺少小组编号'));
   const members = normalizeMemberIds(payload.memberIds);
   if (!members.ok) return ok(refused(members.message));
-  if (members.ids.length === 0) return ok(refused('请选择要加入的成员'));
+  if (!members.ids.length) return ok(refused('请选择要加入的成员'));
+  let added = 0, result;
+  // 添加每人四次操作，20 人一批可留出身份、组版本和审计的固定开销。
+  for (let offset = 0; offset < members.ids.length; offset += 20) {
+    try { result = await addGroupMemberBatch(payload, ctx, members.ids.slice(offset, offset + 20)); }
+    catch (error) { return ok(refused('已添加 ' + added + ' 人；添加未完成，请重试，已加入成员不会重复添加', { added, partial: added > 0 })); }
+    if (!result.ok) return ok(refused('已添加 ' + added + ' 人；' + result.message, { added, partial: added > 0 }));
+    added += result.added || 0;
+  }
+  return ok({ ...result, added });
+}
 
-  const result = await ctx.repo.transaction(async tx => {
+async function addGroupMemberBatch(payload, ctx, ids) {
+  return ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);
     if (!canManageAssociationSpace(fresh)) return refused('只有协会负责人及以上可以添加成员');
     const group = await tx.associationGroups.getById(payload.groupId);
     if (!isLiveGroupDoc(group, fresh)) return refused('小组不存在');
     if (group.status !== GROUP_STATUS.ACTIVE) return refused('小组已归档，不能再添加成员');
-    const eligible = await assertEligibleMembers(tx, fresh, members.ids);
+    const eligible = await assertEligibleMembers(tx, fresh, ids);
     if (!eligible.ok) return refused(eligible.message);
 
     const now = fresh.now;
     let added = 0;
-    for (const userId of members.ids) {
+    for (const userId of ids) {
       const key = associationGroupMemberKey(group._id, userId, fresh);
       const previous = await tx.associationGroupMembers.getById(key);
       if (previous && previous.status === GROUP_MEMBER_STATUS.ACTIVE) continue;
@@ -404,9 +407,8 @@ async function addAssociationGroupMembers(payload = {}, ctx) {
     await tx.audit.append({ _id: auditKey(group._id, 'addAssociationGroupMembers', next.revision),
       action: 'addAssociationGroupMembers', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, groupId: group._id, added, at: now });
-    return { ok: true, group: groupSummary(next, false), message: '' };
+    return { ok: true, added, group: groupSummary(next, false), message: '' };
   });
-  return ok(result);
 }
 
 /** 管理移除成员：幂等，人数最多减一次 */
@@ -499,84 +501,57 @@ async function archiveAssociationGroup(payload = {}, ctx) {
   return ok(result);
 }
 
-/**
- * 删除整个小组（软删除）。用户报的就是这个缺口：把成员全部移出之后小组仍然挂在
- * 列表上，没有任何入口能把组本身去掉。
- *
- * 【为什么是软删除而不是物理删除】
- *   本仓储 forScope 只有 list/getById/set/insert/update，没有 remove；而且历史活动、
- *   训练报名与审计都按 groupId 指向这个组，物理删掉只会留下一堆悬空引用。因此与项目
- *   其余部分同一口径：状态 + 审计留痕，文档保留。
- *
- * 【删掉一个组要动三处】
- *   1. 组文档：status='deleted' + deletedAt/deletedBy，版本号 +1（乐观锁口径与
- *      update / archive 一致，expectedRevision 不符说明有人改过，要求刷新后重试）；
- *   2. 组内成员关系：全部 ACTIVE → REMOVED。删组之后这些关系不再表示「在组里」，
- *      训练 / 赛事的限组报名资格也随之失效（它们只认 ACTIVE 关系）；
- *   3. 组名占位：把 nameClaim 文档的 groupId 置空 + releasedAt，让同名小组可以重建；
- *      不释放的话用户会撞上「同范围已存在同名小组」，而那个组早就看不见了。
- *
- * 【幂等】
- *   小组不存在 / 不属于本范围 / 已被删除，一律返回 ok（deleted:false）而不是报错：
- *   目标态就是「没有这个组」，重复点击、超时重试、并发第二次删除都不该看到失败。
- *   代价是调用方分不清「刚删掉」和「本来就没有」，故返回值用 deleted 标记本次是否
- *   真的改了数据。归档的小组同样允许删除——用户正是删不掉才来报的。
- *
- * 【并发】
- *   仓储约定事务内不能列出集合，成员关系清单只能在事务外先读。这里靠 expectedRevision
- *   兜底：任何成员增减都会推进 revision（见 add / remove / leave），所以「读完清单之后
- *   有人被加进来」必然在事务内因版本不符被拒，不会留下一条属于已删除小组的 ACTIVE 关系。
- */
+/** 先原子关闭小组并释放名称，再按组分页清理关系；失败后同一删除请求可继续。 */
 async function deleteAssociationGroup(payload = {}, ctx) {
   if (!ctx.actorId) return ok(refused('请先登录'));
   if (typeof payload.groupId !== 'string' || !payload.groupId) return ok(refused('缺少小组编号'));
-  if (!Number.isInteger(payload.expectedRevision) || payload.expectedRevision < 1) {
-    return ok(refused('请刷新小组版本后重试'));
-  }
-
-  const relations = await ctx.repo.forScope(ctx).associationGroupMembers.list();
-
-  const result = await ctx.repo.transaction(async tx => {
+  if (!Number.isInteger(payload.expectedRevision) || payload.expectedRevision < 1) return ok(refused('请刷新小组版本后重试'));
+  const closed = await ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);
     if (!canManageAssociationSpace(fresh)) return refused('只有协会负责人及以上可以删除小组');
     const group = await tx.associationGroups.getById(payload.groupId);
-    if (!isGroupDoc(group) || !belongsToSchoolScope(group, fresh)) {
-      return { ok: true, groupId: payload.groupId, deleted: false, message: '' };
-    }
-    if (group.status === GROUP_STATUS.DELETED) {
-      return { ok: true, groupId: group._id, deleted: false, message: '' };
-    }
+    if (!isGroupDoc(group) || !belongsToSchoolScope(group, fresh)) return { ok: true, deleted: false };
+    if (group.status === GROUP_STATUS.DELETED) return { ok: true, deleted: false, group };
     if (group.revision !== payload.expectedRevision) return refused('小组已修改，请刷新后重试');
-
     const now = fresh.now;
-    const removedMemberIds = [];
-    for (const relation of relations) {
-      if (relation.groupId !== group._id || relation.status !== GROUP_MEMBER_STATUS.ACTIVE) continue;
-      const key = associationGroupMemberKey(group._id, relation.userId, fresh);
-      // 事务内重读：清单是事务外读的，期间状态可能已变，只翻仍然是 ACTIVE 的那些。
-      const current = await tx.associationGroupMembers.getById(key);
-      if (!current || current.status !== GROUP_MEMBER_STATUS.ACTIVE) continue;
-      await tx.associationGroupMembers.set(key, { ...current, status: GROUP_MEMBER_STATUS.REMOVED,
-        removedAt: now, removedBy: fresh.actorId });
-      removedMemberIds.push(relation.userId);
-    }
-
-    const next = { ...group, status: GROUP_STATUS.DELETED, memberCount: 0,
+    const next = { ...group, status: GROUP_STATUS.DELETED, memberCount: 0, cleanupPending: true,
       deletedAt: now, deletedBy: fresh.actorId, revision: group.revision + 1, updatedAt: now };
-    await tx.associationGroups.set(next._id, next);
-
-    const claimId = associationGroupNameKey(group.name, fresh);
-    const claim = await tx.associationGroups.getById(claimId);
-    if (claim && claim.groupId === group._id) {
-      await tx.associationGroups.set(claimId, { ...claim, groupId: '', releasedAt: now });
-    }
-
+    await tx.associationGroups.set(group._id, next);
+    const claimId = associationGroupNameKey(group.name, fresh), claim = await tx.associationGroups.getById(claimId);
+    if (claim && claim.groupId === group._id) await tx.associationGroups.set(claimId, { ...claim, groupId: '', releasedAt: now });
+    // 名单资格快照要能感知分批清理期间的删除；配置行已由 freshContext 点读。
+    await tx.schoolAssociations.set(schoolAssociationKey(fresh), { ...fresh.schoolAssociation,
+      groupDeletionRevision: Number(fresh.schoolAssociation.groupDeletionRevision || 0) + 1 });
     await tx.audit.append({ _id: auditKey(group._id, 'deleteAssociationGroup', next.revision),
       action: 'deleteAssociationGroup', schoolId: fresh.schoolId, association: fresh.association,
-      actorId: fresh.actorId, groupId: group._id, removedMemberIds, at: now });
-    return { ok: true, groupId: group._id, deleted: true, message: '' };
+      actorId: fresh.actorId, groupId: group._id, memberCount: group.memberCount, at: now });
+    return { ok: true, deleted: true, group: next };
   });
-  return ok(result);
+  if (!closed.ok) return ok(closed);
+  const group = closed.group;
+  if (!group || !group.cleanupPending) return ok({ ok: true, groupId: payload.groupId, deleted: closed.deleted, message: '' });
+  try {
+    let cursor = '';
+    do {
+      const page = await ctx.repo.forScope(ctx).associationGroupMembers.listGroupPage({ groupId: group._id, cursor });
+      const result = await ctx.repo.transaction(async tx => {
+        const fresh = await freshContext(tx, ctx);
+        if (!canManageAssociationSpace(fresh)) return refused('当前已无删除权限');
+        const current = await tx.associationGroups.getById(group._id);
+        if (!current || current.status !== GROUP_STATUS.DELETED || current.revision !== group.revision) return refused('小组状态已变化');
+        for (const row of page.rows) {
+          const relation = await tx.associationGroupMembers.getById(row._id);
+          if (relation && relation.status === GROUP_MEMBER_STATUS.ACTIVE) await tx.associationGroupMembers.set(row._id,
+            { ...relation, status: GROUP_MEMBER_STATUS.REMOVED, removedAt: fresh.now, removedBy: fresh.actorId });
+        }
+        if (!page.hasMore) await tx.associationGroups.set(group._id, { ...current, cleanupPending: false });
+        return { ok: true };
+      });
+      if (!result.ok) return ok(refused('小组已关闭；' + result.message + '，恢复权限后可重试删除以完成清理', { cleanupPending: true }));
+      cursor = page.nextCursor;
+    } while (cursor);
+  } catch (error) { return ok(refused('小组已关闭，成员清理未完成，请重试删除', { cleanupPending: true })); }
+  return ok({ ok: true, groupId: group._id, deleted: closed.deleted, message: '' });
 }
 
 module.exports = {

@@ -152,37 +152,11 @@ describe('榜单读量：条件下推', () => {
     assert.equal(data.rows[1].userId, 'm03', '后面的人顺位递补');
   });
 
-  test('回填没跑（老评级文档没有 memberStatus）时整体回落旧路径，缺字段的人不会消失', async () => {
-    const repo = fixture({ men: 12, women: 0 });
-    const strip = async (id) => {
-      const doc = await repo.memberRatings.getById(memberRatingKey(id, RATING_POOL.SINGLES, SCOPE));
-      const legacy = { ...doc };
-      delete legacy.gender;
-      delete legacy.memberStatus;
-      await repo.memberRatings.set(legacy._id, legacy);
-    };
-    const restore = async (id, gender) => {
-      const doc = await repo.memberRatings.getById(memberRatingKey(id, RATING_POOL.SINGLES, SCOPE));
-      await repo.memberRatings.set(doc._id, {
-        ...doc, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE,
-      });
-    };
-
-    for (const id of ['m01', 'm02', 'm03']) await strip(id);
-
-    // 只要还有残留就整体回落：部分回填时若只走新路径，m01–m03 会被静默滤掉，
-    // 榜单看起来正常却少了人——比空榜更难发现，所以这里宁可慢也要对。
-    const data = await callRanking(repo, { project: 'men_singles' }, 'm01');
-    assert.equal(data.total, 12, '按名册口径算人数，缺字段的人仍在榜');
-    assert.equal(data.rows.length, 10);
-    assert.ok(data.rows.some(row => row.userId === 'm01'), '老文档没有被状态条件吃掉');
-
-    // 补齐之后切回下推路径：人数与名次口径不变
-    for (const id of ['m01', 'm02', 'm03']) await restore(id, 'M');
-    const fresh = await callRanking(repo, { project: 'men_singles' }, 'm01');
-    assert.equal(fresh.total, 12);
-    assert.deepEqual(fresh.rows.map(row => row.userId), data.rows.map(row => row.userId),
-      '两条路径给出的前 10 必须一致');
+  test('新库榜单不执行旧数据回填巡检', async () => {
+    const repo = fixture();
+    const calls = spyScope(repo);
+    assert.equal((await callRanking(repo)).total, 60);
+    assert.ok(!calls.some(call => call.args[0] && call.args[0].missingProfile));
   });
 });
 

@@ -269,7 +269,7 @@ test('删除小组：从列表消失、成员关系不再 ACTIVE、组名可重�
   assert.equal(audits.length, 1);
   assert.equal(audits[0].groupId, group.groupId);
   assert.equal(audits[0].actorId, 'demo_muc_admin');
-  assert.deepEqual(audits[0].removedMemberIds.slice().sort(), ['demo_muc_member', 'demo_muc_other']);
+  assert.equal(audits[0].memberCount, 2);
 });
 
 test('删除小组：普通会员、外校管理员与版本不符都被拒，且不落库', async () => {

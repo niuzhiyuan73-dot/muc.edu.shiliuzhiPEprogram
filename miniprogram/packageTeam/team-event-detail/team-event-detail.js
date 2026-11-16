@@ -164,6 +164,7 @@ Page(withDetailExperience({
     if (this.liveSubscription) this.liveSubscription.pause();
   },
   onUnload() {
+    clearTimeout(this.schedulePeopleTimer); this.schedulePeopleRequest = (this.schedulePeopleRequest || 0) + 1;
     this.destroyed = true;
     // 与刷新序号配合：离开页面后所有在途读取都不得再 setData 或重新订阅比分。
     this.refreshSeq = (this.refreshSeq || 0) + 1;
@@ -976,7 +977,7 @@ Page(withDetailExperience({
           durationMinutes: result.match.durationMinutes || '',
           requestId: `fb_schedule_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
           referees,
-          recorders,
+          recorders, peopleKeyword: '', peopleCursor: result.nextCursor || '', peopleHasMore: Boolean(result.hasMore), peopleLoading: false, peopleError: '',
           refereeIndex: indexOf(referees, result.match.refereeId),
           recorderIndex: indexOf(recorders, result.match.recorderId),
           refereeLabels: ['不指派', ...referees.map(row => row.name)],
@@ -992,7 +993,45 @@ Page(withDetailExperience({
   },
 
   onCloseSchedule() {
+    clearTimeout(this.schedulePeopleTimer); this.schedulePeopleRequest = (this.schedulePeopleRequest || 0) + 1;
     this.setData({ scheduleEditing: null, scheduleBusy: false });
+  },
+
+  onSearchSchedulePeople(event) {
+    if (!this.data.scheduleEditing) return;
+    this.setData({ 'scheduleEditing.peopleKeyword': event.detail.value });
+    clearTimeout(this.schedulePeopleTimer);
+    this.schedulePeopleRequest = (this.schedulePeopleRequest || 0) + 1;
+    this.schedulePeopleTimer = setTimeout(() => this.loadSchedulePeople(false), 250);
+  },
+  onMoreSchedulePeople() { return this.loadSchedulePeople(true); },
+  onRetrySchedulePeople() { return this.loadSchedulePeople(false); },
+  async loadSchedulePeople(append = false) {
+    const editing = this.data.scheduleEditing;
+    if (!editing || this.data.scheduleBusy || append && (editing.peopleLoading || !editing.peopleHasMore)) return;
+    const request = this.schedulePeopleRequest = (this.schedulePeopleRequest || 0) + 1;
+    this.setData({ 'scheduleEditing.peopleLoading': true, 'scheduleEditing.peopleError': '' });
+    try {
+      const result = await space.forScope(this.scope).getTeamMatchSchedule({ matchId: editing.matchId,
+        keyword: editing.peopleKeyword || '', cursor: append ? editing.peopleCursor : '' });
+      if (request !== this.schedulePeopleRequest || !this.data.scheduleEditing) return;
+      if (!result.ok) throw new Error(result.message || '候选读取失败');
+      const current = this.data.scheduleEditing, patch = {};
+      for (const [list, field] of [['referees', 'referee'], ['recorders', 'recorder']]) {
+        const selected = current[list][current[field + 'Index'] - 1];
+        const prior = append ? current[list] : selected ? [selected] : [];
+        const rows = [...new Map([...prior, ...(result[list] || []).filter(row => !row.disabled)].map(row => [row.userId, row])).values()];
+        patch['scheduleEditing.' + list] = rows;
+        patch['scheduleEditing.' + field + 'Labels'] = ['不指派', ...rows.map(row => row.name)];
+        patch['scheduleEditing.' + field + 'Index'] = selected ? rows.findIndex(row => row.userId === selected.userId) + 1 : 0;
+      }
+      Object.assign(patch, { 'scheduleEditing.peopleLoading': false, 'scheduleEditing.peopleHasMore': Boolean(result.hasMore),
+        'scheduleEditing.peopleCursor': result.nextCursor || '' });
+      this.setData(patch);
+    } catch (error) {
+      if (request === this.schedulePeopleRequest && this.data.scheduleEditing) this.setData({ 'scheduleEditing.peopleLoading': false,
+        'scheduleEditing.peopleError': error.message || '候选读取失败，请重试' });
+    }
   },
 
   onInputSchedule(event) {

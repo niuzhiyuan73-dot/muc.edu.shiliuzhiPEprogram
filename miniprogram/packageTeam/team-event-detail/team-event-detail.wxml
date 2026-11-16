@@ -313,6 +313,13 @@
           bindinput="onInputSchedule"
         />
       </view>
+      <view class="form-row">
+        <view class="form-label">搜索指派人员</view>
+        <input value="{{scheduleEditing.peopleKeyword}}" placeholder="输入姓名或昵称" bindinput="onSearchSchedulePeople" />
+        <view wx:if="{{scheduleEditing.peopleLoading}}" class="loading">正在加载候选…</view>
+        <view wx:if="{{scheduleEditing.peopleError}}" class="error-message" bindtap="onRetrySchedulePeople">{{scheduleEditing.peopleError}}</view>
+        <view wx:if="{{scheduleEditing.peopleHasMore && !scheduleEditing.peopleLoading}}" class="btn btn-outline" bindtap="onMoreSchedulePeople">加载更多候选</view>
+      </view>
       <view class="ot-row">
         <text>裁判</text>
         <picker

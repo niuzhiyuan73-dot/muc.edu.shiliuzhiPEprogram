@@ -56,35 +56,12 @@ const MAX_ENTRIES = 500;
 // `\b` 会让这条正则整体失效。
 const READ_ACTION_PREFIX = /^(get|list|search|describe|query|preview|export)/i;
 
-/**
- * 例外清单：名字像读、实际会写库的动作。
- *
- * 目前为空——项目里以 get/list 开头的接口都是纯读（懒初始化写库发生在事务内，
- * 且事务内走的是 freshContext，不经过这里）。**新增「名为读、实为写」的接口时，
- * 必须登记到这里**，否则会给它套上 5 秒的陈旧上下文。
- */
-const NON_CACHEABLE_ACTIONS = new Set([]);
-
 const store = new Map();
 let ttlMs = readTtl();
 /** 最近一次「整体失效」的时间戳：`set` 用它判断这次读是不是失效前的旧快照。 */
 let lastInvalidateAt = 0;
 /** 按范围失效的时间戳：`prefix -> ts`，理由同上，粒度到「学校 + 协会」。 */
 const scopeInvalidatedAt = new Map();
-/**
- * 整体失效的代际号：每次 `invalidateAll` 自增。
- *
- * 【为什么还要一个号】（2026-10-29 第十一轮审计 P1-1）
- * `buildDirectory`（学校名册目录）缓存的不是「某个人的上下文」，而是一整所学校的
- * 在册名单，键里没有 openId —— 用 `lastInvalidateAt` 去比「这次读是不是失效前的
- * 快照」只能挡住时间先后，挡不住「同一个键换了内容」。代际号给这类**派生自全校
- * 数据**的缓存一个更直白的判据：代际变了就是整批作废，不必逐条推时间。
- *
- * 按范围失效（`invalidateScope`）**不**递增：它的适用面是「纯比赛类写」，那类
- * 动作不碰 schoolMembers / schoolRoles / memberships，名册目录不会变；若也递增，
- * 一场比赛 50 次判球就会让全校目录缓存连续作废，缓存对最热的计分台等于不存在。
- */
-let generation = 0;
 
 /**
  * 运行在 Node 里吗（云函数 / 单元测试）。
@@ -129,7 +106,6 @@ function readTtl() {
 function isReadAction(action) {
   if (ttlMs <= 0) return false;
   if (typeof action !== 'string' || !action) return false;
-  if (NON_CACHEABLE_ACTIONS.has(action)) return false;
   return READ_ACTION_PREFIX.test(action);
 }
 
@@ -174,7 +150,6 @@ function set(key, docs, readAt) {
 /** 整体失效：写动作执行后调用（原因见文件头「为什么不按用户精确失效」）。 */
 function invalidateAll() {
   lastInvalidateAt = Date.now();
-  generation += 1;
   scopeInvalidatedAt.clear();
   store.clear();
 }
@@ -215,25 +190,17 @@ function stats() {
   return { ttlMs, size: store.size };
 }
 
-/**
- * 当前代际号。派生自全校数据的缓存（如 `buildDirectory`）在「读开始」与「写回」
- * 两端各取一次，两个值相同才允许写回或命中——见上面的 `generation` 说明。
- * @returns {number}
- */
-function currentGeneration() {
-  return generation;
-}
+
 
 /** 测试专用：显式设置窗口（0 = 关闭），并清空既有条目。 */
 function __setTtlForTest(ms) {
   ttlMs = Number.isFinite(Number(ms)) && Number(ms) >= 0 ? Math.floor(Number(ms)) : 0;
   store.clear();
   lastInvalidateAt = 0;
-  generation = 0;
   scopeInvalidatedAt.clear();
 }
 
 module.exports = {
-  isReadAction, keyOf, get, set, invalidateAll, invalidateScope, stats, currentGeneration,
+  isReadAction, keyOf, get, set, invalidateAll, invalidateScope, stats,
   __setTtlForTest, DEFAULT_TTL_MS,
 };

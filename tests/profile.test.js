@@ -1,12 +1,11 @@
 /**
- * 个人资料 —— 纯逻辑与本地台账
+ * 个人资料 —— 资料校验与展示
  * ============================================================
  * 这一组盯两件事：
  *   1. 白名单是真的白名单。任何「顺手改个 role / points / studentId」的
  *      请求都必须被丢掉，而不是写进账号。
  *   2. 昵称与真名的展示口径。真名只该在「与昵称不同」时出现，
  *      否则头卡上会冒出「张宇轩（张宇轩）」这种噪音。
- * profile-store 是内存台账，单独测它的读写与复位。
  * ============================================================
  */
 
@@ -22,7 +21,6 @@ const {
   buildProfilePatch,
   resolveNameDisplay,
 } = require('../miniprogram/services/profile.js');
-const profileStore = require('../miniprogram/services/profile-store.js');
 
 /* ============================================================
  * 一、补丁清洗：白名单之外一律丢掉
@@ -155,51 +153,4 @@ test('IMMUTABLE_FIELDS —— 实名与权限字段都在禁改名单里', () =>
   for (const field of ['realName', 'gender', 'studentId', 'role', 'status', 'points']) {
     assert.ok(IMMUTABLE_FIELDS.includes(field), `${field} 应当明确不可改`);
   }
-});
-
-/* ============================================================
- * 五、台账：profile-store
- * ============================================================ */
-
-test('profile-store —— 写入后能按编号取回，取回的是副本', () => {
-  profileStore.reset();
-  const saved = profileStore.setProfile('u01', { nickName: '新名字' });
-  assert.equal(saved.nickName, '新名字');
-
-  const got = profileStore.patchOf('u01');
-  assert.equal(got.nickName, '新名字');
-
-  // 改副本不该影响台账
-  got.nickName = '改坏了';
-  assert.equal(profileStore.patchOf('u01').nickName, '新名字');
-  profileStore.reset();
-});
-
-test('profile-store —— 多次修改叠加，后一次不丢前一次的字段', () => {
-  profileStore.reset();
-  profileStore.setProfile('u02', { nickName: '先改昵称' });
-  profileStore.setProfile('u02', { avatarUrl: 'cloud://a/b.png' });
-
-  assert.deepEqual(profileStore.patchOf('u02'), {
-    nickName: '先改昵称',
-    avatarUrl: 'cloud://a/b.png',
-  });
-  profileStore.reset();
-});
-
-test('profile-store —— 没改过的编号返回 null 而不是空对象', () => {
-  profileStore.reset();
-  assert.equal(profileStore.patchOf('u03'), null);
-  assert.equal(profileStore.patchOf(''), null);
-  assert.equal(profileStore.patchOf(null), null);
-});
-
-test('profile-store —— 空编号不写入，reset 清空全部', () => {
-  profileStore.reset();
-  profileStore.setProfile('u04', { nickName: '甲' });
-  profileStore.setProfile(null, { nickName: '乙' });
-
-  assert.equal(profileStore.patchOf(null), null);
-  profileStore.reset();
-  assert.equal(profileStore.patchOf('u04'), null);
 });

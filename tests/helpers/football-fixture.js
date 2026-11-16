@@ -19,6 +19,7 @@ async function fixture({ cloud = false, count = 2, format = 'round_robin', rules
     seed.schoolMembers.push({ _id: schoolMemberKey(id, 'muc'), userId: id, schoolId: 'muc', status: 'active', collegeId: 'c01' });
     seed.memberships.push({ _id: schoolMembershipKey(id, SCOPE), ...SCOPE, userId: id, status: 'active', role: 'member' });
   }
+  seed.users = seed.users.map(user => ({ ...user, ...require('../../miniprogram/services/account-directory').accountDirectoryFields(user) }));
   const db = cloud ? database(seed) : null;
   const repo = cloud ? createRepo(db) : createSchoolMemoryRepo(seed);
   let request = 0;

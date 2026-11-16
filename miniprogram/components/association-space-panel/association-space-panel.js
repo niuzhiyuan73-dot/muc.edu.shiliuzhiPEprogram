@@ -350,6 +350,7 @@ Component({
         description: row.description || '',
         status: row.status,
         archived: row.status === 'archived',
+        cleanupPending: Boolean(row.cleanupPending),
         memberCount: row.memberCount || 0,
         revision: row.revision,
         joined: Boolean(row.joined),

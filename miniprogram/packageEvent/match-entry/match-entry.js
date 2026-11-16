@@ -130,6 +130,7 @@ Page({
     // 原生 picker 只吃一个静态数组，几十个名字里没法搜；换成这个自建面板，
     // 点格子打开，边打字边筛，再点一下选中。
     /** 面板是否打开 */
+    pickerHasMore: false, pickerCursor: '', pickerLoading: false, pickerError: '',
     pickerVisible: false,
     /** 正在给哪一队的哪一格选人 */
     pickerSide: '',
@@ -325,7 +326,7 @@ Page({
   /** 按搜索词重算面板里的名单。纯本地计算，跟着每次输入即时调用 */
   applyPickerKeyword(keyword) {
     const rows = buildPickerRows(
-      this.data.members,
+      this.pickerCandidates || this.data.members,
       keyword,
       this.selectedIdOf(this.data.pickerSide, this.data.pickerSlot),
       // 只有对手那一侧带场次：名额只数跨队相对的人，同队的搭档之间不算一对
@@ -345,17 +346,47 @@ Page({
 
     this.setData({ pickerVisible: true, pickerSide: side, pickerSlot: index });
     this.applyPickerKeyword('');
+    return this.loadPickerMembers(false);
   },
 
   /** 面板里输入搜索词 */
   onInputPickerKeyword(event) {
     this.applyPickerKeyword(event.detail.value);
+    clearTimeout(this.pickerSearchTimer);
+    this.pickerRequest = (this.pickerRequest || 0) + 1;
+    this.pickerSearchTimer = setTimeout(() => this.loadPickerMembers(false), 250);
   },
 
   /** 清空面板里的搜索词 */
   onClearPickerKeyword() {
+    clearTimeout(this.pickerSearchTimer);
     this.applyPickerKeyword('');
+    return this.loadPickerMembers(false);
   },
+
+  async loadPickerMembers(append = false) {
+    if (!this.api || !this.data.pickerVisible || append && (this.data.pickerLoading || !this.data.pickerHasMore)) return;
+    const request = this.pickerRequest = (this.pickerRequest || 0) + 1;
+    const keyword = this.data.pickerKeyword;
+    this.setData({ pickerLoading: true, pickerError: '' });
+    try {
+      const result = await this.api.listSchoolMembers({ page: true, keyword, limit: 50,
+        cursor: append ? this.data.pickerCursor : '' });
+      if (request !== this.pickerRequest || !this.data.pickerVisible) return;
+      if (!result.ok) throw new Error(result.message || '成员读取失败');
+      const incoming = (result.members || []).map(row => ({ id: row.userId, name: row.nickName || row.userId }));
+      this.pickerCandidates = [...new Map([...(append ? this.pickerCandidates || [] : []), ...incoming].map(row => [row.id, row])).values()];
+      const members = [...new Map([...this.data.members, ...incoming].map(row => [row.id, row])).values()];
+      this.nameById = Object.fromEntries(members.map(row => [row.id, row.name]));
+      this.setData({ members, pickerHasMore: Boolean(result.hasMore), pickerCursor: result.nextCursor || '', pickerLoading: false });
+      this.applyPickerKeyword(keyword);
+    } catch (error) {
+      if (request === this.pickerRequest && this.data.pickerVisible) this.setData({ pickerLoading: false, pickerError: error.message || '成员读取失败，请重试' });
+    }
+  },
+  onMorePicker() { return this.loadPickerMembers(true); },
+  onRetryPicker() { return this.loadPickerMembers(false); },
+  onUnload() { clearTimeout(this.pickerSearchTimer); this.pickerRequest = (this.pickerRequest || 0) + 1; },
 
   /** 在面板里点中一个人，填进那一格并收起面板 */
   onPickMember(event) {
@@ -366,12 +397,14 @@ Page({
     const team = side === 'A' ? [...form.teamA] : [...form.teamB];
     team[Number(slot)] = id;
 
+    clearTimeout(this.pickerSearchTimer); this.pickerRequest = (this.pickerRequest || 0) + 1;
     this.setData({ pickerVisible: false, pickerKeyword: '', pickerRows: [], pickerEmptyText: '' });
     this.applyForm(side === 'A' ? { ...form, teamA: team } : { ...form, teamB: team });
   },
 
   /** 收起面板，不改动任何一格 */
   onClosePicker() {
+    clearTimeout(this.pickerSearchTimer); this.pickerRequest = (this.pickerRequest || 0) + 1;
     this.setData({ pickerVisible: false, pickerKeyword: '', pickerRows: [], pickerEmptyText: '' });
   },
 

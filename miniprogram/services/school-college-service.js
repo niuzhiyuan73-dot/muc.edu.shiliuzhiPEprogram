@@ -355,9 +355,6 @@ async function listCollegeEntries(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) {
     return ok({ ok: false, entries: [], canManage: false, message: '没有读取协会空间的权限' });
   }
-  const dir = await buildCollegeDirectory(ctx);
-  const actor = legacyActorOf(ctx, dir);
-  const canManage = canManageCollegeEvent(actor);
 
   const all = await ctx.repo.forScope(ctx).collegeEntries.list();
   const rows = typeof payload.eventId === 'string' && payload.eventId
@@ -367,6 +364,9 @@ async function listCollegeEntries(payload = {}, ctx) {
   const event = typeof payload.eventId === 'string' && payload.eventId
     ? await ctx.repo.collegeEvents.getById(payload.eventId) : null;
   const eventDoc = isCollegeEventDoc(event) && belongsToSchoolScope(event, ctx) ? event : null;
+  const dir = await buildCollegeDirectory(ctx, rows.flatMap(row => row.members || []));
+  const actor = legacyActorOf(ctx, dir);
+  const canManage = canManageCollegeEvent(actor);
   const members = memberMapOf(dir);
 
   return ok({
@@ -418,9 +418,6 @@ async function listCollegeLineups(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) {
     return ok({ ok: false, lineups: [], canManage: false, message: '没有读取协会空间的权限' });
   }
-  const dir = await buildCollegeDirectory(ctx);
-  const actor = legacyActorOf(ctx, dir);
-  const members = memberMapOf(dir);
 
   // 带 eventId 时下推到查询（索引见 docs/数据库索引清单.md 的 lineups）；
   // 只带 tieId 时没有对应索引，只能取回赛后内存筛——调用方优先传 eventId。
@@ -431,6 +428,9 @@ async function listCollegeLineups(payload = {}, ctx) {
     rows = rows.filter(row => row.tieId === payload.tieId);
   }
 
+  const dir = await buildCollegeDirectory(ctx, rows.flatMap(row => (row.entries || []).flatMap(leg => leg.players || [])));
+  const actor = legacyActorOf(ctx, dir);
+  const members = memberMapOf(dir);
   return ok({
     ok: true, canManage: canManageCollegeEvent(actor),
     lineups: rows.map(row => buildLineupRow(row, { actor, members })),
@@ -482,13 +482,16 @@ async function submitCollegeEntry(payload = {}, ctx) {
   if (typeof payload.eventId !== 'string' || !payload.eventId) return ok(refused('缺少学院赛编号'));
   if (!canReadAssociationSpace(ctx)) return ok(refused('没有读取协会空间的权限'));
 
-  const dir = await buildCollegeDirectory(ctx);
+  const dir = await buildCollegeDirectory(ctx, Array.isArray(payload.memberIds) ? payload.memberIds.slice(0, 31) : []);
   const actor = legacyActorOf(ctx, dir);
   const { collegeId, college } = resolveCollege(payload, dir);
   const members = memberMapOf(dir);
   const snapshot = await ctx.repo.forScope(ctx).collegeEvents.getById(payload.eventId);
   const audience = readAudience(snapshot);
   const witnesses = new Map();
+  const groups = audience.audienceMode === 'groups'
+    ? await Promise.all(audience.audienceGroupIds.map(id => ctx.repo.forScope(ctx).associationGroups.getById(id))) : [];
+  const availableGroups = new Set(groups.filter(row => row && row.status !== 'deleted').map(row => row._id));
   if (audience.audienceMode === 'groups') {
     const checked = buildCollegeEntryRecord({ ...payload, college },
       { event: snapshot, actor, members: dir.members, colleges: dir.collegeNames, now: ctx.now });
@@ -496,7 +499,7 @@ async function submitCollegeEntry(payload = {}, ctx) {
     await Promise.all(checked.record.members.map(async userId => {
       const relations = await ctx.repo.forScope(ctx).associationGroupMembers.listByUser(userId);
       const witness = relations.find(row => row.status === GROUP_MEMBER_STATUS.ACTIVE
-        && audience.audienceGroupIds.includes(row.groupId));
+        && availableGroups.has(row.groupId));
       if (witness) witnesses.set(userId, witness.groupId);
     }));
   }
@@ -514,8 +517,18 @@ async function submitCollegeEntry(payload = {}, ctx) {
 
     // 小组限制（B6-b / G08）：名单里**每一位**都须命中赛事限定的小组，
     // 仅一人不符合即整份提交失败；学院负责人本人入组不能替代选手资格。
-    if (Number(doc.revision || 0) !== Number(snapshot && snapshot.revision || 0)) {
+    if (JSON.stringify(readAudience(doc)) !== JSON.stringify(audience)
+      || audience.audienceMode === 'groups' && Number(fresh.schoolAssociation.groupDeletionRevision || 0)
+        !== Number(ctx.schoolAssociation.groupDeletionRevision || 0)) {
       return refused('赛事或报名已变化，请刷新后重试');
+    }
+    // 只点读本次名单，禁用/转校/退出学籍发生在途时也不能落入新名单。
+    for (const memberId of built.record.members) {
+      const user = await tx.users.getById(memberId);
+      const member = await tx.schoolMembers.getById(schoolMemberKey(memberId, ctx.schoolId));
+      if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId
+        || !member || member.status !== SCHOOL_MEMBER_STATUS.ACTIVE || member.schoolId !== ctx.schoolId
+        || member.userId !== memberId || member.collegeId !== collegeId) return refused('名单成员资格已变化，请刷新后重试');
     }
     if (audience.audienceMode === 'groups') {
       for (const memberId of built.record.members) {
@@ -532,7 +545,6 @@ async function submitCollegeEntry(payload = {}, ctx) {
     }
 
     const key = collegeEntryKey(doc._id, collegeId, ctx);
-    const existing = await tx.collegeEntries.getById(key);
     const nowIso = iso(ctx.now);
     const entry = {
       ...built.record,
@@ -541,7 +553,8 @@ async function submitCollegeEntry(payload = {}, ctx) {
       association: ctx.association,
       collegeId,
       submitTime: nowIso,
-      revision: existing ? Number(existing.revision || 1) + 1 : 1,
+      // 赛事代际单调递增，可直接作为名单版本，省去额外一次点读。
+      revision: Number(doc.revision || 0) + 1,
       updatedAt: nowIso,
     };
     await tx.collegeEntries.set(key, entry);
@@ -565,7 +578,8 @@ async function reviewCollegeEntry(payload = {}, ctx) {
   const actor = legacyActorOf(ctx, dir);
   const { collegeId } = resolveCollege(payload, dir);
   if (!collegeId) return ok(refused('请指定要审核的学院'));
-  const members = memberMapOf(dir);
+  const entrySnapshot = await ctx.repo.collegeEntries.getById(collegeEntryKey(payload.eventId, collegeId, ctx));
+  const members = memberMapOf(await buildCollegeDirectory(ctx, entrySnapshot ? entrySnapshot.members : []));
 
   const result = await inTransaction(ctx, dir, async (tx, actor) => {
     const doc = await tx.collegeEvents.getById(payload.eventId);
@@ -751,7 +765,7 @@ async function submitCollegeLineup(payload = {}, ctx) {
   if (typeof payload.tieId !== 'string' || !payload.tieId) return ok(refused('缺少大场编号'));
   if (!canReadAssociationSpace(ctx)) return ok(refused('没有读取协会空间的权限'));
 
-  const dir = await buildCollegeDirectory(ctx);
+  const dir = await buildCollegeDirectory(ctx, (payload.entries || []).flatMap(row => row.players || []));
   const actor = legacyActorOf(ctx, dir);
   const { collegeId, college } = resolveCollege(payload, dir);
   if (!collegeId) return ok(refused('学院无效'));

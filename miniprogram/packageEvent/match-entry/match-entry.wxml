@@ -299,6 +299,9 @@
             >交手 {{item.pairCount}} 场</view>
             <view wx:if="{{item.selected}}" class="picker-check">✓</view>
           </view>
+          <view wx:if="{{pickerLoading}}" class="loading">正在加载成员…</view>
+          <view wx:if="{{pickerError}}" class="error-message" bindtap="onRetryPicker">{{pickerError}}，点击重试</view>
+          <view wx:if="{{pickerHasMore && !pickerLoading}}" class="btn btn-outline" bindtap="onMorePicker">加载更多成员</view>
         </scroll-view>
       </view>
     </view>

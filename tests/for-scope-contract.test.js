@@ -81,6 +81,8 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     // 赛事 / 学院赛列表下推（2026-10-29 第十二轮审计）：范围 + 状态 + 时间区间 +
     // 排序 + offset 分页一起交给数据库，两端同一份实现（event-list-page.js）。
     if (key === 'events' || key === 'collegeEvents') expected = [...expected, 'listPage'];
+    if (key === 'memberships') expected = [...expected, 'listCollegeMembers'];
+    if (key === 'associationGroupMembers') expected = [...expected, 'listGroupPage'];
     if (key === 'teamEvents') expected = [...expected, 'homeSummary'];
     // 这两个额外有 listByUser：都是「只增不减 + 一个人只有几十条」的集合，
     // 调用方只关心一个人的那几条——训练报名（H-2）、小组归属（H-3）。

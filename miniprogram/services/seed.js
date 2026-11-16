@@ -139,7 +139,7 @@ const ANNOUNCEMENT_SEED = [
  *
  * @param {Date} baseDate 赛季起始时刻
  * @param {Array<Object>} [items] 公告种子，缺省用 ANNOUNCEMENT_SEED。
- *        各协会可用自己的一套（见 services/association-flavor.js）。
+ *        各协会可用自己的一套（由调用方传入）。
  * @returns {Array<Object>} 按发布时间倒序（最新的在前）
  */
 function buildAnnouncements(baseDate, items = ANNOUNCEMENT_SEED) {
@@ -556,7 +556,7 @@ function simulateBracket({ entries, random, startTime, matchType, eventId, forma
  *        单独开这个口子是为了做「混打比例 → 男女分数可比性」的对照实验：
  *        把比例调到 0 就能看到两个性别组各自封闭时会是什么结果。
  * @param {Array<Object>} [options.eventPlan] 赛事编排，缺省用内置那一套。
- *        各协会可用自己的编排错开赛事构成（见 services/association-flavor.js）。
+ *        各协会可用自己的编排错开赛事构成（由调用方传入）。
  * @param {string} [options.eventTitlePrefix] 赛事标题前缀，用来标注归属协会。
  *        默认协会留空，标题仍由实际月份推导（见下方赛事段落）。
  * @param {Array<Object>} [options.announcements] 公告种子，缺省用 ANNOUNCEMENT_SEED。
@@ -705,8 +705,7 @@ function generateSeed(options = {}) {
   // 8 人签表第 1 轮有 4 场，给 4 块场地就是「一人一块」的理想情况，给 2 块
   // 就得排第二批（同一批内仍然不重号，见 services/court.js）。两种情形都要
   // 有样本，验收时才知道分批那条分支到底走不走得通。
-  // 默认协会用内置那一套；其余协会可在 flavor 里给自己的编排（见
-  // services/association-flavor.js），把赛事月份与项目拉开，不至于每个
+  // 默认协会用内置那一套；其余协会可在 flavor 里给自己的编排（由调用方传入），把赛事月份与项目拉开，不至于每个
   // 协会的赛事页看上去都是同一份。不传则逐字节照旧。
   const eventPlan = eventPlanOption || [
     { week: 3, matchType: MATCH_TYPE.SINGLES, gender: 'M', discipline: LEG_DISCIPLINE.MS, size: 8, courtCount: 4, format: { gamePoints: 11, bestOf: 3 } },

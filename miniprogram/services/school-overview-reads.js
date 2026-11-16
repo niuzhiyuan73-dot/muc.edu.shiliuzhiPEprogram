@@ -4,6 +4,16 @@ const { TEAM_EVENT_STATUS } = require('../utils/constants.js');
 function attachOverviewReads(surface, { inTx, top, count, command: cmd }) {
   const scope = surface.scope;
   const assertRead = () => { if (inTx) throw new Error('事务内不允许概览查询'); };
+  if (surface.associationGroupMembers) surface.associationGroupMembers.listGroupPage = async (options = {}) => {
+    assertRead();
+    if (typeof options.groupId !== 'string' || !options.groupId) return { rows: [], hasMore: false, nextCursor: '' };
+    const base = { schoolId: scope.schoolId, association: scope.association, groupId: options.groupId };
+    const after = options.cursor ? decodeURIComponent(options.cursor) : '';
+    const where = after ? cmd.and([base, { _id: cmd.gt(after) }]) : base;
+    const rows = await top('associationGroupMembers', where, [{ field: '_id', direction: 'asc' }], 31);
+    const page = rows.slice(0, 30), hasMore = rows.length > 30;
+    return { rows: page, hasMore, nextCursor: hasMore ? encodeURIComponent(page[page.length - 1]._id) : '' };
+  };
   if (surface.announcements) surface.announcements.listPage = async (options = {}) => {
     assertRead();
     const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 50) : 20;

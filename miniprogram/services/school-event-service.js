@@ -666,7 +666,10 @@ async function signUpSchoolEvent(payload = {}, ctx) {
       const hits = [];
       for (const groupId of audience.audienceGroupIds) {
         const rel = await tx.associationGroupMembers.getById(associationGroupMemberKey(groupId, userId, fresh));
-        if (rel && rel.status === GROUP_MEMBER_STATUS.ACTIVE) hits.push(groupId);
+        if (rel && rel.status === GROUP_MEMBER_STATUS.ACTIVE) {
+          const group = await tx.associationGroups.getById(groupId);
+          if (group && group.status !== 'deleted' && belongsToSchoolScope(group, ctx)) hits.push(groupId);
+        }
       }
       if (hits.length === 0) return refused('本次赛事仅限指定小组成员报名');
     }
@@ -798,7 +801,8 @@ async function drawSchoolEvent(payload = {}, ctx) {
   if (typeof payload.eventId !== 'string' || !payload.eventId) return ok(refused('缺少赛事编号'));
   if (!canReadAssociationSpace(ctx)) return ok(refused('没有读取协会空间的权限'));
 
-  const dir = await buildDirectory(ctx);
+  const drawSignups = await ctx.repo.forScope(ctx).eventSignups.listByEvent(payload.eventId);
+  const dir = await buildDirectory(ctx, drawSignups.map(row => row.userId));
   const actor = legacyActorOf(ctx, dir);
   const scoped = ctx.repo.forScope(ctx);
   const doc = await ctx.repo.events.getById(payload.eventId);
@@ -808,7 +812,7 @@ async function drawSchoolEvent(payload = {}, ctx) {
       ? '只能在报名阶段抽签' : '只有协会负责人及以上可以抽签'));
   }
 
-  const signups = await scoped.eventSignups.listByEvent(doc._id);
+  const signups = drawSignups;
   if (new Set(signups.filter(row => row.status !== SIGNUP_STATUS.CANCELED).map(row => row.userId)).size > drawCapacityOf(doc)) {
     return ok(refused(`本赛制最多支持 ${drawCapacityOf(doc)} 人，请缩小报名名单后抽签`));
   }

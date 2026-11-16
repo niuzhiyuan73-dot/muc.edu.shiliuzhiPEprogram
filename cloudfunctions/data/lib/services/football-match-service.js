@@ -291,7 +291,8 @@ async function getTeamEventPlayerStats(payload, ctx) {
   if (!validEvent(ctx, event) || event.status === 'draft') return ok(refused('赛事不存在或尚未发布'));
   const matches = publicMatches(await repo.teamMatches.listByEvent(event._id));
   const players = aggregate(matches);
-  const order = field => players.filter(p => p[field] !== null).sort((a, b) => b[field] - a[field] || a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0);
+  const order = field => players.filter(p => p[field] !== null)
+    .sort((a, b) => b[field] - a[field] || compareCode(a.userId, b.userId));
   const completeCount = matches.filter(m => ['A', 'B'].every(s => m.footballPublished.sides[s].coverage.goals === 'full'
     && m.footballPublished.sides[s].coverage.ownGoals === 'full')).length;
   return ok({ ok: true, sportFormat: 'football11', players: order('goals'), scorers: order('goals'), assists: order('assists'),

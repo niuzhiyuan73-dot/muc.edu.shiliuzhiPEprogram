@@ -326,6 +326,11 @@ function buildScoped(repo, io, inTx, options) {
   //
   // userId 缺失时**返回空数组**，不退化成整表读——调用方漏传参数不该变成
   // 一次全表扫描。
+  if (result.memberships) result.memberships.listCollegeMembers = collegeId => {
+    if (inTx) throw new Error('事务内不允许学院候选查询');
+    if (typeof collegeId !== 'string' || !collegeId) return Promise.resolve([]);
+    return io.query('memberships', { schoolId: scope.schoolId, association: scope.association, collegeId, status: 'active' });
+  };
   for (const key of ['trainingRegistrations', 'associationGroupMembers', 'memberRatings']) {
     if (!result[key]) continue;
     result[key].listByUser = (userId) => {

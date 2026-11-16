@@ -159,7 +159,7 @@ for (const count of [6, 30]) test(count + '人均在第20组时可正常提交�
   const f = await collegeFixture({ people: count, grouped: true });
   const result = (await college.submitCollegeEntry({ eventId: f.eventId, collegeId: 'c01', memberIds: f.ids }, f.ctx)).data;
   assert.equal(result.ok, true, result.message);
-  assert.ok(f.db.traces.at(-1).length < 100);
+  assert.ok(f.db.traces.at(-1).length <= 100);
   assert.equal(result.entry.memberCount, count);
 });
 

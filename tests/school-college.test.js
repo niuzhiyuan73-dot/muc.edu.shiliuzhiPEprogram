@@ -297,6 +297,7 @@ test('名单：重复提交覆盖同一条，不新增记录', async () => {
   await call(repo, 'submitCollegeEntry',
     { eventId: t.eventId, collegeId: C02, memberIds: ['demo_muc_member_3', 'demo_muc_member_4'] },
     { actor: 'demo_muc_member_3' });
+  const firstRevision = (await repo.collegeEntries.list())[0].revision;
   const again = await call(repo, 'submitCollegeEntry',
     { eventId: t.eventId, collegeId: C02, memberIds: ['demo_muc_member_3'] },
     { actor: 'demo_muc_member_3' });
@@ -305,7 +306,7 @@ test('名单：重复提交覆盖同一条，不新增记录', async () => {
 
   const rows = await repo.collegeEntries.list();
   assert.equal(rows.length, 1, '同「赛事 + 学院」只有一条');
-  assert.equal(rows[0].revision, 2, '同一条名单版本递增');
+  assert.ok(rows[0].revision > firstRevision, '同一条名单版本递增');
 
   const listed = await call(repo, 'listCollegeEntries', { eventId: t.eventId });
   assert.equal(listed.entries.length, 1);

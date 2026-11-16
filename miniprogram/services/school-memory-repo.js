@@ -291,6 +291,12 @@ function createSchoolMemoryRepo(seed = {}) {
         byIds: async (key, ids, fields) => [...new Set(ids)].map(id => getState()[key].get(id))
           .filter(doc => doc && Object.entries(fields).every(([field, value]) => doc[field] === value)).map(clone),
       });
+      result.memberships.listCollegeMembers = async collegeId => {
+        if (inTx) throw new Error('事务内不允许学院候选查询');
+        if (typeof collegeId !== 'string' || !collegeId) return [];
+        return (await repo.memberships.list()).filter(row => row.schoolId === scope.schoolId
+          && row.association === scope.association && row.collegeId === collegeId && row.status === 'active');
+      };
       const overview = memoryOverviewIO(key => [...getState()[key].values()].map(clone));
       attachOverviewReads(result, { inTx, ...overview });
       // 赛事 / 学院赛列表：与云端同一份下推实现（2026-10-29 第十二轮审计）。

@@ -11,6 +11,7 @@ const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { schoolKey, schoolMemberKey, schoolMembershipKey } = require('../miniprogram/utils/school');
 const { fieldValues } = require('../miniprogram/services/scoped-team-reads');
 const scope = { schoolId: 'muc', association: 'bk' };
+const { directoryDatabase } = require('./audit-directory-database.cjs');
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));
 
 /**
@@ -94,12 +95,13 @@ function database(seed) {
       };
     } };
   } });
+  const directory = directoryDatabase(() => Object.fromEntries(Object.entries(state).map(([name, rows]) => [name, [...rows.values()]])));
   const db = {
-    collection: name => surface(state).collection(name), traces,
+    collection: name => ({ ...surface(state).collection(name), aggregate: () => directory.collection(name).aggregate() }), traces,
     // 与云开发 db.command 同形的最小子集：仓储的游标分页（_id > 上一页末条）
     // 与批读（_.in）都依赖它。缺了它 createRepo 一用 listByIds 就炸
     // 「Cannot read properties of undefined (reading 'in')」。
-    command,
+    command: { ...command, aggregate: directory.command.aggregate },
     failSet: (key, nth) => { failure = { name: COLLECTIONS[key], nth, seen: 0 }; },
     runTransaction: async fn => {
       if (db.beforeTransaction) { const hook = db.beforeTransaction; db.beforeTransaction = null; await hook(); }

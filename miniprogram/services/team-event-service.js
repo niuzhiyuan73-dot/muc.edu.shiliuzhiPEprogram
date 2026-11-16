@@ -793,7 +793,7 @@ async function submitTeamEntry(payload = {}, ctx) {
   const previous = await repo.teamEventEntries.getById(key);
   if (previous && previous.status === TEAM_ENTRY_STATUS.LOCKED) return ok(refused('名单已锁定，不能再改'));
 
-  const dir = await buildDirectory(ctx);
+  const dir = await buildDirectory(ctx, chosen.map(row => row.userId));
   const nameOf = userId => {
     const user = (dir.members || []).find(item => item._id === userId);
     return (user && (user.realName || user.nickName)) || userId;
@@ -913,7 +913,7 @@ async function getTeamEntryRoster(payload = {}, ctx) {
 
   const activeRows = (await repo.teamMembers.listByTeams([team._id]))
     .filter(row => row.status === TEAM_MEMBER_STATUS.ACTIVE);
-  const dir = await buildDirectory(ctx);
+  const dir = await buildDirectory(ctx, activeRows.map(row => row.userId));
   // 姓名表改 Map：原先每人一次 find，名单一长就是 O(n²)
   const nameById = new Map((dir.members || []).map(item => [item._id, item]));
   const nameOf = (userId) => {
@@ -1835,22 +1835,22 @@ async function reviewTeamMatchStats(payload = {}, ctx) {
  *   · 候选里保留「为什么不给选」的原因，页面直接显示，不在前端重新推一遍
  *     规则——推两遍迟早分叉。
  */
-async function schedulePeople(ctx, match) {
+async function schedulePeople(ctx, match, query = {}) {
   const repo = ctx.repo.forScope(ctx);
   // 【按需读，不整表】（2026-10-29 第十一轮审计 P3-10）
-  // 原实现无条件读三份整表：目录（已缓存）、本协会全部会籍、本协会全部球队。
+  // 原实现无条件读三份整表：目录、本协会全部会籍、本协会全部球队。
   // 其中「球队」只为取两支队的队长——点读两次即可；「会籍」只有非足球协会才用
   // （足球按账号口径判有效成员），足球路径整份读回来是纯浪费。
   const isFootball = football.isFootball(ctx);
-  const [dir, memberships, teamA, teamB] = await Promise.all([
-    buildDirectory(ctx),
-    isFootball ? Promise.resolve([]) : repo.memberships.list(),
+  const [dir, teamA, teamB] = await Promise.all([
+    buildDirectory(ctx, { page: query, userIds: [match.refereeId, match.recorderId].filter(Boolean) }),
     match.teamA ? repo.teams.getById(match.teamA) : null,
     match.teamB ? repo.teams.getById(match.teamB) : null,
   ]);
   const userById = new Map(dir.members.map(user => [user._id, user]));
+  const roles = isFootball ? [] : await repo.memberships.listByIds(dir.members.map(user => schoolMembershipKey(user._id, ctx)));
   const activeIds = isFootball ? new Set(dir.activeMemberIds.filter(id => userById.get(id)?.primarySchoolId === ctx.schoolId)) : new Set(
-    memberships
+    roles
       .filter(row => row.status === 'active'
         && row.schoolId === ctx.schoolId
         && row.association === ctx.association)
@@ -1873,6 +1873,7 @@ async function schedulePeople(ctx, match) {
     .sort((a, b) => a.name.localeCompare(b.name, 'zh'));
 
   return {
+    hasMore: Boolean(dir.page && dir.page.hasMore), nextCursor: dir.page ? dir.page.nextCursor : '',
     recorders: people.map(row => ({
       ...row, disabled: false, disabledReason: '',
     })),
@@ -1899,7 +1900,7 @@ async function getTeamMatchSchedule(payload = {}, ctx) {
 
   const teams = await repo.teams.list();
   const teamName = new Map(teams.map(team => [team._id, team.name]));
-  const people = await schedulePeople(ctx, match);
+  const people = await schedulePeople(ctx, match, payload);
 
   return ok({
     ok: true,

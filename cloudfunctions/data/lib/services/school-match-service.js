@@ -397,12 +397,12 @@ async function pairUsageOf(ctx, record, season) {
 }
 
 /** 录入页所需的本人、有效成员及本赛季交手次数；不暴露数字角色。 */
-async function getSchoolMatchEntryContext(_payload, ctx) {
+async function getSchoolMatchEntryContext(payload = {}, ctx) {
   const viewer = ctx.actor && ctx.actor.platformStatus === PLATFORM_STATUS.ACTIVE
     ? { userId: ctx.actorId, nickName: ctx.actor.nickName || '' } : null;
   if (!canReadAssociationSpace(ctx)) return ok({ ok: true, viewer, canRecord: false,
     members: [], pairInfo: null, seasonStart: null, message: viewer ? '当前账号没有本协会有效身份，暂时不能录入成绩' : '请先登录后再录入比赛成绩' });
-  const [dir, season] = await Promise.all([buildDirectory(ctx), loadSeason(ctx)]);
+  const [dir, season] = await Promise.all([buildDirectory(ctx, { page: payload }), loadSeason(ctx)]);
   // 只取「本赛季 + 含本人」的场次：名额口径本来就按 resetTime 过滤，而下面的
   // seasonPairCounts 只对含本人的场次敏感——两件事一起下推，一个练了三年的协会
   // 从 30 页 RPC 降到 1~2 页，输出逐字不变（2026-10-23 第三轮 X-7）。
@@ -413,6 +413,7 @@ async function getSchoolMatchEntryContext(_payload, ctx) {
     // **全校在册会员**：一旦带上真名，任何刚入会的人打开一次录分页就能拿到
     // 「编号 ↔ 真实姓名」对照表（抓包即得）。选人只需要「认得是谁」，
     // 昵称加首字足够；真名留给管理侧的名录/审核接口（按角色发放）。
+    hasMore: Boolean(dir.page && dir.page.hasMore), nextCursor: dir.page ? dir.page.nextCursor : '',
     members: dir.members.filter(user => user.platformStatus === PLATFORM_STATUS.ACTIVE).map(user => ({
       userId: user._id, nickName: user.nickName || '',
     })), seasonStart: season.resetTime || season.anchorTime || null,
@@ -504,7 +505,9 @@ async function submitSchoolMatch(payload = {}, ctx) {
     return ok(refused('该协会为团队项目，比赛成绩请在球队赛事中录入'));
   }
 
-  const dir = await buildDirectory(ctx);
+  const scheduled = payload.matchId ? await ctx.repo.forScope(ctx).matches.getById(payload.matchId) : null;
+  const selected = scheduled || payload;
+  const dir = await buildDirectory(ctx, [...(selected.teamA || []), ...(selected.teamB || []), selected.referee].filter(Boolean));
 
   // 既有赛程比赛（个人赛签表 / 学院赛小场）的补录：只补比分，对阵 / 赛制 / 时间
   // 一律取自那条记录本身，走独立通路、不另立新记录（见 submitScheduledMatch）。

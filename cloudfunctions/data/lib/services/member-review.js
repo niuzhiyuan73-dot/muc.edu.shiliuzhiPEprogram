@@ -334,20 +334,6 @@ function validateInitialElo(value) {
 }
 
 /**
- * 校验「当前等级分」的数值。与初始分同范围，但不接受空值——当前分是
- * 一个确切的值，没有「不指定」这一说（要清除是另一回事，本期不做）。
- *
- * @param {*} value 输入框里的原始值
- * @returns {{ok:boolean, value:number|null, message:string}}
- */
-function validateEloValue(value) {
-  const parsed = checkEloNumber(value, '等级分');
-  if (!parsed.ok) return parsed;
-  if (parsed.value === null) return { ok: false, value: null, message: '请输入等级分' };
-  return parsed;
-}
-
-/**
  * 校验一次审核动作。
  *
  * 顺序刻意从「我有没有资格」到「这条单子能不能动」，这样一个没权限的人

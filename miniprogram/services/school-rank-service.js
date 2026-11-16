@@ -31,8 +31,7 @@ const { permissionOf, permissionLabelOf, canSchoolAction } = require('./school-p
 const { displayRating } = require('./school-rating-service.js');
 const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = require('./school-points-service.js');
 const { settledPointsOf, isSettled } = require('./season-points.js');
-const { buildTrainingPointFacts } = require('./training-points.js');
-const { buildProjectLeaderboard, percentileFromBoard } = require('../utils/leaderboard.js');
+const { buildProjectLeaderboard } = require('../utils/leaderboard.js');
 const { getPoolRating } = require('../utils/rating.js');
 const {
   buildEventRecord, summarizeEvents, buildRatingHistory, buildHeadToHead,
@@ -216,22 +215,6 @@ function viewMemberOf(row, user, schoolId) {
   if (user.platformStatus !== PLATFORM_STATUS.ACTIVE) return null;
   if (user.primarySchoolId !== schoolId) return null;
   return { ...user, status: USER_STATUS.ACTIVE };
-}
-
-/**
- * 本范围的训练积分事实（P5 接入）：已确认的签到归一成事实。
- * 【Elo 逐场结算改造后】训练事实交给 school-points-service 统一聚合，
- * 这里保留导出供需要事实明细的调用方（测试）使用。
- *
- * @param {Object} ctx
- * @returns {Promise<Array<Object>>}
- */
-async function trainingFactsOf(ctx) {
-  const [trainings, registrations] = await Promise.all([
-    ctx.repo.forScope(ctx).associationTrainings.list(),
-    ctx.repo.forScope(ctx).trainingRegistrations.list(),
-  ]);
-  return buildTrainingPointFacts({ trainings, registrations });
 }
 
 /**
@@ -571,25 +554,6 @@ async function getSchoolRanking(payload = {}, ctx) {
   const topDocs = await scopeRepo.memberRatings.listTop({
     pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, limit: RANK_SEARCH_LIMIT,
   });
-  // 【回填监控】只要这个池里还有**没有 memberStatus 字段**的文档，就整体回落旧路径。
-  //
-  // 为什么不能只看「新路径取到几条」：那样部分回填的学校会更危险——已经回填的
-  // 人照常上榜，没回填的人被状态条件静默滤掉，榜单看起来正常但少了人。少人比
-  // 空榜更难被发现。所以这里用一次 `exists(false)` 计数把「数据没准备好」与
-  // 「真的没人打过」彻底分开：有残留就回落（慢但正确），并留痕催回填。
-  const legacyCount = await scopeRepo.memberRatings.countRanked({
-    pool, gender: null, memberStatus: null, missingProfile: true,
-  });
-  if (legacyCount > 0) {
-    console.warn(`[rank] 本池还有 ${legacyCount} 条评级缺少 memberStatus（方案 A 回填未完成），榜单回落到全量路径`);
-    return ok({
-      ok: true,
-      schoolName: (ctx.school && ctx.school.shortName) || '',
-      message: '',
-      ...(await rankingFromScopeView(ctx, activeProject, activeProjectLabel, myId)),
-    });
-  }
-
   const total = await scopeRepo.memberRatings.countRanked({
     pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE,
   });
@@ -646,47 +610,6 @@ async function getSchoolRanking(payload = {}, ctx) {
         },
     meHint: myRow !== null ? '' : '你还没有参加过这个项目',
   });
-}
-
-/**
- * 旧路径（全量回放）。只在「回填未完成」时兜底，正常情况下不该走到这里。
- *
- * 保留它而不是直接删掉：榜单不能因为一次数据迁移没跑完就变成空页——那会让
- * 用户以为数据丢了。代价是这个分支仍要读 120 页，所以它必须响（打日志）。
- *
- * @param {Object} ctx
- * @param {string} activeProject
- * @param {string} activeProjectLabel
- * @param {string} myId
- * @returns {Promise<Object>}
- */
-async function rankingFromScopeView(ctx, activeProject, activeProjectLabel, myId) {
-  const { members } = await loadScopeView(ctx, { needMatches: false, needPoints: false });
-  const allRows = buildRows(members, activeProject, myId);
-  const rows = allRows.slice(0, TOP_LIMIT);
-  const total = allRows.length;
-  const myRow = (myId && allRows.find(row => row.isMe)) || null;
-  return {
-    projectTabs: projectTabs(activeProject),
-    activeProject,
-    activeProjectLabel,
-    activeBoardLabel: BOARD_LABEL,
-    rows,
-    allRows,
-    total,
-    hasMore: total > rows.length,
-    empty: rows.length === 0,
-    playerCountText: total > TOP_LIMIT ? `前 ${TOP_LIMIT} 名 · 共 ${total} 人` : `${total} 人上榜`,
-    emptyNote: rows.length === 0 ? '这个项目还没有人打过' : '',
-    me: myRow === null
-      ? null
-      : {
-          rank: myRow.rank,
-          total,
-          beatText: `超过 ${formatPercent((total - myRow.rank) / total)} 的会员`,
-        },
-    meHint: myRow !== null ? '' : '你还没有参加过这个项目',
-  };
 }
 
 /**
@@ -954,16 +877,13 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
   //   · 比我高的人数 + 1 = 名次     · 同条件下的总人数 = 分母
   // 都不读文档。个人主页因此不再需要「全班花名册」这个中间物。
   const scopeRepo = ctx.repo.forScope(ctx);
-  const [userDoc, memberDoc, role, membership, colleges, myRatingDocs, residual] = await Promise.all([
+  const [userDoc, memberDoc, role, membership, colleges, myRatingDocs] = await Promise.all([
     ctx.repo.users.getById(userId),
     ctx.repo.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId)),
     ctx.repo.schoolRoles.getById(schoolRoleKey(userId, ctx.schoolId)),
     ctx.repo.memberships.get(schoolMembershipKey(userId, ctx)),
     loadColleges(ctx),
     scopeRepo.memberRatings.listByUser(userId),
-    // 回填监控（与榜单同一把尺子）：只要有评级文档缺 memberStatus，分母就会偏小，
-    // 名次会虚高。这时退回旧的全量口径，慢但正确。
-    scopeRepo.memberRatings.countRanked({ pool: null, missingProfile: true }),
   ]);
   // 口径与旧路径一致：本人账号可用、本校在册、归属本校（三者缺一就是「没有这位会员」）
   if (!userDoc || userDoc.platformStatus !== PLATFORM_STATUS.ACTIVE
@@ -994,15 +914,6 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
   };
   const events = facts.events;
 
-  // 榜外名次的兜底口径：回填未完成时用全量榜单重算（懒加载，正常情况下不读）
-  let legacyMembers = null;
-  const membersForBoard = async () => {
-    if (!legacyMembers) {
-      legacyMembers = (await loadScopeView(ctx, { needMatches: false, needPoints: false })).members;
-    }
-    return legacyMembers;
-  };
-
   const collegeName = id => (colleges.find(row => row.collegeId === id) || {}).name || '';
   // 交锋 / 搭档 / 逐场都要对手昵称。原来从「全班名册」里 find（依赖那 40 页读），
   // 现在只按这几百场比赛里出现过的对手批读一次——通常几十人，1 页内。
@@ -1026,24 +937,15 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
     let rank = null;
     let total = 0;
     let beatPercent = 0;
-    if (residual > 0) {
-      // 回填未完成：分母不可信，退回内存榜
-      const board = buildProjectLeaderboard(await membersForBoard(), project);
-      const stats = percentileFromBoard(board, userId);
-      rank = stats ? stats.rank : null;
-      total = stats ? stats.total : board.length;
-      beatPercent = stats ? stats.beatPercent : 0;
-    } else {
-      total = await scopeRepo.memberRatings.countRanked({
-        pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE,
-      });
-      const above = await scopeRepo.memberRatings.countRanked({
-        pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, minElo: bucket.elo,
-      });
-      rank = total > 0 ? above + 1 : null;
-      // 分母用 total（第 1 名显示「超过 99%」与 percentileFromBoard 同口径）
-      beatPercent = total > 0 ? Number((((total - rank) / total) * 100).toFixed(1)) : 0;
-    }
+    total = await scopeRepo.memberRatings.countRanked({
+      pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE,
+    });
+    const above = await scopeRepo.memberRatings.countRanked({
+      pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, minElo: bucket.elo,
+    });
+    rank = total > 0 ? above + 1 : null;
+    // 分母用 total（第 1 名显示「超过 99%」与 percentileFromBoard 同口径）
+    beatPercent = total > 0 ? Number((((total - rank) / total) * 100).toFixed(1)) : 0;
     projects.push({
       project, pool, label: RANK_PROJECT_LABEL[project],
       elo: bucket.elo, startElo: bucket.startElo, delta: bucket.elo - bucket.startElo,
