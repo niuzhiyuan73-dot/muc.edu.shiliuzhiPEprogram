@@ -253,10 +253,13 @@ async function listTeams(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) return ok(refused('账号或本校在册会员身份已失效，无权访问本协会'));
   if (!assertTeamSport(ctx)) return ok(refused('该协会不是团队项目'));
 
-  const dir = await buildDirectory(ctx);
   const manage = canManageAssociationSpace(ctx);
   const repo = ctx.repo.forScope(ctx);
   const [teams, members] = await Promise.all([repo.teams.list(), repo.teamMembers.list()]);
+  // 目录只装这一页要用到的人：队长姓名 + 操作者本人（第十八轮起按需取，见 school-actor）。
+  // 【为什么必须带 captainId】（第二十二轮 P1）漏传会让 teamView 退回编号，
+  // 列表上每个不是自己当队长的队都显示 `acc:…`。
+  const dir = await buildDirectory(ctx, [...new Set(teams.map(team => team.captainId).filter(Boolean))]);
 
   const keyword = String(payload.keyword || '').trim().toLowerCase();
   const mineOnly = payload.mine === true;
@@ -353,7 +356,8 @@ async function getTeam(payload = {}, ctx) {
   // 按队下推（2026-10-29 第十一轮审计 P3）：原先是把本协会全部队员读回来再
   // filter，球队越多越亏；`listByTeams` 走 teamId 条件查询，只取这一队。
   const rows = await ctx.repo.forScope(ctx).teamMembers.listByTeams([team._id]);
-  const memberDir = await buildDirectory(ctx, rows.map(row => row.userId));
+  // 卡片上的队长姓名与名单共用同一份目录：漏了 captainId 就会退回编号（第二十二轮 P1）。
+  const memberDir = await buildDirectory(ctx, [...rows.map(row => row.userId), team.captainId].filter(Boolean));
   const membership = rows.find(row => row.userId === ctx.actorId);
 
   const visible = rows
@@ -367,7 +371,7 @@ async function getTeam(payload = {}, ctx) {
 
   return ok({
     ok: true,
-    team: teamView(team, { dir, actorId: ctx.actorId, manage, membership }),
+    team: teamView(team, { dir: memberDir, actorId: ctx.actorId, manage, membership }),
     members: visible,
     pendingCount: rows.filter(row => row.status === TEAM_MEMBER_STATUS.PENDING).length,
     message: '',

@@ -198,3 +198,37 @@ test('选人目录可搜索及连续翻页，接口不再一次下发全校人�
   const found = (await service.getSchoolMatchEntryContext({ keyword: f.ids[106] }, f.ctx)).data;
   assert.ok(found.members.some(row => row.userId === f.ids[106]));
 });
+
+/* ------------------------------------------------------------------ 第二十二轮 */
+
+test('30 人学院名单在事务预算内提交成功，31 人按人数上限拒绝', async () => {
+  const okFixture = await fixture(30);
+  const okEvent = await publish(okFixture);
+  const ok = await submit(okFixture, okEvent, okFixture.ids.slice(0, 30));
+  assert.equal(ok.ok, true, ok.message);
+  const saved = (await okFixture.repo.collegeEntries.list()).filter(row => row.eventId === okEvent);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].members.length, 30, '30 人必须整份落库，不能被截断');
+
+  // 第二十二轮 P2：原先提交端只准备 31 人的目录，32 人起报「查不到的会员」；
+  // 现在人数由 ROSTER_LIMITS.MAX 统一收口，超限给的是可执行的业务文案。
+  const tooManyFixture = await fixture(31);
+  const tooManyEvent = await publish(tooManyFixture);
+  const tooMany = await submit(tooManyFixture, tooManyEvent, tooManyFixture.ids);
+  assert.equal(tooMany.ok, false);
+  assert.match(tooMany.message, /最多 30 人/);
+});
+
+test('建组 28 人在预算内，29 人按上限拒绝', async () => {
+  const f = await fixture(29);
+  const created = await groups.createAssociationGroup({
+    requestId: 'review22_create', name: '二十八人组', memberIds: f.ids.slice(0, 28),
+  }, f.ctx).then(r => r.data);
+  assert.equal(created.ok, true, created.message);
+
+  const tooMany = await groups.createAssociationGroup({
+    requestId: 'review22_create_too_many', name: '二十九人组', memberIds: f.ids,
+  }, f.ctx).then(r => r.data);
+  assert.equal(tooMany.ok, false);
+  assert.match(tooMany.message, /最多添加 28 名成员/);
+});

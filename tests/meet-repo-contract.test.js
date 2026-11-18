@@ -76,6 +76,9 @@ function expectedMethodsOf(key) {
   if (key === 'sportsMeetInterests' || key === 'sportsMeetEntries') {
     expected = [...expected, 'listByUser'];
   }
+  // 我的荣誉按参赛者下推（第二十二轮 P3）：荣誉表停写后改从发布快照取，
+  // 不能把一届全部 publication 读回来再摊平。
+  if (key === 'sportsMeetPublications') expected = [...expected, 'listByParticipant'];
   return expected.sort();
 }
 
@@ -206,4 +209,22 @@ test('事务抛错时运动会写入一并回滚', async () => {
     );
     assert.equal(await scoped.sportsMeetQuotaUsage.getById('mtq:rollback'), null, `${label} 未回滚`);
   }
+});
+
+test('listByParticipant 只回含该成员的发布快照（第二十二轮 P3）', async () => {
+  const repo = createSchoolMemoryRepo({
+    sportsMeetPublications: [
+      { _id: 'mtp:1:e1:s1', schoolId: 'muc', meetId: 'meet1', eventKey: 'e1', status: 'published',
+        rows: [{ entryKey: 'a', userIds: ['u1', 'u2'] }, { entryKey: 'b', userIds: ['u3'] }] },
+      { _id: 'mtp:1:e2:s2', schoolId: 'muc', meetId: 'meet1', eventKey: 'e2', status: 'published',
+        rows: [{ entryKey: 'c', userIds: ['u3'] }] },
+      { _id: 'mtp:9:e1:s1', schoolId: 'muc', meetId: 'meet9', eventKey: 'e1', status: 'published',
+        rows: [{ entryKey: 'd', userIds: ['u1'] }] },
+    ],
+  });
+  const scoped = repo.forMeet({ schoolId: 'muc', meetId: 'meet1' });
+  const mine = await scoped.sportsMeetPublications.listByParticipant('u1');
+  assert.deepEqual(mine.map(doc => doc._id), ['mtp:1:e1:s1'], '只回本场次、且本人参赛的那一条');
+  assert.deepEqual(await scoped.sportsMeetPublications.listByParticipant(''), [], '空编号不退化成整表读');
+  assert.deepEqual(await scoped.sportsMeetPublications.listByParticipant('nobody'), []);
 });

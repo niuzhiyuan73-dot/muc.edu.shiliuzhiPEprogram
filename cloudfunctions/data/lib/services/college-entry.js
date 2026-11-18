@@ -29,6 +29,7 @@ const {
   COLLEGE_EVENT_STATUS,
   COLLEGE_ENTRY_STATUS,
   COLLEGE_ENTRY_STATUS_LABEL,
+  ROSTER_LIMITS,
 } = require('../utils/constants.js');
 const { formatDate } = require('../utils/format.js');
 const { managesCollege } = require('./permission.js');
@@ -124,7 +125,11 @@ function validateCollegeEntry(payload = {}, ctx = {}) {
   }
 
   const min = Number.isFinite(Number(event.rosterMin)) ? Number(event.rosterMin) : 0;
-  const max = Number.isFinite(Number(event.rosterMax)) ? Number(event.rosterMax) : Infinity;
+  // 名单人数直接决定提交事务的操作数（每人 2 次资格点读，限组再多 1 次），
+  // 所以配置上限与提交上限取同一个常量；老赛事存了更大的 rosterMax 也按它收口。
+  // （第二十二轮 P2：32~50 人的名单原先必然失败，且报「查不到的会员」。）
+  const configuredMax = Number.isFinite(Number(event.rosterMax)) ? Number(event.rosterMax) : Infinity;
+  const max = Math.min(configuredMax, ROSTER_LIMITS.MAX);
   if (memberIds.length < min) {
     return { ok: false, message: `名单至少 ${min} 人，当前 ${memberIds.length} 人`, memberIds: [], college };
   }

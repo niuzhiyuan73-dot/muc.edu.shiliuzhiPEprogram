@@ -246,7 +246,7 @@ test('12 条报名、36 份成绩：发布成绩不超事务预算', async () =>
   assert.equal(published.data.publication.rows.length, 12);
 });
 
-test('发布后结果行与荣誉全部落库（派生索引在事务外也要写全）', async () => {
+test('发布后结果行落库；荣誉表不再写（读端直接取发布快照）', async () => {
   const { repo, meetId, admin, eventKey, sessionKey } = await makeFinishedEvent();
   const published = await score.publishMeetResults({ eventKey }, admin);
   assert.equal(published.ok, true, published.message);
@@ -255,11 +255,10 @@ test('发布后结果行与荣誉全部落库（派生索引在事务外也要�
   const scope = repo.forMeet({ schoolId: SCHOOL, meetId });
   const rows = await scope.sportsMeetResultRows.list();
   assert.equal(rows.length, 12, '12 条报名各一条结果行');
+  // 第二十二轮 P2/P3：荣誉派生表停写（没有读方），「我的荣誉」改读发布快照。
+  // 这条断言同时防止有人不明就里把写入加回来——那会让每次发布多付 52 条事务写。
   const honors = await scope.sportsMeetHonors.list();
-  assert.equal(honors.length, 12, '12 条报名各一条荣誉');
-  // 前 3 名有奖牌，第 4 名以后只有名次没有奖牌分
-  assert.equal(honors.filter((doc) => Number(doc.rank) === 1).length, 1);
-  assert.ok(honors.some((doc) => Number(doc.rank) > 3 && Number(doc.points) === 0));
+  assert.equal(honors.length, 0, '荣誉表已停写，不应再有新文档');
 
   // 读接口取到的行数与成绩值都要对得上（明细与快照两条路一致）
   const view = await score.getPublishedResults({ eventKey }, admin);

@@ -350,3 +350,22 @@ test('球队详情与报名名单按队下推，不做全协会队员整表读',
   // 报名名单（team-event-service）走同一个原语，由团队赛报名用例覆盖；
   // 这里只钉「详情页不再整表读」这一条，避免两处各写一份夹具。
 });
+
+test('列表与详情的队长姓名取昵称，不把编号铺到页面上（第二十二轮 P1）', async () => {
+  const repo = fixture();
+  const teamId = await activeTeam(repo, '姓名回归队');
+  // 目录按需装载后，队长若不是查看者就容易被漏掉；给队长一个与编号不同的昵称，
+  // 一旦 nameOf 退回 userId，断言立刻能看出来。
+  const captain = await repo.users.getById('u_cap');
+  await repo.users.set('u_cap', { ...captain, nickName: '队长昵称' });
+
+  const list = await call(repo, 'listTeams', {}, { actor: 'u_m2' });
+  assert.equal(list.ok, true, list.message);
+  const row = list.teams.find(item => item.teamId === teamId);
+  assert.ok(row, '球队应出现在列表里');
+  assert.equal(row.captainName, '队长昵称', '列表上的队长姓名必须来自目录，不能退回编号');
+
+  const detail = await call(repo, 'getTeam', { teamId }, { actor: 'u_m2' });
+  assert.equal(detail.ok, true, detail.message);
+  assert.equal(detail.team.captainName, '队长昵称', '详情卡片同上');
+});

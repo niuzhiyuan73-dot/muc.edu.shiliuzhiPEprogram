@@ -370,6 +370,17 @@ function createSchoolMemoryRepo(seed = {}) {
             return (await repo[key].list()).filter(doc => owns(doc) && doc.eventKey === projectKey);
           };
         }
+        // 我的荣誉按参赛者下推：与云端 `{'rows.userIds': userId}` 同口径
+        //（第二十二轮 P3：荣誉改读发布快照后，不能整届读回来再摊平）。
+        if (key === 'sportsMeetPublications') {
+          result[key].listByParticipant = async userId => {
+            if (inTx) throw new Error('事务内不允许条件读取（sportsMeetPublications），请改用 getById');
+            if (typeof userId !== 'string' || !userId) return [];
+            return (await repo[key].list()).filter(doc => owns(doc)
+              && Array.isArray(doc.rows)
+              && doc.rows.some(row => Array.isArray(row.userIds) && row.userIds.includes(userId)));
+          };
+        }
         if (key === 'sportsMeetScores' || key === 'sportsMeetJudgeAssignments') {
           result[key].listBySession = async sessionKey => {
             if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);

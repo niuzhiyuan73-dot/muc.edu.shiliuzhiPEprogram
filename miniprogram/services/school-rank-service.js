@@ -551,6 +551,20 @@ async function getSchoolRanking(payload = {}, ctx) {
   const { pool, gender } = RANK_PROJECT_CONFIG[activeProject];
   const scopeRepo = ctx.repo.forScope(ctx);
 
+  // 【回填巡检：显式诊断，不挂在默认读路径上】（第二十二轮 P3）
+  // 榜单按 `memberStatus` 过滤，缺这个字段的老评级文档会被静默滤掉——少人比空榜
+  // 更难发现。默认路径不付这笔聚合（`tests/rank-read-budget` 钉着「新库不巡检」），
+  // 部署后由管理员带 `{ diagnose: true }` 调一次，按返回的 residual 确认回填状态。
+  let residual = null;
+  if (payload.diagnose === true) {
+    residual = await scopeRepo.memberRatings.countRanked({
+      pool, gender: null, memberStatus: null, missingProfile: true,
+    });
+    if (residual > 0) {
+      console.warn(`[rank] 本池还有 ${residual} 条评级缺少 memberStatus（回填未完成），榜单可能少人`);
+    }
+  }
+
   const topDocs = await scopeRepo.memberRatings.listTop({
     pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, limit: RANK_SEARCH_LIMIT,
   });
@@ -609,6 +623,8 @@ async function getSchoolRanking(payload = {}, ctx) {
           beatText: `超过 ${formatPercent((Math.max(total, myRow.rank) - myRow.rank) / Math.max(total, myRow.rank))} 的会员`,
         },
     meHint: myRow !== null ? '' : '你还没有参加过这个项目',
+    // 仅 `{ diagnose: true }` 时出现：给部署后的回填核对一个可读的数字。
+    diagnostics: residual === null ? undefined : { missingMemberStatus: residual },
   });
 }
 

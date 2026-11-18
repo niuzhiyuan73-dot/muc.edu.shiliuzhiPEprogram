@@ -35,7 +35,7 @@
 const {
   MEET_STATUS,
   meetScoreKey, meetJudgeKey, meetPublicationKey, meetResultRowKey, meetStandingKey,
-  meetHonorKey, listAliveEvents,
+  listAliveEvents,
 } = require('../utils/meet-scope.js');
 const { MEET_SCORE_TYPE } = require('./meet-event-catalog.js');
 const { normalizeMeasure, formatMeasure } = require('./meet-measure.js');
@@ -935,8 +935,6 @@ async function publishMeetResults(payload = {}, ctx) {
       version,
       writtenAt: now,
       official,
-      // 派生索引要用它作废「旧版有、新版没有」的荣誉
-      staleHonorRows: official ? oldRows : [],
       publication: {
         eventKey, version, sessionKey, official,
         rows: rows.map((row) => ({
@@ -950,7 +948,7 @@ async function publishMeetResults(payload = {}, ctx) {
 
   if (!committed.ok || !committed.data) return committed;
 
-  // 事务之后：结果行与个人荣誉（派生索引），分批写。
+  // 事务之后：结果行（派生索引），按批写。
   // 失败不影响「已发布」这个事实——读取侧会回落到发布快照（publishedRowsOf），
   // 下次重新发布也会整体覆盖自愈。
   const detailWritten = await writeMeetResultDetail({
@@ -961,7 +959,6 @@ async function publishMeetResults(payload = {}, ctx) {
     publicationKey,
     version: committed.data.version,
     rows,
-    staleHonorRows: committed.data.staleHonorRows,
     official: committed.data.official,
     now: committed.data.writtenAt,
   });
@@ -971,13 +968,22 @@ async function publishMeetResults(payload = {}, ctx) {
   return ok({ warning: committed.data.warning, publication: result });
 }
 
-/** 每批并发写入数，每条以独立事务核对版本并写入。 */
-const RESULT_DETAIL_BATCH = 10;
+/**
+ * 每个事务写多少条派生索引。
+ *
+ * 【为什么是 20 而不是「每条一个事务」】（第二十二轮 P2）
+ * 逐条事务在满员田赛项目上就是 52 个事务、每个「读 + 写」两次操作 —— 云端
+ * `runTransaction` 的固定开销远高于直写，发布一场要几百毫秒到数秒。
+ * 一个事务写 20 条是「读 20 + 写 20」= 40 次操作，离 100 的预算还有一半余量；
+ * 版本守卫仍在事务里做，语义不变。
+ */
+const RESULT_DETAIL_BATCH = 20;
 
 /**
- * 发布之后并发维护派生索引，每条事务只读写同一主键并拒绝版本回退。
+ * 发布之后按批维护派生索引：一个事务内核对版本再写，拒绝旧版本覆盖新版本。
  *
- * @param {Object} collection 集合接口（需有 set）
+ * @param {Object} repo 仓储（需有 transaction）
+ * @param {string} key 集合键
  * @param {Array<[string, Object]>} entries [主键, 文档]
  * @returns {Promise<boolean>} 全部写入成功返回 true
  */
@@ -985,11 +991,13 @@ async function writeDetailBatch(repo, key, entries) {
   for (let i = 0; i < entries.length; i += RESULT_DETAIL_BATCH) {
     const slice = entries.slice(i, i + RESULT_DETAIL_BATCH);
     try {
-      await Promise.all(slice.map(([id, doc]) => repo.transaction(async tx => {
-        const current = await tx[key].getById(id);
-        if (current && Number(current.version) > Number(doc.version)) return;
-        await tx[key].set(id, doc);
-      })));
+      await repo.transaction(async tx => {
+        for (const [id, doc] of slice) {
+          const current = await tx[key].getById(id);
+          if (current && Number(current.version) > Number(doc.version)) continue;
+          await tx[key].set(id, doc);
+        }
+      });
     } catch (err) {
       console.warn('[meet] 成绩明细写入失败', err && (err.message || err));
       return false;
@@ -999,59 +1007,32 @@ async function writeDetailBatch(repo, key, entries) {
 }
 
 /**
- * 发布之后的派生索引：结果行 + 个人荣誉。
+ * 发布之后的派生索引：结果行。
  *
  * 【为什么分离发布事务】（2026-10-22 大用户量复查 W-0）
- * 这两张表都是「一条报名一条」。26 个学院满员的田赛项目是 52 条报名，
+ * 结果行是「一条报名一条」。26 个学院满员的田赛项目是 52 条报名，
  * 光它们就是 104 个事务操作，加学院总榜的 52 个，必然撞云端事务预算（约 100）——
  * 报错文案是「事务读写总操作预算不足：请缩小本次处理范围」，管理员只会看到
- * 「服务异常」。而它们本质上是**可从发布快照重建的数据**，不需要与「发布挂牌」原子。
+ * 「服务异常」。而它本质上是**可从发布快照重建的数据**，不需要与「发布挂牌」原子。
+ *
+ * 【为什么不再写 sportsMeetHonors】（第二十二轮 P2/P3）
+ * 「我的荣誉」已改为直接读正式发布快照（见 meet-standing-service），
+ * 这张派生表不再有读方。继续写等于每次发布多付 52 条文档写入与事务开销，
+ * 还可能与快照版本不一致。集合仍保留在清单里，只为兼容历史文档，不再写入。
  *
  * 【幂等】
- * 主键只由 (publicationKey, entryKey) 与 (meetId, entryKey) 决定，内容由
- * 「本次 rows + 版本号」决定。中途失败后重新发布一次就整体覆盖，不会留下半截脏数据。
+ * 主键只由 (publicationKey, entryKey) 决定，内容由「本次 rows + 版本号」决定。
+ * 中途失败后重新发布一次就整体覆盖，不会留下半截脏数据。
  *
  * @returns {Promise<boolean>} 是否全部写完
  */
 async function writeMeetResultDetail({
-  repo, schoolId, meetId, eventKey, publicationKey, version, rows, staleHonorRows, official, now,
+  repo, schoolId, meetId, eventKey, publicationKey, version, rows, official, now,
 }) {
   const rowEntries = rows.map((row) => [meetResultRowKey(publicationKey, row.entryKey), {
     schoolId, meetId, eventKey, publicationKey, version, ...row, updatedAt: now,
   }]);
-  if (!await writeDetailBatch(repo, 'sportsMeetResultRows', rowEntries)) return false;
-
-  if (!official) return true;
-
-  const honorEntries = [];
-  // 旧版有、新版没有的记录（例如报名被撤回、被排除出签表）：荣誉必须一并作废，
-  // 否则「我的荣誉」会一直挂着一个已不成立的第一名。
-  const liveKeys = new Set(rows.map((row) => row.entryKey));
-  for (const row of staleHonorRows) {
-    if (liveKeys.has(row.entryKey)) continue;
-    const key = meetHonorKey(meetId, row.entryKey);
-    honorEntries.push([key, {
-      _id: key, schoolId, meetId, eventKey,
-      entryKey: row.entryKey, collegeId: row.collegeId,
-      userIds: Array.isArray(row.userIds) ? [...row.userIds] : [],
-      rank: null, points: 0, version, publishedAt: now, updatedAt: now,
-    }]);
-  }
-  // 荣誉一条参赛记录一条；不再得奖的记录直接覆盖成「无名次」，
-  // 而不是留着旧名次——那会让「我的荣誉」显示一个已经作废的第一名。
-  for (const row of rows) {
-    const key = meetHonorKey(meetId, row.entryKey);
-    const worth = row.status === ROW_STATUS.RESULT && Number(row.rank) > 0;
-    honorEntries.push([key, {
-      _id: key, schoolId, meetId, eventKey,
-      entryKey: row.entryKey, collegeId: row.collegeId,
-      userIds: Array.isArray(row.userIds) ? [...row.userIds] : [],
-      rank: worth ? row.rank : null,
-      points: worth ? row.points : 0,
-      version, publishedAt: now, updatedAt: now,
-    }]);
-  }
-  return writeDetailBatch(repo, 'sportsMeetHonors', honorEntries);
+  return writeDetailBatch(repo, 'sportsMeetResultRows', rowEntries);
 }
 
 /**

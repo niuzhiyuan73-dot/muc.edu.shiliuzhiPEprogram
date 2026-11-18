@@ -36,8 +36,18 @@ const {
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
 
-/** 单次请求最多30人；创建在一个事务内，添加按20人分批。 */
-const MAX_MEMBERS_PER_WRITE = 30;
+/**
+ * 单次请求最多 28 人；创建在一个事务内，添加按 20 人分批。
+ *
+ * 【为什么是 28】（第二十二轮 P3）
+ * 建组事务的固定开销约 11 次（身份 6 + 幂等读 1 + 名称占用读写 2 + 组文档 1
+ * + 审计 1），每人再 3 次（2 次资格读 + 1 次写）。30 人 = 101，正好越过
+ * `TX_OPERATION_BUDGET`；28 人 = 95，留 5 次余量。要更多请先建空组再用
+ * 「批量添加」（20 人一个事务）。
+ */
+const MAX_MEMBERS_PER_WRITE = 28;
+/** 批量添加的外层上限：内部按 20 人一个事务分批，100 人 = 5 批。 */
+const MAX_MEMBERS_PER_ADD = 100;
 const MAX_NAME_LENGTH = 30;
 const MAX_DESCRIPTION_LENGTH = 300;
 const GROUP_LIST_LIMIT = 50;
@@ -74,7 +84,7 @@ const text = (value, max) => {
   return { ok: true, value: trimmed };
 };
 
-function normalizeMemberIds(input) {
+function normalizeMemberIds(input, max = MAX_MEMBERS_PER_WRITE) {
   if (input === undefined) return { ok: true, ids: [] };
   if (!Array.isArray(input)) return { ok: false, message: '成员清单格式无效' };
   const ids = [];
@@ -87,7 +97,7 @@ function normalizeMemberIds(input) {
     if (typeof id !== 'string' || !MEMBER_ID_PATTERN.test(id)) return { ok: false, message: '成员编号无效' };
     if (!ids.includes(id)) ids.push(id);
   }
-  if (ids.length > MAX_MEMBERS_PER_WRITE) return { ok: false, message: `单次最多添加 ${MAX_MEMBERS_PER_WRITE} 名成员` };
+  if (ids.length > max) return { ok: false, message: `单次最多添加 ${max} 名成员` };
   return { ok: true, ids };
 }
 
@@ -97,15 +107,23 @@ function normalizeMemberIds(input) {
  * @returns {{ok:boolean, message:string}}
  */
 async function assertEligibleMembers(tx, ctx, userIds) {
-  for (const userId of userIds) {
-    const [member, user] = await Promise.all([
-      tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId)),
-      tx.users.getById(userId),
-    ]);
-    if (!member || member.userId !== userId || member.schoolId !== ctx.schoolId ||
-        member.status !== SCHOOL_MEMBER_STATUS.ACTIVE ||
-        !user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) {
-      return { ok: false, message: '只能选择本协会在册会员' };
+  // 分批并发读：串行 28 人 = 28 个 RTT，每次两人份点读；10 人一批能把往返压到 3 轮，
+  // 事务内的操作数不变（仍是每人 2 次读），预算口径不受影响（第二十二轮 P3）。
+  for (let offset = 0; offset < userIds.length; offset += 10) {
+    const chunk = userIds.slice(offset, offset + 10);
+    const rows = await Promise.all(chunk.map(async (userId) => {
+      const [member, user] = await Promise.all([
+        tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId)),
+        tx.users.getById(userId),
+      ]);
+      return { userId, member, user };
+    }));
+    for (const { userId, member, user } of rows) {
+      if (!member || member.userId !== userId || member.schoolId !== ctx.schoolId ||
+          member.status !== SCHOOL_MEMBER_STATUS.ACTIVE ||
+          !user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) {
+        return { ok: false, message: '只能选择本协会在册会员' };
+      }
     }
   }
   return { ok: true, message: '' };
@@ -362,7 +380,7 @@ async function updateAssociationGroup(payload = {}, ctx) {
 async function addAssociationGroupMembers(payload = {}, ctx) {
   if (!ctx.actorId) return ok(refused('请先登录'));
   if (typeof payload.groupId !== 'string' || !payload.groupId) return ok(refused('缺少小组编号'));
-  const members = normalizeMemberIds(payload.memberIds);
+  const members = normalizeMemberIds(payload.memberIds, MAX_MEMBERS_PER_ADD);
   if (!members.ok) return ok(refused(members.message));
   if (!members.ids.length) return ok(refused('请选择要加入的成员'));
   let added = 0, result;

@@ -363,6 +363,18 @@ function buildScoped(repo, io, inTx, options) {
     };
   }
 
+  // 我的荣誉按参赛者下推（第二十二轮 P3）：荣誉已改读正式发布快照，
+  // 若把一届全部 publication 读回来再摊平，一次「我的荣誉」要扫 90 个项目。
+  // `rows` 是数组，`{'rows.userIds': userId}` 在云端即「数组内含」；
+  // 内存端 fieldValues 会展开同一路径，两端同口径。
+  if (result.sportsMeetPublications) {
+    result.sportsMeetPublications.listByParticipant = (userId) => {
+      if (inTx) throw new Error('事务内不允许条件读取（sportsMeetPublications），请改用 getById');
+      if (typeof userId !== 'string' || !userId) return Promise.resolve([]);
+      return io.query('sportsMeetPublications', { ...expectedOf('sportsMeetPublications'), 'rows.userIds': userId });
+    };
+  }
+
   // 按训练取报名：一场训练的报名只有几十条，而集合是「只增不减」的。
   // 原来详情页把整个协会的报名台账读回来再按 trainingId 过滤（2026-10-23 第三轮 X-8）。
   if (result.trainingRegistrations) {

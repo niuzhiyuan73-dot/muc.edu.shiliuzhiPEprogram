@@ -226,3 +226,13 @@ describe('选手成绩读端：按编号下推（2026-10-26 只读审查 P2-6）
     assert.deepEqual(data.members.map(row => row.userId), ['m01']);
   });
 });
+
+test('回填巡检只在显式 diagnose 时发生，并回报缺失条数（第二十二轮 P3）', async () => {
+  const repo = fixture();
+  const plain = await callRanking(repo);
+  assert.equal(plain.diagnostics, undefined, '默认读路径不付巡检这笔聚合');
+
+  const diagnosed = await callRanking(repo, { diagnose: true });
+  assert.deepEqual(diagnosed.diagnostics, { missingMemberStatus: 0 }, '新库回填完整时应为 0');
+  assert.equal(diagnosed.total, plain.total, '诊断不改变榜单内容');
+});

@@ -42,7 +42,7 @@ const { buildCollegeDirectory, legacyActorOf } = require('./school-actor.js');
 const { canSchoolAction } = require('./school-permission.js');
 const {
   schoolKey, schoolMemberKey, belongsToSchoolScope, collegeEventKey, collegeEntryKey,
-  collegeLineupKey, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS, associationGroupMemberKey,
+  collegeLineupKey, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS,
 } = require('../utils/school.js');
 // 小组限制（受众范围，B6）：与训练 / 个人赛事共用同一套纯规则。
 const { buildAudience, readAudience } = require('./association-audience.js');
@@ -482,7 +482,10 @@ async function submitCollegeEntry(payload = {}, ctx) {
   if (typeof payload.eventId !== 'string' || !payload.eventId) return ok(refused('缺少学院赛编号'));
   if (!canReadAssociationSpace(ctx)) return ok(refused('没有读取协会空间的权限'));
 
-  const dir = await buildCollegeDirectory(ctx, Array.isArray(payload.memberIds) ? payload.memberIds.slice(0, 31) : []);
+  // 【为什么不再切片】（第二十二轮 P2）名单人数由 `ROSTER_LIMITS.MAX` 统一收口
+  // （`validateCollegeEntry` 里夹取）。原先这里只装前 31 人，32 人以上的名单
+  // 会被校验成「查不到的会员」——配置允许 50，提交却永远过不去。
+  const dir = await buildCollegeDirectory(ctx, Array.isArray(payload.memberIds) ? payload.memberIds : []);
   const actor = legacyActorOf(ctx, dir);
   const { collegeId, college } = resolveCollege(payload, dir);
   const members = memberMapOf(dir);
@@ -492,6 +495,12 @@ async function submitCollegeEntry(payload = {}, ctx) {
   const groups = audience.audienceMode === 'groups'
     ? await Promise.all(audience.audienceGroupIds.map(id => ctx.repo.forScope(ctx).associationGroups.getById(id))) : [];
   const availableGroups = new Set(groups.filter(row => row && row.status !== 'deleted').map(row => row._id));
+  // 见证小组的名单版本：事务内只需按**组**复核版本，不必逐人点读关系。
+  // 任何成员增减都会推进 `membershipRevision`（见 association-group-service 的
+  // add / remove / leave），版本一致就说明这份名单的小组资格没变。
+  const witnessGroups = new Map(groups
+    .filter(row => row && row.status !== 'deleted')
+    .map(row => [row._id, Number(row.membershipRevision) || 0]));
   if (audience.audienceMode === 'groups') {
     const checked = buildCollegeEntryRecord({ ...payload, college },
       { event: snapshot, actor, members: dir.members, colleges: dir.collegeNames, now: ctx.now });
@@ -532,13 +541,14 @@ async function submitCollegeEntry(payload = {}, ctx) {
     }
     if (audience.audienceMode === 'groups') {
       for (const memberId of built.record.members) {
-        const groupId = witnesses.get(memberId);
-        if (!groupId) return refused('名单中有成员不在赛事限定的小组内，请调整名单');
-        const rel = await tx.associationGroupMembers.getById(
-          associationGroupMemberKey(groupId, memberId, ctx));
-        if (!rel || rel.status !== GROUP_MEMBER_STATUS.ACTIVE
-          || rel.schoolId !== ctx.schoolId || rel.association !== ctx.association
-          || rel.userId !== memberId || rel.groupId !== groupId) {
+        if (!witnesses.get(memberId)) return refused('名单中有成员不在赛事限定的小组内，请调整名单');
+      }
+      // 按**组**复核名单版本，而不是逐人点读关系行：30 人名单只花 1~2 次读，
+      // 事务预算从「每人一次」降到「每组一次」（第二十二轮 P2）。
+      for (const [groupId, revision] of witnessGroups) {
+        const group = await tx.associationGroups.getById(groupId);
+        if (!group || group.status === 'deleted'
+          || Number(group.membershipRevision || 0) !== revision) {
           return refused('成员的小组资格已变化，请刷新后重试');
         }
       }

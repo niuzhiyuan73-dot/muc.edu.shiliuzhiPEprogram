@@ -135,7 +135,7 @@ async function getMyMeetHonors(payload = {}, ctx) {
 
   const [meet, publications, events] = await Promise.all([
     ctx.repo.sportsMeets.getById(ctx.meetId),
-    ctx.repo.forMeet(scopeOf(ctx)).sportsMeetPublications.list(),
+    ctx.repo.forMeet(scopeOf(ctx)).sportsMeetPublications.listByParticipant(ctx.actorId),
     listAliveEvents(ctx.repo.forMeet(scopeOf(ctx)).sportsMeetEvents),
   ]);
   if (!meet || meet.schoolId !== ctx.schoolId || meet.status === 'deleted') {

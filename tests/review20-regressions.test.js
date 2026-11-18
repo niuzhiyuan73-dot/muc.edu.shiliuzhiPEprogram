@@ -169,6 +169,12 @@ test('资格快照读取后成员退出小组，事务拒绝整份名单', async
   f.db.beforeTransaction = async () => {
     const row = await f.repo.associationGroupMembers.getById(key);
     await f.repo.associationGroupMembers.set(key, { ...row, status: 'left' });
+    // 真实路径里 leaveAssociationGroup 会同时 +1 membershipRevision；
+    // 第二十二轮起事务内按「组版本」复核名单资格，模拟必须带上这一步。
+    const group = await f.repo.associationGroups.getById('g19');
+    await f.repo.associationGroups.set('g19', {
+      ...group, membershipRevision: Number(group.membershipRevision || 0) + 1,
+    });
   };
   const result = (await college.submitCollegeEntry({ eventId: f.eventId, collegeId: 'c01', memberIds: f.ids }, f.ctx)).data;
   assert.equal(result.ok, false);

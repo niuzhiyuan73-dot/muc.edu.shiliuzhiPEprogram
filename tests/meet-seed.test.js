@@ -207,7 +207,9 @@ test('mock 装载：演示记录齐备，且全部归属民大', async () => {
   const records = await createMeetDemoRecords();
   for (const key of ['sportsMeets', 'sportsMeetEvents', 'sportsMeetEntries', 'sportsMeetSessions',
     'sportsMeetJudgeAssignments', 'sportsMeetScores', 'sportsMeetPublications', 'sportsMeetResultRows',
-    'sportsMeetStandings', 'sportsMeetHonors', 'sportsMeetColleges', 'sportsMeetCollegeLeads']) {
+    // sportsMeetHonors 自第二十二轮起停写（「我的荣誉」直接读发布快照），
+    // 演示数据里不再产生这张表。
+    'sportsMeetStandings', 'sportsMeetColleges', 'sportsMeetCollegeLeads']) {
     assert.ok(Array.isArray(records[key]) && records[key].length > 0, `${key} 不能空`);
     for (const doc of records[key]) {
       assert.equal(doc.schoolId, 'muc', `${key} 混进了外校数据`);
