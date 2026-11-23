@@ -495,12 +495,6 @@ async function submitCollegeEntry(payload = {}, ctx) {
   const groups = audience.audienceMode === 'groups'
     ? await Promise.all(audience.audienceGroupIds.map(id => ctx.repo.forScope(ctx).associationGroups.getById(id))) : [];
   const availableGroups = new Set(groups.filter(row => row && row.status !== 'deleted').map(row => row._id));
-  // 见证小组的名单版本：事务内只需按**组**复核版本，不必逐人点读关系。
-  // 任何成员增减都会推进 `membershipRevision`（见 association-group-service 的
-  // add / remove / leave），版本一致就说明这份名单的小组资格没变。
-  const witnessGroups = new Map(groups
-    .filter(row => row && row.status !== 'deleted')
-    .map(row => [row._id, Number(row.membershipRevision) || 0]));
   if (audience.audienceMode === 'groups') {
     const checked = buildCollegeEntryRecord({ ...payload, college },
       { event: snapshot, actor, members: dir.members, colleges: dir.collegeNames, now: ctx.now });
@@ -512,6 +506,10 @@ async function submitCollegeEntry(payload = {}, ctx) {
       if (witness) witnesses.set(userId, witness.groupId);
     }));
   }
+  const hitGroupIds = new Set(witnesses.values());
+  const witnessGroups = new Map(groups
+    .filter(row => row && row.status !== 'deleted' && hitGroupIds.has(row._id))
+    .map(row => [row._id, Number(row.membershipRevision) || 0]));
 
   const result = await inTransaction(ctx, dir, async (tx, actor, fresh) => {
     const doc = await tx.collegeEvents.getById(payload.eventId);
@@ -526,9 +524,7 @@ async function submitCollegeEntry(payload = {}, ctx) {
 
     // 小组限制（B6-b / G08）：名单里**每一位**都须命中赛事限定的小组，
     // 仅一人不符合即整份提交失败；学院负责人本人入组不能替代选手资格。
-    if (JSON.stringify(readAudience(doc)) !== JSON.stringify(audience)
-      || audience.audienceMode === 'groups' && Number(fresh.schoolAssociation.groupDeletionRevision || 0)
-        !== Number(ctx.schoolAssociation.groupDeletionRevision || 0)) {
+    if (JSON.stringify(readAudience(doc)) !== JSON.stringify(audience)) {
       return refused('赛事或报名已变化，请刷新后重试');
     }
     // 只点读本次名单，禁用/转校/退出学籍发生在途时也不能落入新名单。

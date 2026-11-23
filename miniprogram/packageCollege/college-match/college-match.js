@@ -159,9 +159,16 @@ Page({
 
     const { scoreA, scoreB } = this.data.form;
     this.setData({ submitting: true });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .submitSchoolMatch({ matchId: this.matchId, scoreA, scoreB });
-    this.setData({ submitting: false });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .submitSchoolMatch({ matchId: this.matchId, scoreA, scoreB });
+    } catch (err) {
+      this.showToast((err && err.message) || '提交失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ submitting: false });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || (result.scoreErrors || [])[0] || result.message)) || '提交失败');
@@ -190,9 +197,16 @@ Page({
     if (!confirmed) return undefined;
 
     this.setData({ acting: 'confirm' });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .confirmSchoolMatch({ matchId: this.matchId });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .confirmSchoolMatch({ matchId: this.matchId });
+    } catch (err) {
+      this.showToast((err && err.message) || '确认失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '确认失败');
@@ -223,10 +237,17 @@ Page({
     if (!confirmed) return undefined;
 
     this.setData({ acting: 'forfeit' });
-    // 学院赛弃权按学院记：走自成一档的 forfeitCollegeTieLeg（个人赛那条路明确挡学院赛）
-    const result = await space.forScope(this.scope || this.currentScope())
-      .forfeitCollegeTieLeg({ tieId: this.data.view.tieId, legNo: this.data.view.legNo, college });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      // 学院赛弃权按学院记：走自成一档的 forfeitCollegeTieLeg（个人赛那条路明确挡学院赛）
+      result = await space.forScope(this.scope || this.currentScope())
+        .forfeitCollegeTieLeg({ tieId: this.data.view.tieId, legNo: this.data.view.legNo, college });
+    } catch (err) {
+      this.showToast((err && err.message) || '记录弃权失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '记录弃权失败');

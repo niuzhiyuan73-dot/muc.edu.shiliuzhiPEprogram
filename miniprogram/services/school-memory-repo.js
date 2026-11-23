@@ -45,7 +45,7 @@ function createSchoolMemoryRepo(seed = {}) {
   let state = Object.fromEntries(KEYS.map(key => [key, new Map((seed[key] || []).map(doc => [doc._id, clone(doc)]))]));
   let queue = Promise.resolve();
   const build = (getState, inTx) => {
-    const repo = {};
+    const repo = { inTx: Boolean(inTx) };
     repo.personalSports = { readPage: async (source, auth, query) => {
       if (inTx) throw new Error('事务内不允许个人体育查询');
       return memoryPersonalPage(key => [...getState()[key].values()].map(clone), source, auth, query);
@@ -167,9 +167,12 @@ function createSchoolMemoryRepo(seed = {}) {
         // 名录页给每一行算权限标签，都可以一页只发一次调用（2026-10-22 H-3／H-5）。
         // `owns` 校验是这条路径的安全底线：主键可能来自调用方。
         if (EVENT_SCOPED.includes(key) || key === 'schoolRoles' || key === 'memberships'
-          || key === 'schoolMembers' || key === 'memberRatings') {
+          || key === 'schoolMembers' || key === 'memberRatings' || key === 'liveScores') {
           result[key].listByIds = async ids => {
             if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
+            if (key === 'liveScores' && typeof repo.liveScores.listByIds === 'function') {
+              return (await repo.liveScores.listByIds(ids)).filter(owns);
+            }
             const uniq = [...new Set((Array.isArray(ids) ? ids : [])
               .filter(id => typeof id === 'string' && id))];
             const out = [];

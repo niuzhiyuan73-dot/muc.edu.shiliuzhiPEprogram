@@ -39,15 +39,16 @@ function requestFor(scope, options = {}) {
       if (typeof wx === 'undefined' || !wx.cloud) throw new Error('云开发尚未初始化');
       // 写动作由用户逐个触发，远低于写阈值（3/秒），不排队以免「点下去没反应」
       if (!isWrite) await pacer.take();
-      const { result } = await wx.cloud.callFunction({ name: 'data', data: {
+      const res = await wx.cloud.callFunction({ name: 'data', data: {
         protocolVersion: 2, ...scope, action, payload,
       } });
+      const result = res && res.result;
       if (!result || !result.ok) throw new Error(result && result.message || '学校接口请求失败');
       const data = result.data;
       if (throwOnRefused && data && data.ok === false) throw new Error(data.message || '操作失败');
       return data;
     };
-    return isWrite ? guardWrite(run) : run();
+    return isWrite && !throwOnRefused ? guardWrite(run) : run();
   };
 }
 

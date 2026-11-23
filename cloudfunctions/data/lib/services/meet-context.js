@@ -34,11 +34,12 @@ const contextCache = require('./context-cache.js');
  * @param {string} [options.action] 只有读动作才允许走缓存（见 context-cache）
  */
 async function buildMeetContext({
-  repo, openId = '', actorId = '', scope, now = new Date(), action = '',
+  repo, openId = '', actorId = '', scope, now = new Date(), action = '', inTx = false,
 }) {
   const schoolId = String((scope && scope.schoolId) || '').trim();
   const meetId = String((scope && scope.meetId) || '').trim();
   if (!schoolId) throw new Error('运动会接口缺少学校');
+  const serial = Boolean(inTx || (repo && repo.inTx));
 
   // 与学校上下文同一套缓存规则（2026-10-23 H-10）：运动会也要读学校、账号、
   // 名册、校级角色、届次——一个页面连发几个请求就是几十次重复读。
@@ -55,31 +56,44 @@ async function buildMeetContext({
     readStartedAt = Date.now();
   }
 
-  const [school, actor] = await Promise.all([
-    repo.schools.getById(schoolId),
-    actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null,
-  ]);
-  if (!school || school.schoolId !== schoolId || school.status !== 'active') {
+  const readActor = () => (actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null);
+  const school = serial ? await repo.schools.getById(schoolId) : null;
+  const actor = serial ? await readActor() : null;
+  const [resolvedSchool, resolvedActor] = serial
+    ? [school, actor]
+    : await Promise.all([repo.schools.getById(schoolId), readActor()]);
+  if (!resolvedSchool || resolvedSchool.schoolId !== schoolId || resolvedSchool.status !== 'active') {
     // 与 school-context 同一口径：带 code，由入口转成业务拒绝（第十一轮 P2-6）
     const err = new Error('学校不存在或已停用');
     err.code = 'SCHOOL_INACTIVE';
     throw err;
   }
 
-  const [member, role, meet] = actor
-    ? await Promise.all([
-      repo.schoolMembers.getById(schoolMemberKey(actor._id, schoolId)),
-      repo.schoolRoles.getById(schoolRoleKey(actor._id, schoolId)),
-      meetId ? repo.sportsMeets.getById(meetId) : null,
-    ])
-    : [null, null, meetId ? repo.sportsMeets.getById(meetId) : null];
+  let member = null;
+  let role = null;
+  let meet = null;
+  if (serial) {
+    if (resolvedActor) {
+      member = await repo.schoolMembers.getById(schoolMemberKey(resolvedActor._id, schoolId));
+      role = await repo.schoolRoles.getById(schoolRoleKey(resolvedActor._id, schoolId));
+    }
+    if (meetId) meet = await repo.sportsMeets.getById(meetId);
+  } else {
+    [member, role, meet] = resolvedActor
+      ? await Promise.all([
+        repo.schoolMembers.getById(schoolMemberKey(resolvedActor._id, schoolId)),
+        repo.schoolRoles.getById(schoolRoleKey(resolvedActor._id, schoolId)),
+        meetId ? repo.sportsMeets.getById(meetId) : null,
+      ])
+      : [null, null, meetId ? repo.sportsMeets.getById(meetId) : null];
+  }
 
-  const owned = (doc) => (doc && doc.schoolId === schoolId && doc.userId === actor._id ? doc : null);
+  const owned = (doc) => (doc && doc.schoolId === schoolId && doc.userId === resolvedActor._id ? doc : null);
   const docs = {
-    actor,
-    openId: openId || (actor && actor.openId) || '',
-    actorId: actor ? actor._id : '',
-    school,
+    actor: resolvedActor,
+    openId: openId || (resolvedActor && resolvedActor.openId) || '',
+    actorId: resolvedActor ? resolvedActor._id : '',
+    school: resolvedSchool,
     schoolMember: owned(member),
     schoolRole: owned(role),
     // 不属于本届或不属于本校的记录一律当「不存在」，不让越界数据进入上下文。
@@ -96,6 +110,7 @@ function freshMeetContext(tx, ctx) {
     actorId: ctx.actorId,
     scope: { schoolId: ctx.schoolId, meetId: ctx.meetId },
     now: ctx.now,
+    inTx: true,
   });
 }
 

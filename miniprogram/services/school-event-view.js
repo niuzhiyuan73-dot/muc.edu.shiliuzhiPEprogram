@@ -461,6 +461,7 @@ function buildListRow(summary, ctx = {}) {
  */
 async function loadEventParts(api, eventId, extraUserIds = []) {
   const roster = await api.listSchoolEventSignups({ eventId });
+  if (roster && roster.ok === false) throw new Error(roster.message || '赛事报名读取失败');
   const rosterRows = (roster && roster.ok && roster.signups) || [];
   const ids = Array.from(new Set([...memberIdsOf(rosterRows), ...asArray(extraUserIds).filter(Boolean)]));
 
@@ -470,6 +471,8 @@ async function loadEventParts(api, eventId, extraUserIds = []) {
       ? api.getSchoolMemberStats({ userIds: ids })
       : Promise.resolve({ ok: true, members: [] }),
   ]);
+  if (matches && matches.ok === false) throw new Error(matches.message || '赛事对阵读取失败');
+  if (stats && stats.ok === false) throw new Error(stats.message || '选手信息读取失败');
   return {
     matchDtos: (matches && matches.ok && matches.matches) || [],
     statsRows: (stats && stats.ok && stats.members) || [],

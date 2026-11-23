@@ -29,6 +29,10 @@ Component({
     styleIsolation: 'apply-shared',
   },
 
+  properties: {
+    active: { type: Boolean, value: true },
+  },
+
   data: {
     loading: true,
     error: '',
@@ -49,7 +53,7 @@ Component({
   pageLifetimes: {
     // 从建队 / 详情页返回时刷新：刚建的队、刚加入的队要立刻出现
     show() {
-      if (!this.loaded) return undefined;
+      if (!this.loaded || this.data.active === false) return undefined;
       return this.refresh();
     },
   },

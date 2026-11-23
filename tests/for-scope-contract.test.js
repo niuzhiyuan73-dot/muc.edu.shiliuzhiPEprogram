@@ -100,7 +100,7 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     }
     // 名录页给每一行算权限标签：20 行 × 2 次点读 → 两条 listByIds（H-5）。
     // schoolMembers 同理：比赛列表只要「这页参赛者属于哪个学院」（第三轮 X-3）。
-    if (key === 'schoolRoles' || key === 'memberships' || key === 'schoolMembers') {
+    if (key === 'schoolRoles' || key === 'memberships' || key === 'schoolMembers' || key === 'liveScores') {
       expected = [...expected, 'listByIds'];
     }
     if (key === 'schoolMembers') {

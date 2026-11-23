@@ -124,4 +124,20 @@ describe('requestFor —— 写动作收敛、读动作放行', () => {
       assert.equal(result, payload);
     });
   });
+
+  test('运动会门面（throwOnRefused）写动作遇到业务拒绝或故障时继续抛出异常，不被 guardWrite 吞掉', async () => {
+    const refusedWx = {
+      cloud: {
+        callFunction: async () => ({
+          result: { ok: true, data: { ok: false, message: '报名已截止，不能再提交意向' } },
+        }),
+      },
+    };
+    await withWx(refusedWx, async () => {
+      await assert.rejects(() => CLIENTS.meet.submitMeetInterest({ eventKey: 'e1' }), /报名已截止/);
+    });
+    await withWx(undefined, async () => {
+      await assert.rejects(() => CLIENTS.meet.finishSportsMeet({}), /云开发尚未初始化/);
+    });
+  });
 });

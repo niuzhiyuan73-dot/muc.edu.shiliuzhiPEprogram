@@ -23,7 +23,7 @@
 
 const { legResultOf, summarizeTie, nextRoundPairsOf, buildTiesForRound } = require('./college-tie.js');
 const { belongsToSchoolScope } = require('../utils/school.js');
-const { TIE_STATUS, MATCH_COMPETITION } = require('../utils/constants.js');
+const { TIE_STATUS, MATCH_COMPETITION, COLLEGE_EVENT_STATUS } = require('../utils/constants.js');
 
 const iso = value => new Date(value).toISOString();
 const isLegMatch = doc => Boolean(doc && doc.competition === MATCH_COMPETITION.COLLEGE && doc.tieId);
@@ -46,10 +46,12 @@ async function advanceCollegeAfterLeg(ctx, legMatch) {
   const snapshot = await ctx.repo.ties.getById(legMatch.tieId);
   if (!belongsTo(snapshot, ctx)) return null;
   const event = await ctx.repo.collegeEvents.getById(snapshot.eventId);
-  if (!belongsTo(event, ctx)) return null;
+  if (!belongsTo(event, ctx) || event.status === COLLEGE_EVENT_STATUS.FINISHED) return null;
 
   let tiePatch = null;
   await ctx.repo.transaction(async tx => {
+    const freshEvent = await tx.collegeEvents.getById(snapshot.eventId);
+    if (!belongsTo(freshEvent, ctx) || freshEvent.status === COLLEGE_EVENT_STATUS.FINISHED) return;
     const tie = await tx.ties.getById(legMatch.tieId);
     if (!tie) return;
 

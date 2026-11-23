@@ -101,6 +101,7 @@ function canSubmitForCollege(ctx, leadDoc, collegeId) {
  * 重新任命。判定四件事缺一不可——记录在任、就是本人、同一届、同校。
  */
 function isChiefJudge(ctx, meet) {
+  if (!isLocalActiveMember(ctx)) return false;
   const chief = meet && meet.chiefJudge;
   return Boolean(chief && chief.status === 'active' && chief.userId === ctx.actorId
     && chief.schoolId === ctx.schoolId && chief.meetId === ctx.meetId);
@@ -114,6 +115,7 @@ function isChiefJudge(ctx, meet) {
  */
 function canPublishMeetResult(ctx, options = {}) {
   if (canManageMeet(ctx)) return true;
+  if (!isLocalActiveMember(ctx)) return false;
   // 缺省取上下文里的当届记录（meet-context 已把 sportsMeets 文档放进 ctx.meet）：
   // 调用方不必逐个记得传，少一处漏传就是「总裁判点不动」。
   const chief = options.chiefJudge !== undefined

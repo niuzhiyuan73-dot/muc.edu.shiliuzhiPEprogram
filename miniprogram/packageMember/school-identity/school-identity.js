@@ -269,19 +269,24 @@ Page({
   },
   async submitGrant(userId, permission, make, targetCollegeId) {
     const member = this.data.members.find(row => row.userId === userId);
-    if (!member || this.data.submitting) return undefined;
-    const collegeId = permission === 'collegeLeader' ? targetCollegeId || member.managedCollegeId || member.collegeId : '';
-    const label = (this.data.grants.find(row => row.permission === permission) || {}).label || permission;
-    const college = this.data.colleges.find(row => row.collegeId === collegeId);
-    const scope = `${this.data.schoolName} · ${this.data.associationName || this.data.association}${college ? ' · ' + college.name : ''}`;
-    if (typeof wx !== 'undefined' && wx.showModal) {
-      const version = this.loadVersion;
-      const confirmed = await new Promise(resolve => wx.showModal({ title: `${make ? '授予' : '取消'}${label}`,
-        content: `${member.nickName || userId}：${scope}。请核对授权范围。`,
-        success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) }));
-      if (!confirmed || this.unloaded || version !== this.loadVersion) return;
+    if (!member || this.data.submitting || this._granting) return undefined;
+    this._granting = true;
+    try {
+      const collegeId = permission === 'collegeLeader' ? targetCollegeId || member.managedCollegeId || member.collegeId : '';
+      const label = (this.data.grants.find(row => row.permission === permission) || {}).label || permission;
+      const college = this.data.colleges.find(row => row.collegeId === collegeId);
+      const scope = `${this.data.schoolName} · ${this.data.associationName || this.data.association}${college ? ' · ' + college.name : ''}`;
+      if (typeof wx !== 'undefined' && wx.showModal) {
+        const version = this.loadVersion;
+        const confirmed = await new Promise(resolve => wx.showModal({ title: `${make ? '授予' : '取消'}${label}`,
+          content: `${member.nickName || userId}：${scope}。请核对授权范围。`,
+          success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) }));
+        if (!confirmed || this.unloaded || version !== this.loadVersion) return;
+      }
+      return await this.write(api => api.grantSchoolPermission({ userId, permission, make, collegeId }));
+    } finally {
+      this._granting = false;
     }
-    return this.write(api => api.grantSchoolPermission({ userId, permission, make, collegeId }));
   },
 
   onRetry() { if (!this.data.submitting) return this.reload(); },

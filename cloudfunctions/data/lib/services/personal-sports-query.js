@@ -96,12 +96,15 @@ function queryPlan(source, auth, query = {}) {
       : source === 'meetJudge' ? { judgeId: uid, status: 'active' } : { judgeId: uid, state: 'draft' }) }]);
     stages.push(...join('sportsMeetSessions', source === 'meetSchedule' ? 'eventKey' : 'sessionKey', 'hubSession', false, source === 'meetSchedule' ? 'eventKey' : '_id'));
     meetParents();
+    const sameJudgeRevision = field => eq(fallback(field, 0), fallback('$hubSession.judgeAssignmentRevision', 0));
     if (source === 'meetSchedule') stages.push(['match', expr(or(oneOf('$_id', fallback('$hubSession.entryKeys', [])),
       and(eq({ $size: fallback('$hubSession.entryKeys', []) }, 0), { $ne: ['$hubEvent.rounds', 'heat_final'] })))]);
+    if (source === 'meetJudge') stages.push(['match', expr(sameJudgeRevision('$judgeAssignmentRevision'))]);
     if (source === 'judgeDraft') {
       stages.push(...join('sportsMeetJudgeAssignments', 'sessionKey', 'hubAssignment', false, 'sessionKey'));
       stages.push(['match', expr(and(eq('$hubAssignment.schoolId', auth.schoolId), eq('$hubAssignment.meetId', '$meetId'),
-        eq('$hubAssignment.eventKey', '$eventKey'), eq('$hubAssignment.judgeId', uid), eq('$hubAssignment.status', 'active')))]);
+        eq('$hubAssignment.eventKey', '$eventKey'), eq('$hubAssignment.judgeId', uid), eq('$hubAssignment.status', 'active'),
+        sameJudgeRevision('$hubAssignment.judgeAssignmentRevision')))]);
     }
     time = source === 'judgeDraft' ? '$updatedAt' : '$hubSession.startAt';
     id = source === 'judgeDraft' ? '$_id' : '$hubSession._id'; subject = 'hubSession';

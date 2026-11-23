@@ -550,6 +550,8 @@ function createSchoolHandlers({ claimKey }) {
     const readOnly = Boolean(active && ctx.actor.primarySchoolId && ctx.actor.primarySchoolId !== ctx.schoolId);
     const manageable = active && !readOnly;
     const collegeId = (ctx.schoolMember && ctx.schoolMember.collegeId) || '';
+    const managedCollegeId = manageable && ctx.membership && ctx.membership.status === 'active'
+      && ctx.membership.role === 'staff' ? ctx.membership.collegeId || '' : '';
     // user 是**本人账号**的展示字段：真名 / 性别 / 头像随账号走（跨校不变），
     // platformStatus 让客户端分清「没有账号 / 账号停用」两种情形（B3：登录页
     // 不能把停用账号当新用户引导去注册）。
@@ -566,12 +568,11 @@ function createSchoolHandlers({ claimKey }) {
       // 本人权限档位：校级 / 协会 / 学院，普通会员为空串（展示标签退回「会员」）。
       permission: manageable ? permissionOf(ctx.schoolRole, ctx.membership) : '',
       permissionLabel: manageable ? permissionLabelOf(ctx.schoolRole, ctx.membership) : '',
-      managedCollegeId: manageable && ctx.membership && ctx.membership.status === 'active' && ctx.membership.role === 'staff'
-        ? ctx.membership.collegeId || '' : '',
+      managedCollegeId,
       // 能不能管**自己的学院**（学院赛名单提交的判据）。校级 / 协会负责人可管任一本校学院；
       // 学院负责人只在本学院上有权；平台管理员跨校也可管。口径与 canSchoolAction 同源。
       canManageCollege: manageable ? canSchoolAction(ctx, 'manageCollege',
-        { schoolId: ctx.schoolId, association: ctx.association, collegeId }) : false,
+        { schoolId: ctx.schoolId, association: ctx.association, collegeId: managedCollegeId || collegeId }) : false,
       // 能不能管**本校**的校级事务（公告发布与下架、校务设置）。平台管理员与校级管理员为真。
       // 公告页原先自己拿 isPlatformAdmin 判，把校级管理员挡在门外；判定收回服务端这把尺子，
       // 页面照着布尔量走，避免两处口径分叉。

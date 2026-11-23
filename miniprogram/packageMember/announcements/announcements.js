@@ -23,7 +23,7 @@ const { withNoticeExpansion } = require('../../templates/notice-experience');
  */
 
 const { loadSchoolAnnouncementListView } = require('../../services/announcement-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
@@ -39,12 +39,13 @@ Page(withNoticeExpansion({
     /** 视图模型，形状见 services/announcement-view.js */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
   },
 
   /** 返回 Promise 是有意为之：测试需要句柄等首屏加载完 */
   onLoad() {
     this.unloaded = false;
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 

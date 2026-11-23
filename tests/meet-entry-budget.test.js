@@ -27,7 +27,7 @@ const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
 const meetService = require('../miniprogram/services/meet-service.js');
 const leadService = require('../miniprogram/services/meet-college-lead-service.js');
 const reg = require('../miniprogram/services/meet-registration-service.js');
-const { meetEventKey, MEET_ENTRY_MAX_MEMBERS } = require('../miniprogram/utils/meet-scope.js');
+const { meetEventKey, meetInterestKey, MEET_ENTRY_MAX_MEMBERS } = require('../miniprogram/utils/meet-scope.js');
 const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
 
 const SCHOOL = 'muc';
@@ -125,8 +125,8 @@ function instrument(repo) {
   };
 }
 
-/** 建一个「报名窗口已开、配好 20 人团体项目、授好部长」的世界 */
-async function makeWorld() {
+/** 建一个「报名窗口已开、配好 20 人项目、授好部长」的世界 */
+async function makeWorld(templateId = 'show-parade') {
   const repo = createSchoolMemoryRepo({
     schools: [{ _id: SCHOOL, schoolId: SCHOOL, name: '中央民族大学', status: 'active' }],
     users, colleges, schoolMembers, schoolRoles,
@@ -139,15 +139,15 @@ async function makeWorld() {
   const meetId = created.data.meet.meetId;
   const admin = await ctxOf(repo, 'u_admin', meetId);
 
-  // 入场式展示：内置模板默认就是 20 人，正是原来必然撞预算的那个口径
+  // 入场式展示是 20 人团体；多人绑腿跑是 20 人「多人协作组」（计入个人兼项额度）。
   const configured = await meetService.configureMeetEvent(
-    { templateId: 'show-parade', group: 'mixed', members: ROSTER, perCollegeLimit: 1 }, admin,
+    { templateId, group: 'mixed', members: ROSTER, perCollegeLimit: 1 }, admin,
   );
-  assert.equal(configured.ok, true, `配置 ${ROSTER} 人团体项目应成功：${configured.message}`);
+  assert.equal(configured.ok, true, `配置 ${ROSTER} 人项目（${templateId}）应成功：${configured.message}`);
   await meetService.publishMeetRegistration(WINDOW, admin);
   await leadService.grantMeetCollegeLead({ collegeId: 'c01', userId: 'u_lead' }, admin);
 
-  const eventKey = meetEventKey(meetId, 'show-parade', 'mixed');
+  const eventKey = meetEventKey(meetId, templateId, 'mixed');
   // 全员提交意向（D14：部长只能从申请人里选）
   for (const userId of studentIds) {
     const res = await reg.submitMeetInterest({ eventKey }, await ctxOf(repo, userId, meetId));
@@ -178,6 +178,51 @@ test(`配到上限（${ROSTER} 人）的团体项目：一次提交不超事务�
     `最贵的一个事务用了 ${probe.stats.peak} 个操作`
     + `（${probe.stats.perTx.map(tx => tx.reads + tx.writes).join(' / ')}），超过云端预算 ${CLOUD_TX_BUDGET}`,
   );
+});
+
+test('20 人多人协作组：撤回不超事务预算，意向回到待选拔', async () => {
+  const { repo, meetId, eventKey, probe } = await makeWorld('fun-multi-leg');
+  const submitted = await reg.submitMeetCollegeEntry(
+    { eventKey, userIds: studentIds }, await ctxOf(repo, 'u_lead', meetId),
+  );
+  assert.equal(submitted.ok, true, submitted.message);
+
+  probe.reset();
+  const withdrawn = await reg.withdrawMeetCollegeEntry(
+    { entryKey: submitted.data.entry._id }, await ctxOf(repo, 'u_lead', meetId),
+  );
+  assert.equal(withdrawn.ok, true, withdrawn.message);
+  assert.ok(
+    probe.stats.peak <= CLOUD_TX_BUDGET,
+    `撤回最贵的一个事务用了 ${probe.stats.peak} 个操作`
+    + `（${probe.stats.perTx.map(tx => tx.reads + tx.writes).join(' / ')}），超过云端预算 ${CLOUD_TX_BUDGET}`,
+  );
+  const interest = await repo.sportsMeetInterests.getById(meetInterestKey(meetId, eventKey, studentIds[0]));
+  assert.equal(interest.status, 'pending', '撤回后意向应回到待选拔');
+  assert.equal(interest.entryKey, '');
+});
+
+test('20 人多人协作组：驳回不超事务预算，意向回到待选拔', async () => {
+  const { repo, meetId, eventKey, probe } = await makeWorld('fun-multi-leg');
+  const submitted = await reg.submitMeetCollegeEntry(
+    { eventKey, userIds: studentIds }, await ctxOf(repo, 'u_lead', meetId),
+  );
+  assert.equal(submitted.ok, true, submitted.message);
+
+  probe.reset();
+  const rejected = await reg.reviewMeetEntry(
+    { entryKey: submitted.data.entry._id, decision: 'reject', reason: '预算用例' },
+    await ctxOf(repo, 'u_admin', meetId),
+  );
+  assert.equal(rejected.ok, true, rejected.message);
+  assert.ok(
+    probe.stats.peak <= CLOUD_TX_BUDGET,
+    `驳回最贵的一个事务用了 ${probe.stats.peak} 个操作`
+    + `（${probe.stats.perTx.map(tx => tx.reads + tx.writes).join(' / ')}），超过云端预算 ${CLOUD_TX_BUDGET}`,
+  );
+  const interest = await repo.sportsMeetInterests.getById(meetInterestKey(meetId, eventKey, studentIds[0]));
+  assert.equal(interest.status, 'pending', '驳回后意向应回到待选拔');
+  assert.equal(interest.entryKey, '');
 });
 
 test('提交后 20 人的意向全部转为「已选入」', async () => {

@@ -168,6 +168,7 @@ async function loadSchoolMemberView(api, options = {}) {
   const { project, historyLimit = DEFAULT_HISTORY_LIMIT } = options;
   const data = await api.getSchoolMemberProfile({
     userId: options.userId || '',
+    project: project || '',
     historyLimit,
   });
   if (!data || !data.found) return { found: false };
@@ -290,14 +291,16 @@ async function loadSchoolProfileSummaryView({ schoolId, session, client }) {
   const user = session.user;
   const space = client || require('./association-space.js');
 
-  // 会员档案（学院全名）：第一个读得到的协会里取；都读不到时降级为空。
-  let profile = null;
-  for (const assoc of allAssociations()) {
+  // 会员档案（学院全名）：并发探测，取第一个读得到的协会。
+  const memberResults = await Promise.all(allAssociations().map(async (assoc) => {
     try {
       const result = await space.forScope({ schoolId, association: assoc.id }).getSchoolMember({ userId: user.userId });
-      if (result && result.member) { profile = result.member; break; }
-    } catch (err) { /* 下一个协会 */ }
-  }
+      return (result && result.member) || null;
+    } catch (err) {
+      return null;
+    }
+  }));
+  const profile = memberResults.find(Boolean) || null;
 
   const groups = [];
   let eventCount = 0;

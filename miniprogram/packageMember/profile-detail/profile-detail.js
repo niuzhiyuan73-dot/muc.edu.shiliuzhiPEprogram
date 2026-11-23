@@ -11,7 +11,7 @@
  */
 
 const { createMemberPage } = require('../../templates/member-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 
 // 页内切换协会：只切本页，默认「本人比赛最多的协会」，退出即失效（§11.1 / §11.5）
 const memberPage = createMemberPage({ localAssociation: true });
@@ -21,7 +21,7 @@ Page({
   data: {
     ...memberPage.data,
     /** 开发期在页脚标注数据来源，以免把演示数据当成真实成绩 */
-    isMock,
+    isMock: false,
   },
 
   /**
@@ -29,6 +29,7 @@ Page({
    * 「从编辑页返回」——后者需要重取，前者不必。
    */
   async onLoad(query) {
+    this.setData({ isMock: isMockNow() });
     await memberPage.onLoad.call(this, query);
     this.ready = true;
   },

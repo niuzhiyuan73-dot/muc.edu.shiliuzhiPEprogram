@@ -193,9 +193,15 @@ async function drawMeetHeats(payload = {}, ctx) {
     if (!canManageMeet(fresh)) return refused('只有校级管理员及以上可以抽签分组');
     const now = toIso(fresh.now);
 
+    const existingSessions = [];
     for (let i = 1; i <= heatCount; i += 1) {
       const key = meetSessionKey(fresh.meetId, eventKey, isHeatFinal ? 'heat' : 'final', i);
-      const current = await tx.sportsMeetSessions.getById(key);
+      existingSessions.push({ index: i, key, current: await tx.sportsMeetSessions.getById(key) });
+    }
+    const finalKey = isHeatFinal ? meetSessionKey(fresh.meetId, eventKey, 'final', 1) : '';
+    const finalDoc = isHeatFinal ? await tx.sportsMeetSessions.getById(finalKey) : null;
+
+    for (const { index: i, key, current } of existingSessions) {
       await tx.sportsMeetSessions.set(key, {
         ...(current || {}),
         schoolId: fresh.schoolId,
@@ -222,14 +228,14 @@ async function drawMeetHeats(payload = {}, ctx) {
 
     // 预赛+决赛：决赛先建出来（还没定人），赛程才能一起排；参赛人由晋级动作填
     if (isHeatFinal) {
-      const finalKey = meetSessionKey(fresh.meetId, eventKey, 'final', 1);
-      const finalDoc = await tx.sportsMeetSessions.getById(finalKey);
-      if (!finalDoc) {
+      if (!finalDoc || finalDoc.voidedAt) {
         await tx.sportsMeetSessions.set(finalKey, {
+          ...(finalDoc || {}),
           schoolId: fresh.schoolId, meetId: fresh.meetId, eventKey,
           round: 'final', index: 1, roundLabel: '决赛', entryKeys: [],
+          voidedAt: null,
           startAt: '', endAt: '', venue: '', note: '', status: 'scheduled',
-          createdAt: now, updatedAt: now,
+          createdAt: (finalDoc && finalDoc.createdAt) || now, updatedAt: now,
         });
       }
     }
@@ -283,7 +289,7 @@ async function advanceMeetEvent(payload = {}, ctx) {
   if (event.rounds !== 'heat_final') return refused('该项目没有预赛，不需要晋级');
 
   const heatSessions = sessions
-    .filter((doc) => doc.eventKey === eventKey && doc.round === 'heat')
+    .filter((doc) => doc.eventKey === eventKey && doc.round === 'heat' && !doc.voidedAt)
     .sort((a, b) => Number(a.index) - Number(b.index));
   if (heatSessions.length === 0) return refused('该项目还没有预赛分组，请先抽签');
 
@@ -491,7 +497,7 @@ function stageOf(session) {
 /** 把场次还原成纯函数要的对阵结构（小组赛与淘汰赛都在内）。 */
 function matchesOf(sessions, eventKey) {
   return sessions
-    .filter((doc) => doc.eventKey === eventKey && stageOf(doc))
+    .filter((doc) => doc.eventKey === eventKey && !doc.voidedAt && stageOf(doc))
     .map((doc) => ({
       sessionKey: doc._id,
       stage: stageOf(doc),
@@ -663,13 +669,15 @@ async function drawMeetBracket(payload = {}, ctx) {
     if (!canManageMeet(fresh)) return refused('只有校级管理员及以上可以编排赛制');
     const now = toIso(fresh.now);
 
+    const currentEvent = await tx.sportsMeetEvents.getById(eventKey);
+    const pendingSessions = [];
     for (const match of matches) {
       const round = match.stage === 'group'
         ? `g${match.groupIndex}`
         : (format === MEET_FORMAT.ROUND_ROBIN ? 'rr' : `r${match.roundNo}`);
       const key = meetSessionKey(fresh.meetId, eventKey, round, match.index);
       const current = await tx.sportsMeetSessions.getById(key);
-      await tx.sportsMeetSessions.set(key, {
+      pendingSessions.push([key, {
         ...(current || {}),
         schoolId: fresh.schoolId,
         meetId: fresh.meetId,
@@ -688,10 +696,10 @@ async function drawMeetBracket(payload = {}, ctx) {
         status: (current && current.status) || 'scheduled',
         createdAt: (current && current.createdAt) || now,
         updatedAt: now,
-      });
+      }]);
     }
 
-    const currentEvent = await tx.sportsMeetEvents.getById(eventKey);
+    for (const [key, doc] of pendingSessions) await tx.sportsMeetSessions.set(key, doc);
     await tx.sportsMeetEvents.set(eventKey, {
       ...currentEvent, revision: Number(currentEvent.revision || 0) + 1,
       bracket: {
@@ -755,6 +763,7 @@ async function setMeetMatchWinner(payload = {}, ctx) {
     return refused('该场次还没有对阵双方');
   }
   const winner = String(payload.winnerEntryKey || '').trim();
+  if (winner && session.entryKeys.filter(Boolean).length < 2) return refused('该场次还没有对阵双方');
   if (winner && !session.entryKeys.includes(winner)) return refused('胜者必须是本场的参赛方');
 
   const event = events.find((row) => row._id === session.eventKey);
@@ -809,6 +818,7 @@ async function setMeetMatchWinner(payload = {}, ctx) {
       && (before.roundLabel || '') === (match.roundLabel || '')) continue;
     changed.push(match);
   }
+  if (changed.length > 40) return refused('本次联动更新场次超过云端单事务安全容量，请缩小签表规模');
 
   return ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
@@ -816,8 +826,13 @@ async function setMeetMatchWinner(payload = {}, ctx) {
     if (!await unchanged(tx, 'sportsMeetEvents', [event])) return refused('项目数据已变化，请刷新后重试');
     if (!canPublishMeetResult(fresh)) return refused('只有校级管理员及以上或本届总裁判可以判定胜负');
     const now = toIso(fresh.now);
+    const existingSessions = new Map();
     for (const match of changed) {
-      const current = await tx.sportsMeetSessions.getById(match.sessionKey);
+      existingSessions.set(match.sessionKey, await tx.sportsMeetSessions.getById(match.sessionKey));
+    }
+    const currentEvent = await tx.sportsMeetEvents.getById(session.eventKey);
+    for (const match of changed) {
+      const current = existingSessions.get(match.sessionKey);
       await tx.sportsMeetSessions.set(match.sessionKey, {
         ...(current || {}),
         schoolId: fresh.schoolId, meetId: fresh.meetId, eventKey: event._id,
@@ -836,7 +851,6 @@ async function setMeetMatchWinner(payload = {}, ctx) {
       ? ''
       : (matches.find((match) => match.stage !== 'group'
         && match.roundNo === totalRounds && match.winnerEntryKey) || {}).winnerEntryKey || '';
-    const currentEvent = await tx.sportsMeetEvents.getById(session.eventKey);
     await tx.sportsMeetEvents.set(session.eventKey, {
       ...currentEvent, revision: Number(currentEvent.revision || 0) + 1,
       ...(expandedSize ? {bracket:{...currentEvent.bracket, size:expandedSize, totalRounds}} : {}),
@@ -987,6 +1001,17 @@ async function resetMeetDraw(payload = {}, ctx) {
   if (scores.some((row) => row.eventKey === eventKey)) {
     return refused('该项目已有裁判录分，不能再重排');
   }
+  const hasPlayedMatch = own.some((doc) => {
+    if (!doc.winnerEntryKey) return false;
+    const sides = Array.isArray(doc.entryKeys) ? doc.entryKeys.filter(Boolean) : [];
+    return sides.length !== 1 || sides[0] !== doc.winnerEntryKey;
+  });
+  if (hasPlayedMatch) {
+    return refused('该项目已有比赛结果，不能再重排');
+  }
+  if (own.length > 80) {
+    return refused('该项目场次超过云端单事务安全容量，请联系管理员处理');
+  }
 
   return ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
@@ -1006,6 +1031,8 @@ async function resetMeetDraw(payload = {}, ctx) {
         winnerEntryKey: '',
         // 场次上原有的时间/场地/裁判一并作废：重抽后分组变了，原来的安排已无意义
         startAt: '', endAt: '', venue: '',
+        judgeIds: [], judgeCount: 0,
+        judgeAssignmentRevision: (doc.judgeAssignmentRevision || 0) + 1,
         status: 'scheduled',
         voidedAt: now,
         updatedAt: now,

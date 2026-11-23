@@ -368,14 +368,24 @@ async function cancelExchangeEvent(payload = {}, ctx) {
  * @returns {Promise<{roster:Array<Object>, pruned:Array<Object>}>}
  */
 async function reviewEntrants(repo, signups) {
+  const memberIds = [...new Set(signups.map(r => r.schoolMemberId).filter(Boolean))];
+  const userIds = [...new Set(signups.map(r => r.userId).filter(Boolean))];
+  const schoolIds = [...new Set(signups.map(r => r.representedSchoolId).filter(Boolean))];
+  const [members, users, schools] = await Promise.all([
+    Promise.all(memberIds.map(id => repo.schoolMembers.getById(id))),
+    userIds.length ? repo.users.listByIds(userIds) : [],
+    Promise.all(schoolIds.map(id => repo.schools.getById(id))),
+  ]);
+  const memberById = new Map(members.filter(Boolean).map(m => [m._id, m]));
+  const userById = new Map(users.map(u => [u._id, u]));
+  const schoolById = new Map(schools.filter(Boolean).map(s => [s._id, s]));
+
   const roster = [];
   const pruned = [];
   for (const row of signups) {
-    const [member, user, school] = await Promise.all([
-      repo.schoolMembers.getById(row.schoolMemberId),
-      repo.users.getById(row.userId),
-      repo.schools.getById(row.representedSchoolId),
-    ]);
+    const member = memberById.get(row.schoolMemberId);
+    const user = userById.get(row.userId);
+    const school = schoolById.get(row.representedSchoolId);
     const valid = member && member.userId === row.userId && member.schoolId === row.representedSchoolId &&
       member.status === 'active' && user && user.platformStatus === 'active' &&
       user.primarySchoolId === row.representedSchoolId && school && school.status === 'active';
@@ -490,6 +500,9 @@ async function drawExchangeEvent(payload = {}, ctx) {
   if (!planned.ok) return ok(refused(planned.message));
   // 重抽时按当前签表整体重算，旧对阵的残留记录不会被投影出来。
   const built = planExchangeMatches({ event: snapshot, draw: planned.draw, entrantsById: map, matches: [] });
+  if (built.matches.length > 85) {
+    return ok(refused('本次抽签生成场次超过云端单事务安全容量，请减少参赛人数或改用单败淘汰'));
+  }
   return ok(await ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);
     const event = await tx.exchangeEvents.getById(payload.eventId);
@@ -594,6 +607,10 @@ async function submitExchangeScore(payload = {}, ctx) {
     if (event.status === 'canceled') return refused('赛事已取消');
     if (current.status !== 'pending') return refused('这场比赛已确认比分');
     if (event.revision !== snapshot.revision || current.revision !== match.revision) return refused('赛事已变化，请刷新后重试');
+    const clashes = new Map();
+    for (const row of changed) {
+      clashes.set(row._id, await tx.exchangeMatches.getById(row._id));
+    }
     const scored = { ...current, scoreA, scoreB, winner: scoreA > scoreB ? current.playerA : current.playerB,
       status: 'active', recordedBy: fresh.actorId, recordedAt: fresh.now, revision: current.revision + 1 };
     await tx.exchangeMatches.set(scored._id, scored);
@@ -601,7 +618,7 @@ async function submitExchangeScore(payload = {}, ctx) {
     // 换人（待确认 / 已撤销的下一轮）按新对阵刷新。已生效的比分不动。
     // 遍历的是**差分**（changed），不是整张签表，见上方 X-1 的说明。
     for (const row of changed) {
-      const clash = await tx.exchangeMatches.getById(row._id);
+      const clash = clashes.get(row._id);
       if (!clash) {
         await tx.exchangeMatches.set(row._id, { ...row, schoolId: event.schoolId, association: event.association });
         continue;
@@ -652,11 +669,9 @@ async function confirmExchangeRanking(payload = {}, ctx) {
 async function getExchangeEvents(_payload, ctx) {
   if (!manages(ctx) && !participates(ctx)) return ok({ ...refused('请使用本校有效身份查看邀请赛'), events: [] });
   const invitations = await ctx.repo.exchangeInvitations.listByScope(ctx);
-  const events = [];
-  for (const invitation of invitations) {
-    const event = await ctx.repo.exchangeEvents.getById(invitation.eventId);
-    if (canSee(event, ctx)) events.push(summary(event));
-  }
+  const eventIds = [...new Set(invitations.map(row => row.eventId).filter(Boolean))];
+  const eventDocs = await Promise.all(eventIds.map(id => ctx.repo.exchangeEvents.getById(id)));
+  const events = eventDocs.filter(event => canSee(event, ctx)).map(summary);
   return ok({ ok: true, events: events.sort((a, b) => (a.startTime < b.startTime ? -1 : a.startTime > b.startTime ? 1 : 0)), message: '' });
 }
 

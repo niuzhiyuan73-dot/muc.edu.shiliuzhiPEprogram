@@ -26,7 +26,7 @@ const { withFormExperience } = require('../../templates/form-experience.js');
  */
 
 const { TITLE_MAX, CONTENT_MAX, DEFAULT_CATEGORY } = require('../../services/announcement.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -43,7 +43,7 @@ Page(withFormExperience({
   data: {
     /** 提交中，防止连点重复提交 */
     submitting: false,
-    isMock,
+    isMock: false,
     /** 当前协会的主题类，挂在页面根节点上 */
     themeClass: '',
 
@@ -68,6 +68,7 @@ Page(withFormExperience({
   },
 
   async onLoad() {
+    this.setData({ isMock: isMockNow() });
     const scope = this.currentScope();
     this.scope = scope;
 

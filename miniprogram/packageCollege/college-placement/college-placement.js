@@ -21,7 +21,7 @@
  */
 
 const { loadCollegePlacementView } = require('../../services/school-college-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -40,7 +40,7 @@ Page({
     /** 视图模型，形状见 services/college-view.js */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 提交中，防止连点 */
     submitting: false,
     /** 整体错误提示 */
@@ -50,6 +50,7 @@ Page({
   /** 返回 Promise 让测试能等待首屏加载完 */
   onLoad(query) {
     this.eventId = (query && query.eventId) || '';
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
@@ -173,21 +174,26 @@ Page({
 
     const scope = this.scope || this.currentScope();
     this.setData({ submitting: true, errorText: '' });
-    const result = await space.forScope(scope)
-      .finishCollegeEvent({ eventId: this.eventId, results: collected.results });
+    try {
+      const result = await space.forScope(scope)
+        .finishCollegeEvent({ eventId: this.eventId, results: collected.results });
 
-    if (!result || !result.ok) {
-      this.setData({
-        submitting: false,
-        errorText: (result && (result.firstError || result.message)) || '录入失败',
-      });
+      if (!result || !result.ok) {
+        this.setData({
+          errorText: (result && (result.firstError || result.message)) || '录入失败',
+        });
+        return undefined;
+      }
+
+      this.showToast('名次已录入，赛事结束', 'success');
+      wx.navigateBack();
       return undefined;
+    } catch (err) {
+      this.setData({ errorText: (err && err.message) || '录入失败，请重试' });
+      return undefined;
+    } finally {
+      this.setData({ submitting: false });
     }
-
-    this.setData({ submitting: false });
-    this.showToast('名次已录入，赛事结束', 'success');
-    wx.navigateBack();
-    return undefined;
   },
 
   /** 放弃录入，回详情页 */

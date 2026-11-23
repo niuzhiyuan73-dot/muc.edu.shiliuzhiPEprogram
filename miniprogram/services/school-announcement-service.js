@@ -35,7 +35,7 @@
 
 const { buildSchoolContext } = require('./school-context.js');
 const { canReadAssociationSpace } = require('./association-space-permission.js');
-const { isPlatformAdminCtx, canSchoolAction } = require('./school-permission.js');
+const { canSchoolAction } = require('./school-permission.js');
 const { legacyActorOf } = require('./school-actor.js');
 const { buildAnnouncementRecord } = require('./announcement.js');
 const {
@@ -81,7 +81,6 @@ const auditKey = (announcementId, action, revision) =>
  * 跨校只读浏览（他人学校）拿不到本校在册身份，因此无法借入口越界发布。
  */
 const canPublishAnnouncement = ctx =>
-  isPlatformAdminCtx(ctx) ||
   canSchoolAction(ctx, 'manageSchool', { schoolId: ctx.schoolId, association: ctx.association });
 
 /** 公告 DTO：权限布尔量与文案在此算好，模板不写业务判断。 */

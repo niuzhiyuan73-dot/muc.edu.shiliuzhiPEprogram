@@ -45,7 +45,6 @@ const MANIFEST = [
   // 排序键的确定性比较（2026-11-07）：编号/时间不得用 localeCompare
   'utils/text-order.js',
   'utils/event-capacity.js',
-  'utils/interface-view.js',
   'utils/associations.js',
   // 篮球规则快照：赛事创建时定节数/节长/犯规上限，云端开赛与本地模拟
   // 必须用同一份判定（否则「5 人可开赛」会在一端放行、另一端拒绝）。

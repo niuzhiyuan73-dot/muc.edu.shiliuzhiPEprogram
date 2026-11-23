@@ -83,8 +83,7 @@ async function transactionGuard(tx, payload, ctx) {
 }
 
 async function startSchoolLiveScore(payload = {}, ctx) {
-  const ready = await guard(payload, ctx);
-  if (ready.error) return ok(refused(ready.error, { live: null }));
+  if (!payload.matchId) return ok(refused('缺少比赛编号', { live: null }));
 
   const id = schoolLiveKey(payload.matchId, ctx);
   const live = await ctx.repo.transaction(async tx => {
@@ -103,8 +102,7 @@ async function startSchoolLiveScore(payload = {}, ctx) {
 }
 
 async function recordSchoolRally(payload = {}, ctx) {
-  const ready = await guard(payload, ctx);
-  if (ready.error) return ok(refused(ready.error, { live: null }));
+  if (!payload.matchId) return ok(refused('缺少比赛编号', { live: null }));
 
   const id = schoolLiveKey(payload.matchId, ctx);
   const side = payload.side;
@@ -142,8 +140,7 @@ async function recordSchoolRally(payload = {}, ctx) {
 }
 
 async function undoSchoolRally(payload = {}, ctx) {
-  const ready = await guard(payload, ctx);
-  if (ready.error) return ok(refused(ready.error, { live: null }));
+  if (!payload.matchId) return ok(refused('缺少比赛编号', { live: null }));
 
   const id = schoolLiveKey(payload.matchId, ctx);
   const result = await ctx.repo.transaction(async tx => {
@@ -176,9 +173,7 @@ async function undoSchoolRally(payload = {}, ctx) {
 }
 
 async function finishSchoolLiveScore(payload = {}, ctx) {
-  // 签表对阵按比赛记录校验；身份和学院权限在事务内重读。
-  const ready = await guard(payload, ctx);
-  if (ready.error) return ok(refused(ready.error, { live: null, match: null }));
+  if (!payload.matchId) return ok(refused('缺少比赛编号', { live: null, match: null }));
 
   const id = schoolLiveKey(payload.matchId, ctx);
   const matchId = payload.matchId;
@@ -231,7 +226,9 @@ async function getSchoolLiveScores(payload = {}, ctx) {
 
   // 一次批读：`_.in(编号)` 只花 1 个 RTT。原先是「每批 10 个并发、逐条点读」，
   // 50 场要 5 轮往返回，而这是每 2 秒跑一次的轮询接口（2026-10-21 审查 P1-6）。
-  const states = await ctx.repo.liveScores.listByIds(ids.map(matchId => schoolLiveKey(matchId, ctx)));
+  const states = await ctx.repo.forScope(ctx).liveScores.listByIds(
+    ids.map(matchId => schoolLiveKey(matchId, ctx)),
+  );
   const scores = [];
   // 编号由调用方给，直读集合前判一次归属——别校 / 别协会的实时比分同样读不到。
   for (const state of states) {

@@ -33,7 +33,7 @@ const { buildPickerRows, pickerEmptyText } = require('../../services/match-entry
 
 const { watchLiveScores } = require('../../services/live-watch.js');
 const { applyLiveRows } = require('../../services/live-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 
 /** 驳回面板文案（撤销已随 Elo 逐场结算改造取消，只剩驳回一种作废动作） */
@@ -103,7 +103,7 @@ Component({
     /** 录入按钮上方的说明。不能录入时，把原因写在这里 */
     entryHint: '',
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 当前是否在浏览外校（演示）比赛：为真时整页只读，隐藏录入口 */
     demoSchool: false,
     /** 演示学校简称，供只读提示条显示 */
@@ -162,6 +162,7 @@ Component({
      * 但测试需要一个句柄等首屏加载完（见 tests/page.test.js）。
      */
     onLoad() {
+      this.setData({ isMock: isMockNow() });
       return this.refresh();
     },
 
@@ -329,12 +330,15 @@ Component({
       if (limit >= all.length && nextCursor) {
         if (this.moreLoading) return undefined;
         this.moreLoading = true;
+        const request = this.request;
         try {
           // 复用上一页的上下文：续页不该再为「姓名映射」把全校名录读一遍
           const view = await loadSchoolMatchView(this.api, this.currentTab, {
             cursor: nextCursor, context: this.viewContext,
           });
-          const merged = [...all, ...(view.records || [])];
+          if (this.hidden || this.data.active === false || request !== this.request) return undefined;
+          const seen = new Set(all.map((row) => row.matchId));
+          const merged = [...all, ...(view.records || []).filter((row) => !seen.has(row.matchId))];
           this.setData({
             'view.records': merged,
             'view.nextCursor': view.nextCursor || '',
@@ -343,7 +347,9 @@ Component({
             visibleRecords: merged.slice(0, limit),
             visibleHasMore: merged.length > limit || Boolean(view.nextCursor),
           });
+          this.syncLiveWatch();
         } catch (error) {
+          if (this.hidden || this.data.active === false || request !== this.request) return undefined;
           this.showToast(error.message || '加载更多失败，请重试');
         } finally {
           this.moreLoading = false;
@@ -419,6 +425,7 @@ Component({
 
     /** 确认对手录入的比分，成绩随即计入等级分 */
     async onConfirm(event) {
+      if (this.data.acting) return undefined;
       const matchId = event.currentTarget.dataset.matchId;
       const user = this.currentUser();
       if (!matchId) return undefined;
@@ -429,24 +436,29 @@ Component({
       // 确认即最终结算：先核对结果、把「不可撤销」说在前面，再落库
       // （交接文档 §4.3：确认前必须有可见的结果核对与不可撤销提示）。
       if (typeof wx === 'undefined' || typeof wx.showModal !== 'function') return undefined;
-      const confirmed = await new Promise((resolve) => {
-        wx.showModal({
-          title: '确认比分',
-          content: '确认后成绩立即生效并计入等级分，之后不可撤销、不可修改。确定确认吗？',
-          success: (res) => resolve(Boolean(res && res.confirm)),
-          fail: () => resolve(false),
+      this.setData({ acting: true });
+      try {
+        const confirmed = await new Promise((resolve) => {
+          wx.showModal({
+            title: '确认比分',
+            content: '确认后成绩立即生效并计入等级分，之后不可撤销、不可修改。确定确认吗？',
+            success: (res) => resolve(Boolean(res && res.confirm)),
+            fail: () => resolve(false),
+          });
         });
-      });
-      if (!confirmed) return undefined;
+        if (!confirmed) return undefined;
 
-      const result = await this.write('confirmSchoolMatch', { matchId });
-      if (!result.ok) {
-        this.showToast(result.message || '确认失败');
-        return undefined;
+        const result = await this.write('confirmSchoolMatch', { matchId });
+        if (!result.ok) {
+          this.showToast(result.message || '确认失败');
+          return undefined;
+        }
+
+        this.showToast('已确认，成绩已计入等级分', 'success');
+        return this.refresh();
+      } finally {
+        this.setData({ acting: false });
       }
-
-      this.showToast('已确认，成绩已计入等级分', 'success');
-      return this.refresh();
     },
 
     /* ---------- 弃权 ---------- */

@@ -931,7 +931,7 @@ async function loadCollegeEventListRows(options = {}) {
   let pages = 0;
   do {
     dto = await api.listCollegeEvents({ limit: EVENT_LIST_MAX, offset });
-    if (!okOf(dto)) return { rows: [], canManage: false };
+    if (!okOf(dto)) throw new Error((dto && dto.message) || '学院赛列表加载失败');
     all.push(...asArray(dto.events));
     if (dto.hasMore && !(dto.nextOffset > offset)) throw new Error('学院赛列表分页没有前进');
     offset = dto.nextOffset;

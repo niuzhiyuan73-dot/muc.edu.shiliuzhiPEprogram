@@ -34,25 +34,25 @@
   <!-- 面板：挂过的保持挂载，用 hidden 收起来，来回切页签不丢状态 -->
   <block wx:for="{{[workspaceKey]}}" wx:key="*this">
   <view wx:if="{{mounted.space}}" hidden="{{activeTab !== 'space'}}">
-    <association-space-panel id="space" />
+    <association-space-panel id="space" active="{{activeTab === 'space'}}" />
   </view>
   <!-- 组队（团队运动专属）：切到页签就能看到球队列表，不再多一次「进入组队」 -->
   <view wx:if="{{mounted.teams}}" hidden="{{activeTab !== 'teams'}}">
-    <team-panel id="teams" />
+    <team-panel id="teams" active="{{activeTab === 'teams'}}" />
   </view>
   <view wx:if="{{mounted.myTeams}}" hidden="{{activeTab !== 'myTeams'}}">
     <team-profile-panel id="myTeams" association="{{associationId}}" active="{{activeTab === 'myTeams'}}" />
   </view>
   <view wx:if="{{mounted.rank}}" hidden="{{activeTab !== 'rank'}}">
-    <rank-panel id="rank" />
+    <rank-panel id="rank" active="{{activeTab === 'rank'}}" />
   </view>
   <view wx:if="{{mounted.match}}" hidden="{{activeTab !== 'match'}}">
     <match-panel id="match" active="{{activeTab === 'match'}}" />
   </view>
   <view wx:if="{{mounted.events}}" hidden="{{activeTab !== 'events'}}">
     <!-- 团队运动的赛事是另一套（球队报名、抽签、录总分），不是个人赛事 -->
-    <team-events-panel wx:if="{{isTeamSport}}" id="events" />
-    <events-panel wx:else id="events" />
+    <team-events-panel wx:if="{{isTeamSport}}" id="events" active="{{activeTab === 'events'}}" />
+    <events-panel wx:else id="events" active="{{activeTab === 'events'}}" />
   </view>
 
   </block>

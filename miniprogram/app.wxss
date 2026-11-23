@@ -483,6 +483,9 @@ page {
   --color-primary-dark: #8e2c23;
   --color-primary-light: #f7e9e7;
   --color-accent: #c9a227;
+  --brand-color: #b23a2e;
+  --brand-dark: #8e2c23;
+  --brand-soft: #f7e9e7;
 }
 
 .assoc-pkb {
@@ -490,6 +493,9 @@ page {
   --color-primary-dark: #0d47a1;
   --color-primary-light: #e3f0fb;
   --color-accent: #ff7a45;
+  --brand-color: #1565c0;
+  --brand-dark: #0d47a1;
+  --brand-soft: #e3f0fb;
 }
 
 .assoc-tt {
@@ -497,6 +503,9 @@ page {
   --color-primary-dark: #00332b;
   --color-primary-light: #e0f0ec;
   --color-accent: #c9a227;
+  --brand-color: #004d40;
+  --brand-dark: #00332b;
+  --brand-soft: #e0f0ec;
 }
 
 .assoc-bd {
@@ -504,6 +513,9 @@ page {
   --color-primary-dark: #4a148c;
   --color-primary-light: #f3e8f7;
   --color-accent: #f2994a;
+  --brand-color: #6a1b9a;
+  --brand-dark: #4a148c;
+  --brand-soft: #f3e8f7;
 }
 
 .assoc-tn {
@@ -511,6 +523,9 @@ page {
   --color-primary-dark: #1b5e20;
   --color-primary-light: #e8f5e9;
   --color-accent: #c6d93b;
+  --brand-color: #2e7d32;
+  --brand-dark: #1b5e20;
+  --brand-soft: #e8f5e9;
 }
 
 /* 篮球 → 橙（与匹克球的蓝、网球的草绿拉开；accent 用琥珀配球体质感） */
@@ -519,6 +534,9 @@ page {
   --color-primary-dark: #bf360c;
   --color-primary-light: #fff3e0;
   --color-accent: #f9a825;
+  --brand-color: #e65100;
+  --brand-dark: #bf360c;
+  --brand-soft: #fff3e0;
 }
 
 .assoc-fb {
@@ -526,6 +544,9 @@ page {
   --color-primary-dark: #08492f;
   --color-primary-light: #e7f3ec;
   --color-accent: #d4af37;
+  --brand-color: #0d6b45;
+  --brand-dark: #08492f;
+  --brand-soft: #e7f3ec;
 }
 
 /* ==================== 运动会主题（恒定金色，不随协会换肤） ==================== */

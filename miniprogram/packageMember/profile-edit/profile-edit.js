@@ -16,7 +16,7 @@
 
 const { uploadAvatar } = require('../../services/avatar.js');
 const { loadSchoolProfileEditView, schoolProfilePatch } = require('../../services/school-profile-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const identity = require('../../services/school-identity.js');
@@ -28,7 +28,7 @@ Page({
     loading: true,
     /** 提交中，防止连点重复提交 */
     submitting: false,
-    isMock,
+    isMock: false,
 
     /** 没有登录态时的原因（或装载失败），非空就在页面上顶掉整张表单 */
     blockReason: '',
@@ -57,6 +57,7 @@ Page({
    * 但测试需要一个句柄等首屏装载完。
    */
   onLoad() {
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
@@ -153,7 +154,11 @@ Page({
   async save() {
     try {
       // 已经是 fileID 的话 uploadAvatar 原样返回，不会重复上传
+      const hadAvatar = Boolean(String(this.data.form.avatarUrl || '').trim());
       const avatarUrl = await uploadAvatar(this.data.form.avatarUrl);
+      if (hadAvatar && !avatarUrl) {
+        return { ok: false, account: null, errors: {}, firstError: '头像上传失败，请检查网络后重试' };
+      }
       const patch = schoolProfilePatch({ ...this.data.form, avatarUrl });
       const result = await identity.forSchoolIdentity(this.scope || this.currentScope())
         .updateSchoolProfile({ patch });

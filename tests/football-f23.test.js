@@ -6,6 +6,12 @@ const { normalizeFootballReport, normalizeResult, matchMinutes } = require('../m
 const { defaultRulesFor, normalizeFootballRules, STANDARD_PRESET_KEY } = require('../miniprogram/utils/football-rules');
 const rules = defaultRulesFor();
 
+test('10 队足球单循环在云端预算内一次抽出 45 场', async () => {
+  const f = await fixture({ cloud: true, count: 10 });
+  assert.equal((await f.matches()).length, 45);
+  assert.equal(f.db.traces.at(-1).length, 98);
+});
+
 test('F2 足球结果拒绝空分、非法阶段；0:0、提前决胜的点球总分合法且不叠加进球', () => {
   for (const value of ['', null, true, -1, '1e1', 1.2]) {
     assert.equal(normalizeResult({ regulationScore: { A: value, B: 0 } }, rules, 'round_robin').ok, false);

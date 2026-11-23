@@ -20,6 +20,7 @@ const ROOT = path.join(__dirname, '..');
 const MINI = path.join(ROOT, 'miniprogram');
 // 页面已按域拆进分包，路径一律从 app.json 查，见 helpers/page-registry.js
 const { pagePathOf, pageFileOf, isRegistered } = require('./helpers/page-registry.js');
+const { instantiate } = require('./helpers/page-harness.js');
 
 const PAGES = ['meet-list', 'meet-detail', 'meet-setup', 'meet-college', 'meet-schedule', 'meet-score', 'meet-standing'];
 
@@ -227,3 +228,82 @@ test('派裁判只列已有场次的项目，并带上报名人数', () => {
   assert.equal(targets[0].entryText, '32 人');
   assert.equal(targets[0].pendingText, '2 待审');
 });
+
+test('三个运动会页面只注册一次卸载处理，并取消待发请求和卸载后的更新', async () => {
+  const [schedule, college, setup] = ['meet-schedule', 'meet-college', 'meet-setup'].map(name => {
+    const source = fs.readFileSync(pageFileOf(name, '.js'), 'utf8');
+    assert.equal([...source.matchAll(/^\s*onUnload\s*\(/gm)].length, 1, name);
+    return instantiate(loadPage(name));
+  });
+  const calls = [];
+  const candidates = async ({ keyword }) => { calls.push(keyword); return { items: [] }; };
+  schedule.client = college.client = () => ({ listMeetJudgeCandidates: candidates });
+  setup.persist = async () => { calls.push('save'); };
+  setup.data.picked = [{ key: 'event', members: 2 }];
+
+  schedule.onAssignKeyword({ detail: { value: 'assign' } });
+  schedule.onChiefKeyword({ detail: { value: 'chief' } });
+  college.onLeadKeyword({ detail: { value: 'lead' } });
+  await setup.applyChange(0, { members: 3 }, { debounce: true });
+  for (const page of [schedule, college, setup]) {
+    page.onUnload();
+    assert.equal(page.unloaded, true);
+    page.setData = () => calls.push('setData');
+    page.update({ busy: false });
+  }
+
+  await new Promise(resolve => setTimeout(resolve, 425));
+  assert.deepEqual(calls, []);
+});
+
+test('meet-detail 发布报名与开放补报窗口的提交格式与服务端校验一致', async () => {
+  const detail = instantiate(loadPage('meet-detail'));
+  const meetService = require('../miniprogram/services/meet-service');
+  const regService = require('../miniprogram/services/meet-registration-service');
+  const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+  const { buildMeetContext } = require('../miniprogram/services/meet-context');
+
+  const repo = createSchoolMemoryRepo({
+    schools: [{ _id: 'muc', schoolId: 'muc', name: '中央民族大学', status: 'active' }],
+    users: [{ _id: 'adm1', openId: 'adm1', platformRole: 'admin', platformStatus: 'active', primarySchoolId: 'muc' }],
+    schoolMembers: [{ _id: 'sm:muc:adm1', schoolId: 'muc', userId: 'adm1', collegeId: 'c01', status: 'active' }],
+  });
+  const now = new Date('2026-11-16T00:00:00Z');
+  const ctxOf = (meetId = '') => buildMeetContext({ repo, actorId: 'adm1', scope: { schoolId: 'muc', meetId }, now });
+  const created = await meetService.createSportsMeet({
+    name: '页面报名发布验证', year: 2026, startDate: '2026-11-20', endDate: '2026-11-21',
+  }, await ctxOf());
+  const meetId = created.data.meet.meetId;
+  await meetService.configureMeetEvent({ templateId: 'sprint-100m', group: 'male', perCollegeLimit: 4 }, await ctxOf(meetId));
+
+  detail.data.schoolId = 'muc';
+  detail.data.meetId = meetId;
+  detail.data.openAt = '2026-11-01';
+  detail.data.closeAt = '2026-11-18';
+  detail.data.lateStartDate = '2026-11-19';
+  detail.data.lateStartTime = '08:00';
+  detail.data.lateEndDate = '2026-11-19';
+  detail.data.lateEndTime = '20:00';
+  detail.reload = async () => {};
+  detail.client = () => ({
+    publishMeetRegistration: async (payload) => {
+      const res = await meetService.publishMeetRegistration(payload, await ctxOf(meetId));
+      if (!res.ok) throw new Error(res.message);
+      return res.data;
+    },
+    openMeetLateWindow: async (payload) => {
+      const res = await regService.openMeetLateWindow(payload, await ctxOf(meetId));
+      if (!res.ok) throw new Error(res.message);
+      return res.data;
+    },
+  });
+
+  await detail.onPublish();
+  assert.equal(detail.data.error, '');
+  assert.equal(detail.data.notice, '报名已发布');
+
+  await detail.onSubmitLateWindow();
+  assert.equal(detail.data.error, '');
+  assert.equal(detail.data.notice, '补报窗口已开放');
+});
+

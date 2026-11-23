@@ -22,7 +22,7 @@
  */
 
 const { loadSchoolRankView, describeSearch } = require('../../services/rank-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const space = require('../../services/association-space');
 const schoolSession = require('../../services/school-session');
@@ -33,6 +33,10 @@ Component({
     // 组件默认样式隔离，app.wxss 里的 .card / .pool-tabs / .btn 等全局类进不来。
     // apply-shared 让全局与所在页面的样式渗入组件，本面板的样式仍不外泄。
     styleIsolation: 'apply-shared',
+  },
+
+  properties: {
+    active: { type: Boolean, value: true },
   },
 
   data: {
@@ -48,7 +52,7 @@ Component({
     // 初值给空对象而不是 null，WXML 里的 {{view.xxx}} 才不会报错。
     view: {},
     /** 开发期在页脚标注数据来源 */
-    isMock,
+    isMock: false,
 
     // ---------- 按名字筛选 ----------
     // 完整榜单留在 this.view 里，面板上只渲染筛选后的结果。这样每敲一个字
@@ -69,6 +73,7 @@ Component({
 
   lifetimes: {
     attached() {
+      this.setData({ isMock: isMockNow() });
       this.onLoad();
     },
     detached() {
@@ -101,7 +106,7 @@ Component({
      * 因此紧随其后的 onShow 会被挡掉，此后每次切回来都重算。
      */
     onShow() {
-      if (!this.loaded) return undefined;
+      if (!this.loaded || this.data.active === false) return undefined;
       return this.refresh();
     },
 

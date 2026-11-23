@@ -16,10 +16,11 @@ const contextCache = require('./context-cache.js');
  * `now` 不缓存：时间判定每次都要新鲜。
  */
 async function buildSchoolContext({
-  repo, openId = '', actorId = '', scope, now = new Date(), action = '',
+  repo, openId = '', actorId = '', scope, now = new Date(), action = '', inTx = false,
 }) {
   const target = schoolScope(scope);
-  const cacheable = contextCache.isReadAction(action);
+  const serial = Boolean(inTx || (repo && repo.inTx));
+  const cacheable = !serial && contextCache.isReadAction(action);
   const cacheKey = cacheable ? contextCache.keyOf(target, openId, actorId) : '';
   // 记下「这次读是几点开始的」：buildSchoolContext 要跨 3~5 次读库，期间若有写请求
   // 做了失效，这份结果是失效前的快照，不能写回缓存（见 context-cache.js 的 set）。
@@ -29,11 +30,21 @@ async function buildSchoolContext({
     if (cached) return Object.freeze({ repo, ...target, now, ...cached });
     readStartedAt = Date.now();
   }
-  const [school, schoolAssociation, actor] = await Promise.all([
-    repo.schools.getById(target.schoolId),
-    repo.schoolAssociations.getById(schoolAssociationKey(target)),
-    actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null,
-  ]);
+  const readActor = () => (actorId ? repo.users.getById(actorId) : openId ? repo.users.getByOpenId(openId) : null);
+  let school;
+  let schoolAssociation;
+  let actor;
+  if (serial) {
+    school = await repo.schools.getById(target.schoolId);
+    schoolAssociation = await repo.schoolAssociations.getById(schoolAssociationKey(target));
+    actor = await readActor();
+  } else {
+    [school, schoolAssociation, actor] = await Promise.all([
+      repo.schools.getById(target.schoolId),
+      repo.schoolAssociations.getById(schoolAssociationKey(target)),
+      readActor(),
+    ]);
+  }
   // 【业务状态要带 code，别当基础设施故障】（2026-10-29 第十一轮审计 P2-6）
   // 这两句 throw 发生在处理器之前，入口只把它兜成「服务异常，请稍后再试」，
   // 而模拟端页面拿到的是原文案——同一个失败两种说法，且「没启用协会」这种
@@ -49,11 +60,22 @@ async function buildSchoolContext({
     err.code = 'ASSOCIATION_DISABLED';
     throw err;
   }
-  const [member, role, membership] = actor ? await Promise.all([
-    repo.schoolMembers.getById(schoolMemberKey(actor._id, target.schoolId)),
-    repo.schoolRoles.getById(schoolRoleKey(actor._id, target.schoolId)),
-    repo.memberships.get(schoolMembershipKey(actor._id, target)),
-  ]) : [null, null, null];
+  let member = null;
+  let role = null;
+  let membership = null;
+  if (actor) {
+    if (serial) {
+      member = await repo.schoolMembers.getById(schoolMemberKey(actor._id, target.schoolId));
+      role = await repo.schoolRoles.getById(schoolRoleKey(actor._id, target.schoolId));
+      membership = await repo.memberships.get(schoolMembershipKey(actor._id, target));
+    } else {
+      [member, role, membership] = await Promise.all([
+        repo.schoolMembers.getById(schoolMemberKey(actor._id, target.schoolId)),
+        repo.schoolRoles.getById(schoolRoleKey(actor._id, target.schoolId)),
+        repo.memberships.get(schoolMembershipKey(actor._id, target)),
+      ]);
+    }
+  }
   const owned = (doc) => doc && doc.schoolId === target.schoolId && doc.userId === actor._id ? doc : null;
   // openId 供注册平台账号（M3-d）取用：尚无账号时只能凭微信身份开户，actorId 还不存在。
   // 云端按 OpenID 解析 actor；模拟端按 actorId 解析，回填该账号的 openId 以对齐语义。

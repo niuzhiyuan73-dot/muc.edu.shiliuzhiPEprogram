@@ -50,13 +50,16 @@ async function collegeNamesOf(ctx) {
 async function getMeetStandings(payload = {}, ctx) {
   if (!meetReadable(ctx) || !ctx.meetId) return refused('请先登录');
 
-  const [meet, standings, names, scope, publications] = await Promise.all([
+  const [meet, standings, scope, publications] = await Promise.all([
     ctx.repo.sportsMeets.getById(ctx.meetId),
     ctx.repo.forMeet(scopeOf(ctx)).sportsMeetStandings.list(),
-    collegeNamesOf(ctx),
     ctx.repo.forMeet(scopeOf(ctx)).sportsMeetColleges.list(),
     ctx.repo.forMeet(scopeOf(ctx)).sportsMeetPublications.list(),
   ]);
+  const names = new Map();
+  for (const row of scope) {
+    if (row && row.schoolId === ctx.schoolId) names.set(row.collegeId, row.name || row.collegeId);
+  }
   if (!meet || meet.schoolId !== ctx.schoolId || meet.status === 'deleted') {
     return refused('运动会不存在或已删除');
   }

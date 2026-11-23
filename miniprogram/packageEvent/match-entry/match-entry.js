@@ -19,7 +19,7 @@
  * ============================================================
  */
 
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const space = require('../../services/association-space');
 const schoolSession = require('../../services/school-session');
 const associationScope = require('../../services/association-scope');
@@ -68,7 +68,7 @@ Page({
     submitting: false,
     /** 当前登录态 */
     auth: { loggedIn: false },
-    isMock,
+    isMock: false,
 
     /** 不能录入时的原因，非空就在页面上顶掉整张表单 */
     blockReason: '',
@@ -156,6 +156,7 @@ Page({
    */
   onLoad(query) {
     this.matchId = (query && query.matchId) || '';
+    this.setData({ isMock: isMockNow() });
     return this.init();
   },
 

@@ -60,6 +60,21 @@ const SCOPE_ONLY_INVALIDATION = new Set([
 ]);
 
 /**
+ * 会改写身份 / 角色 / 学校 / 协会 / 运动会届次上下文文档的写动作。
+ * 只有命中此白名单才触发 `contextCache.invalidateAll()`；其余纯业务写动作
+ * （普通录分、报名、排程、小组、训练、公告、跨校比赛等）不再打穿全容器缓存。
+ */
+const IDENTITY_INVALIDATION_ACTIONS = new Set([
+  'registerSchoolAccount', 'applySchoolMembership', 'reviewSchoolMembership',
+  'grantSchoolPermission', 'updateSchoolProfile', 'applySchoolTransfer',
+  'reviewSchoolTransfer', 'cancelSchoolTransfer',
+  'createSportsMeet', 'updateMeetDraft', 'publishMeetRegistration',
+  'deleteSportsMeet', 'finishSportsMeet', 'appointMeetChiefJudge',
+  'revokeMeetChiefJudge', 'grantMeetCollegeLead', 'revokeMeetCollegeLead',
+  'saveMeetJudgeScore', 'submitMeetJudgeScore',
+]);
+
+/**
  * 把处理器返回统一成协议 2 的信封形状（2026-10-28 第十轮只读审计 P1）。
  *
  * 【为什么要收这一道】
@@ -157,11 +172,9 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
     throw err;
   } finally {
     if (!readOnly) {
-      // 纯比赛类写只失效本范围（见 SCOPE_ONLY_INVALIDATION）；其余全清。
-      // 运动会没有 association，因此不进白名单，走全清。
       if (SCOPE_ONLY_INVALIDATION.has(event.action) && event.association) {
         contextCache.invalidateScope(event.schoolId, event.association);
-      } else {
+      } else if (IDENTITY_INVALIDATION_ACTIONS.has(event.action)) {
         contextCache.invalidateAll();
       }
     }

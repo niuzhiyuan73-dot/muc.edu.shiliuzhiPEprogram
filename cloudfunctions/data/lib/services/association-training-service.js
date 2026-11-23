@@ -113,10 +113,23 @@ const signupAuditKey = (registrationId, action, revision) =>
 
 /* --------------------------------------------------------------- 纯工具 */
 
+const { isCalendarDate } = require('./meet-time.js');
+
 /** 解析时间输入（ISO 串 / 时间戳 / Date）为毫秒；无效返回 null */
 function parseTime(value) {
   if (value === null || value === undefined || value === '') return null;
-  const ms = value instanceof Date ? value.getTime() : Date.parse(value);
+  if (value instanceof Date) {
+    const ms = value.getTime();
+    return Number.isFinite(ms) ? ms : null;
+  }
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  const datePrefix = /^(\d{4}-\d{2}-\d{2})(?:$|[ T])/.exec(raw);
+  if (datePrefix && !isCalendarDate(datePrefix[1])) return null;
+  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/.exec(raw);
+  const normalized = naive ? `${naive[1]}T${naive[2]}:${naive[3] || '00'}+08:00` : raw;
+  const ms = Date.parse(normalized);
   return Number.isFinite(ms) ? ms : null;
 }
 
@@ -744,10 +757,10 @@ async function removeTrainingRegistration(payload = {}, ctx) {
   if (typeof payload.userId !== 'string' || !payload.userId) return ok(refused('缺少目标成员'));
   const reason = text(payload.reason, 200, { label: '移除原因' });
   if (!reason.ok) return ok(refused(reason.message));
-  let pointsChanged = false;
   let pointsNeedRefresh = false;
 
   const result = await ctx.repo.transaction(async tx => {
+    pointsNeedRefresh = false;
     const fresh = await freshContext(tx, ctx);
     if (!canManageAssociationSpace(fresh)) return refused('只有协会负责人及以上可以移除报名');
     const training = await tx.associationTrainings.getById(payload.trainingId);
@@ -769,19 +782,18 @@ async function removeTrainingRegistration(payload = {}, ctx) {
       action: 'removeTrainingRegistration', schoolId: fresh.schoolId, association: fresh.association,
       actorId: fresh.actorId, trainingId: training._id, targetUserId: payload.userId,
       reason: reason.value, at: nowIso });
-    // 移除「已确认签到」的报名才会撤掉一条积分事实；pending / 未提交的移除不动分，
-    // 别为它们白跑一次重算。
+    // 移除「已确认签到」的报名才会撤掉一条积分事实；增量成功时已在事务内原子扣分，
+    // 仅在未能增量维护（needsRefresh）时才回退全表重算。
     if ((reg.attendanceStatus || ATTENDANCE_STATUS.NOT_SUBMITTED) === ATTENDANCE_STATUS.CONFIRMED) {
       const settled = await applyTrainingFactDelta(tx, fresh, {
         userId: payload.userId, delta: -1,
         effectiveAt: reg.pointEffectiveAt || training.startAt,
       });
-      pointsChanged = settled.applied;
       pointsNeedRefresh = settled.needsRefresh;
     }
     return { ok: true, training: trainingSummary(next, fresh.now.getTime()), message: '' };
   });
-  if (result && result.ok && (pointsChanged || pointsNeedRefresh)) await refreshAfterWrite(ctx);
+  if (result && result.ok && pointsNeedRefresh) await refreshAfterWrite(ctx);
   return ok(result);
 }
 

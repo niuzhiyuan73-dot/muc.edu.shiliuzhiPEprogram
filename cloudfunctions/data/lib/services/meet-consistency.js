@@ -90,6 +90,12 @@ function liveMeet(ctx) {
   return Boolean(ctx.meet && ctx.meet.schoolId === ctx.schoolId && ctx.meet.status !== 'deleted');
 }
 
+// 重抽在场次上推进指派版本，原指派随之失效。旧数据的场次与指派都按版本 0 处理。
+function isCurrentJudgeAssignment(session, assignment) {
+  return Boolean(session && !session.voidedAt && assignment
+    && (session.judgeAssignmentRevision || 0) === (assignment.judgeAssignmentRevision || 0));
+}
+
 /**
  * 某次发布的明细行：优先取派生索引，缺失时回落到发布快照里的 rows。
  *
@@ -123,6 +129,6 @@ function publishedRowsOf(publication, rows) {
 }
 
 module.exports = {
-  unchanged, unchangedEvent, touchEvent, liveMeet, publishedRowsOf,
+  unchanged, unchangedEvent, touchEvent, liveMeet, publishedRowsOf, isCurrentJudgeAssignment,
   scheduleRevisionOf, touchScheduleRevision, unchangedScheduleRevision,
 };

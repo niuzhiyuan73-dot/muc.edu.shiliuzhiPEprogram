@@ -134,8 +134,12 @@ Page({
   },
 
   onUnload() {
-    clearTimeout(this.candidateTimer);
     this.unloaded = true;
+    this.chiefSeq = (this.chiefSeq || 0) + 1;
+    clearTimeout(this.candidateTimer);
+    clearTimeout(this.chiefTimer);
+    this.candidateTimer = null;
+    this.chiefTimer = null;
   },
 
   update(values) {
@@ -834,16 +838,22 @@ Page({
     return undefined;
   },
 
-  async onChiefKeyword(event) {
+  onChiefKeyword(event) {
     const chiefKeyword = event.detail.value;
     this.update({ chiefKeyword });
-    try {
-      const result = await this.client().listMeetJudgeCandidates({ keyword: chiefKeyword });
-      this.update({ chiefCandidates: (result.items || []).slice(0, 20) });
-    } catch (err) {
-      this.update({ chiefCandidates: [] });
-    }
-    return undefined;
+    if (this.chiefTimer) clearTimeout(this.chiefTimer);
+    this.chiefTimer = setTimeout(async () => {
+      this.chiefTimer = null;
+      const seq = this.chiefSeq = (this.chiefSeq || 0) + 1;
+      try {
+        const result = await this.client().listMeetJudgeCandidates({ keyword: chiefKeyword });
+        if (this.unloaded || seq !== this.chiefSeq) return;
+        this.update({ chiefCandidates: (result.items || []).slice(0, 20) });
+      } catch (err) {
+        if (this.unloaded || seq !== this.chiefSeq) return;
+        this.update({ chiefCandidates: [] });
+      }
+    }, 250);
   },
 
   onPickChief(event) {
@@ -852,6 +862,7 @@ Page({
   },
 
   async submitChiefJudge(userId) {
+    if (this.data.busy) return undefined;
     this.update({ busy: true, error: '', notice: '' });
     try {
       await this.client().appointMeetChiefJudge({ userId });

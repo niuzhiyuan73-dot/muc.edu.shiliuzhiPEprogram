@@ -556,12 +556,14 @@ async function listSchoolEventSignups(payload = {}, ctx) {
   const memberById = new Map(signupUsers.map(member => [member._id, member]));
   const collegeNameById = new Map(colleges.map(row => [row.collegeId, row.name]));
   // 报名者的学院取自名册（权威值），不是账号上的历史字段
-  const memberRows = await Promise.all(rows.map(row =>
-    ctx.repo.schoolMembers.getById(schoolMemberKey(row.userId, ctx.schoolId))));
+  const memberIds = [...new Set(rows.map(row => schoolMemberKey(row.userId, ctx.schoolId)))];
+  const memberRows = memberIds.length
+    ? await ctx.repo.forScope(ctx).schoolMembers.listByIds(memberIds)
+    : [];
   const collegeIdByUser = new Map();
-  memberRows.forEach((row, index) => {
-    if (row && row.collegeId) collegeIdByUser.set(rows[index].userId, row.collegeId);
-  });
+  for (const row of memberRows) {
+    if (row && row.userId && row.collegeId) collegeIdByUser.set(row.userId, row.collegeId);
+  }
   const collegeOf = userId => collegeNameById.get(collegeIdByUser.get(userId)) || '';
 
   const signups = rows.map(row => {

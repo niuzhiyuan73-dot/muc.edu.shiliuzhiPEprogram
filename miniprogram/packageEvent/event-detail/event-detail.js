@@ -31,7 +31,7 @@ const { loadSchoolEventDetailView } = require('../../services/school-event-view.
 const { buildPickerRows, pickerEmptyText } = require('../../services/match-entry-view.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
 const { applyLiveRows } = require('../../services/live-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -50,7 +50,7 @@ Page(withDetailExperience({
     /** 视图模型，形状见 services/events-view.js */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 写操作进行中，防止连点 */
     acting: false,
     /** 签表展示方式：chart 横向晋级泳道 / list 逐场明细（默认图形，可回退） */
@@ -98,6 +98,7 @@ Page(withDetailExperience({
     this.destroyed = false;
     this.visible = true;
     this.refreshSeq = 0;
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
@@ -121,6 +122,11 @@ Page(withDetailExperience({
     // 结果是旧页面在后台空转、新页面的比分停更。
     this.destroyed = true;
     this.visible = false;
+    this.refereeRequest = (this.refereeRequest || 0) + 1;
+    if (this.refereeTimer) {
+      clearTimeout(this.refereeTimer);
+      this.refereeTimer = null;
+    }
     if (this.liveHandle) {
       this.liveHandle();
       this.liveHandle = null;
@@ -287,8 +293,15 @@ Page(withDetailExperience({
     if (this.data.acting) return undefined;
 
     this.setData({ acting: true });
-    const result = await write();
-    this.setData({ acting: false });
+    let result;
+    try {
+      result = await write();
+    } catch (err) {
+      this.showToast((err && err.message) || '操作失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: false });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '操作失败');
@@ -373,9 +386,16 @@ Page(withDetailExperience({
     if (!confirmed) return undefined;
 
     this.setData({ acting: true });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .drawSchoolEvent({ eventId: this.eventId, seedValue: Date.now(), manualOrder });
-    this.setData({ acting: false });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .drawSchoolEvent({ eventId: this.eventId, seedValue: Date.now(), manualOrder });
+    } catch (err) {
+      this.showToast((err && err.message) || '抽签失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: false });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && result.message) || '抽签失败');
@@ -535,25 +555,34 @@ Page(withDetailExperience({
 
   /** 按关键字刷新面板列表（输入有防抖，见 onInputRefereeKeyword） */
   async applyRefereeKeyword(keyword, append = false) {
+    const request = this.refereeRequest = (this.refereeRequest || 0) + 1;
     this.setData({ 'referee.loading': true });
-    const page = await this.loadPickerPage(keyword, append);
-    if (!page.ok) {
+    try {
+      const page = await this.loadPickerPage(keyword, append);
+      if (this.destroyed || request !== this.refereeRequest) return;
+      if (!page.ok) {
+        this.setData({ 'referee.loading': false, 'referee.rows': append ? this.data.referee.rows : [],
+          'referee.hasMore': false, 'referee.emptyText': '候选读取失败，请重试' });
+        return;
+      }
+      const merged = append
+        ? [...this.data.referee.rows, ...buildPickerRows(page.rows, '', this.data.referee.selectedId)]
+        : buildPickerRows(page.rows, '', this.data.referee.selectedId);
+      const seen = new Set();
+      const rows = merged.filter((row) => (seen.has(row.id) ? false : seen.add(row.id)));
+      this.setData({
+        'referee.keyword': keyword,
+        'referee.rows': rows,
+        'referee.hasMore': page.hasMore,
+        'referee.loading': false,
+        'referee.emptyText': pickerEmptyText(keyword),
+      });
+    } catch (err) {
+      if (this.destroyed || request !== this.refereeRequest) return;
+      console.error('[event-detail] 裁判候选加载失败', err);
       this.setData({ 'referee.loading': false, 'referee.rows': append ? this.data.referee.rows : [],
         'referee.hasMore': false, 'referee.emptyText': '候选读取失败，请重试' });
-      return;
     }
-    const merged = append
-      ? [...this.data.referee.rows, ...buildPickerRows(page.rows, '', this.data.referee.selectedId)]
-      : buildPickerRows(page.rows, '', this.data.referee.selectedId);
-    const seen = new Set();
-    const rows = merged.filter((row) => (seen.has(row.id) ? false : seen.add(row.id)));
-    this.setData({
-      'referee.keyword': keyword,
-      'referee.rows': rows,
-      'referee.hasMore': page.hasMore,
-      'referee.loading': false,
-      'referee.emptyText': pickerEmptyText(keyword),
-    });
   },
 
   /** 打开指派面板。当前是谁当头一版勾出来 */
@@ -633,9 +662,16 @@ Page(withDetailExperience({
     if (!matchId) return undefined;
 
     this.setData({ refereeActing: true });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .assignSchoolMatchReferee({ matchId, refereeId });
-    this.setData({ refereeActing: false });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .assignSchoolMatchReferee({ matchId, refereeId });
+    } catch (err) {
+      this.showToast((err && err.message) || '指派失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ refereeActing: false });
+    }
 
     if (!result.ok) {
       this.showToast(result.message || '指派失败');

@@ -45,14 +45,9 @@ async function matchCountsByAssociation(userId) {
   const space = require('./association-space.js');
   const schoolId = schoolSession.getSchoolId() || LEGACY_SCHOOL_ID;
 
-  const results = [];
-  for (const assoc of activeAssociations()) {
+  return Promise.all(activeAssociations().map(async (assoc) => {
     try {
       const client = space.forScope({ schoolId, association: assoc.id });
-      // 【只取评级计数，不算积分】（2026-10-26 只读审查 P2-6）
-      // 启动时逐个协会问「我打了多少场」，原先把每个协会的整校积分都算一遍：
-      // 会籍、账号、评级、赛事、训练、训练报名全部整表读，串行 8 个协会就是
-      // 8 倍。ratingsOnly 只点读本人这几条评级（人数 × 池数），与全校规模无关。
       const result = await client.getSchoolMemberStats({ userIds: [userId], ratingsOnly: true });
       const row = result && result.ok !== false && Array.isArray(result.members)
         ? result.members.find(member => member.userId === userId)
@@ -61,15 +56,12 @@ async function matchCountsByAssociation(userId) {
         ? Object.values(row.ratings || {}).reduce(
           (sum, rating) => sum + (Number(rating && rating.matchCount) || 0), 0)
         : 0;
-      results.push({ id: assoc.id, matchCount });
+      return { id: assoc.id, matchCount };
     } catch (err) {
-      // 云端把「无权读取」与基础设施故障都收敛成抛出；这里按 0 场处理，
-      // 规则不因单个协会的读取失败而中断（理由见模块头）。
       console.warn(`[association-usage] 读取 ${assoc.id} 的场次失败，按 0 处理`, err);
-      results.push({ id: assoc.id, matchCount: 0 });
+      return { id: assoc.id, matchCount: 0 };
     }
-  }
-  return results;
+  }));
 }
 
 /**

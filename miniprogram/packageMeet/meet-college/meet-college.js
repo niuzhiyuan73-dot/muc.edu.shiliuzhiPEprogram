@@ -75,6 +75,9 @@ Page({
 
   onUnload() {
     this.unloaded = true;
+    this.leadSeq = (this.leadSeq || 0) + 1;
+    clearTimeout(this.leadTimer);
+    this.leadTimer = null;
   },
 
   update(values) {
@@ -319,14 +322,17 @@ Page({
   },
 
   async loadLeadCandidates(keyword) {
+    const seq = this.leadSeq = (this.leadSeq || 0) + 1;
     try {
       const result = await this.client().listMeetJudgeCandidates({ keyword });
+      if (this.unloaded || seq !== this.leadSeq) return undefined;
       // 只列**本学院**的在册成员：服务端要求部长是该学院成员，
       // 摆出别院的人只会让管理员点了才收到「不是本学院在册会员」。
       const collegeId = this.data.collegeId;
       const rows = (result.items || []).filter((row) => !collegeId || row.collegeId === collegeId);
       this.update({ leadCandidates: rows.slice(0, 20) });
     } catch (err) {
+      if (this.unloaded || seq !== this.leadSeq) return undefined;
       this.update({ leadCandidates: [], error: (err && err.message) || '成员加载失败' });
     }
     return undefined;
@@ -335,7 +341,11 @@ Page({
   onLeadKeyword(event) {
     const leadKeyword = event.detail.value;
     this.update({ leadKeyword });
-    return this.loadLeadCandidates(leadKeyword);
+    if (this.leadTimer) clearTimeout(this.leadTimer);
+    this.leadTimer = setTimeout(() => {
+      this.leadTimer = null;
+      this.loadLeadCandidates(leadKeyword);
+    }, 250);
   },
 
   onPickLead(event) {

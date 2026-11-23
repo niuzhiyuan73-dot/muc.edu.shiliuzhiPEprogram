@@ -103,9 +103,11 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
   if (!requestPattern.test(payload.requestId || '') || !Number.isInteger(payload.expectRevision)) return ok(refused('缺少请求编号或比赛版本，请刷新后重试'));
   const outside = await readTarget(payload, ctx);
   if (!outside.ok) return ok(outside);
-  const related = dependencies ? (await outside.repo.teamMatches.listByEvent(outside.event._id))
+  const needDownstream = Boolean(dependencies && payload.approve === true
+    && outside.match.footballPublished && outside.event.format === 'single_elim');
+  const related = needDownstream ? (await outside.repo.teamMatches.listByEvent(outside.event._id))
     .filter(m => m._id !== outside.match._id) : [];
-  if (related.length > 70) return ok(refused('关联赛程超过单次处理容量，请分届办赛'));
+  if (related.length > 55) return ok(refused('关联赛程超过单次处理容量，请分届办赛'));
   const basis = outside.event.revision || 0;
   return ok(await ctx.repo.transaction(async root => {
     const context = await buildSchoolContext({ repo: root, actorId: ctx.actorId, scope: ctx, now: ctx.now });
@@ -120,7 +122,7 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
     const previous = (match.footballRequests || []).find(r => r.key === key);
     if (previous) return previous.result;
     if (match.revision !== payload.expectRevision) return refused('这场比赛刚被改过，请刷新后重试');
-    if (dependencies && (event.revision || 0) !== basis) return refused('赛事刚被改过，请刷新后重试');
+    if (needDownstream && (event.revision || 0) !== basis) return refused('赛事刚被改过，请刷新后重试');
     if (event.status === 'canceled' || match.status === 'canceled') return refused('赛事或比赛已取消');
     const rosters = {};
     const teams = {};

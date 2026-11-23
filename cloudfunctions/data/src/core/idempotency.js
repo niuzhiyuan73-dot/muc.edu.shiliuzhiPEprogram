@@ -203,12 +203,5 @@ function collegeLineupNaturalKey(tieId, college) {
 module.exports = {
   digest,
   matchNaturalKey,
-  announcementNaturalKey,
-  eventNaturalKey,
   memberKey,
-  membershipKey,
-  signupNaturalKey,
-  collegeEventNaturalKey,
-  collegeEntryNaturalKey,
-  collegeLineupNaturalKey,
 };

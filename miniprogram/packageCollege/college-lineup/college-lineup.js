@@ -49,11 +49,17 @@ Page({
    * @param {Object} [query] 路由参数，带 tieId / eventId / college
    */
   onLoad(query = {}) {
+    this.unloaded = false;
     this.tieId = query.tieId || '';
     this.eventId = query.eventId || '';
     // 替哪一侧排阵：管理员与协会负责人两侧都进得来，由详情页指明；缺省取本人学院
     this.college = safeRouteId(query.college);
     return this.refresh();
+  },
+
+  onUnload() {
+    this.unloaded = true;
+    this.loadEpoch = (this.loadEpoch || 0) + 1;
   },
 
   /** 当前「学校 + 协会」范围。读写复用它，避免异步期间全局范围被切走 */
@@ -90,9 +96,11 @@ Page({
    * @returns {Promise<void>}
    */
   async refresh() {
+    const epoch = this.loadEpoch = (this.loadEpoch || 0) + 1;
     const scope = this.currentScope();
     this.scope = scope;
     const session = await this.readSession();
+    if (this.unloaded || epoch !== this.loadEpoch) return undefined;
     const actorId = (session && session.user && session.user.userId) || null;
     const collegeId = (session && session.account && session.account.collegeId) || '';
 
@@ -104,6 +112,7 @@ Page({
         college: this.college,
         collegeId,
       });
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       // 采纳装载器探测出的真实编号再用于写：query 在微信开发者工具 / 真机里是
       // 原样透传的（未解码），继续拿路由原值提交排阵会被服务端答「找不到这个大场」
       // （见 utils/route-query.js）。大场编号与它所属的赛事编号都要落回实例。
@@ -112,6 +121,7 @@ Page({
       this.loaded = true;
       this.setData({ loading: false, error: '', view, themeClass: currentThemeClass() });
     } catch (err) {
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       console.error('[college-lineup] 加载失败', err);
       this.loaded = true;
       this.setData({ loading: false, error: '排阵页加载失败，请返回重试',
@@ -169,9 +179,16 @@ Page({
     }));
 
     this.setData({ submitting: true });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .submitCollegeLineup({ tieId: this.tieId, college: view.college, entries });
-    this.setData({ submitting: false });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .submitCollegeLineup({ tieId: this.tieId, college: view.college, entries });
+    } catch (err) {
+      this.showToast((err && err.message) || '提交失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ submitting: false });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '提交失败');

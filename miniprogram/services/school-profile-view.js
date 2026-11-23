@@ -74,7 +74,7 @@ async function loadSchoolProfileEditView(options = {}) {
     allowed: true,
     blockReason: '',
     nicknameMax: NICKNAME_MAX,
-    form: { nickName: display.nickName, avatarUrl: (member && member.avatarUrl) || '' },
+    form: { nickName: display.nickName, avatarUrl: (member && member.avatarUrl) || user.avatarUrl || '' },
     avatarText: avatarTextOf(display.nickName),
     realName: display.realName,
     genderText: (member && GENDER_LABEL[member.gender]) || '',

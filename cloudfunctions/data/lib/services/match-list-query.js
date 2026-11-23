@@ -72,7 +72,9 @@ function matchListWhere(scope, filter, cursor) {
   return and.length === 1 ? where : { $and: and };
 }
 
-function memoryMatchPage(docs, scope, { filter = {}, limit, offset = 0, cursor = null }) {
+function memoryMatchPage(docs, scope, { filter = {}, limit = 20, offset = 0, cursor = null }) {
+  const raw = limit === undefined || limit === null ? 20 : Number(limit);
+  const size = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 100)) : 20;
   const base = docs.filter(doc => isListMatch(doc) && doc.schoolId === scope.schoolId &&
     doc.association === scope.association &&
     (filter.pool === undefined || doc.pool === filter.pool) &&
@@ -82,8 +84,8 @@ function memoryMatchPage(docs, scope, { filter = {}, limit, offset = 0, cursor =
   const rows = base.filter(doc => filter.status === undefined || doc.status === filter.status).sort(compareMatches);
   const remaining = cursor ? rows.filter(doc => compareMatches(doc, { matchTime: cursor.matchTime, _id: cursor.id }) > 0) : rows;
   const start = cursor ? 0 : offset;
-  return { rows: remaining.slice(start, start + limit), total: rows.length, pendingCount,
-    hasMore: remaining.length > start + limit };
+  return { rows: remaining.slice(start, start + size), total: rows.length, pendingCount,
+    hasMore: remaining.length > start + size };
 }
 
 module.exports = {

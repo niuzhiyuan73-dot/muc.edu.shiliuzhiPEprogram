@@ -94,13 +94,13 @@ function toMatchTime(value) {
   if (value === null || value === undefined) return { ok: true, value: null };
   const raw = String(value).trim();
   if (raw === '') return { ok: true, value: null };
-  // 手填的「年月日 + 时分」先过日历日回读：`2026-02-30 10:00` 会被 Date.parse 静默进位成
-  // 03-02，比赛时间白白错两天（2026-10-28 审计 2 B-2）。时分超范围 Date.parse 自己会拒。
-  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}):(\d{2})$/.exec(raw);
-  if (naive && !isCalendarDate(naive[1])) return { ok: false, value: null };
-  // `YYYY-MM-DD HH:mm` 在部分运行时会被当成非法日期；补成显式带时区的 ISO
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(raw)
-    ? `${raw.replace(' ', 'T')}:00+08:00`
+  // 任何 YYYY-MM-DD 开头的串都先过日历日回读，防止 2026-02-30 静默进位成 03-02。
+  const datePrefix = /^(\d{4}-\d{2}-\d{2})(?:$|[ T])/.exec(raw);
+  if (datePrefix && !isCalendarDate(datePrefix[1])) return { ok: false, value: null };
+  // 无时区的 `YYYY-MM-DD HH:mm(:ss)?` / `YYYY-MM-DDTHH:mm(:ss)?` 统一补 +08:00，避免云端 UTC 偏移 8 小时。
+  const naive = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})(?::(\d{2}))?$/.exec(raw);
+  const normalized = naive
+    ? `${naive[1]}T${naive[2]}:${naive[3] || '00'}+08:00`
     : raw;
   const time = Date.parse(normalized);
   if (!Number.isFinite(time)) return { ok: false, value: null };
@@ -307,7 +307,9 @@ async function listTeamEvents(payload = {}, ctx) {
 
   // 「我能不能报名」：本院院队的报名处在什么状态。
   // 院队编号是确定性派生的，所以不必先把队读出来就能与报名记录比对。
-  const myCollegeId = (ctx.schoolMember && ctx.schoolMember.collegeId) || '';
+  const managedCollegeId = (ctx.membership && ctx.membership.status === 'active'
+    && ctx.membership.role === 'staff' && ctx.membership.collegeId) || '';
+  const myCollegeId = managedCollegeId || (ctx.schoolMember && ctx.schoolMember.collegeId) || '';
   const myTeamId = myCollegeId ? collegeTeamKey(myCollegeId, ctx) : '';
   const canManageMyCollege = Boolean(myCollegeId) && canSchoolAction(ctx, 'manageCollege', {
     schoolId: ctx.schoolId, association: ctx.association, collegeId: myCollegeId,
@@ -493,7 +495,9 @@ async function getTeamEvent(payload = {}, ctx) {
  * 谁能看到谁的候选：校管看全部学院（代报），学院负责人只看本院，其余人不给。
  */
 function collegeEntryCandidates({ ctx, dir, activeCount, entered, entryMin }) {
-  const myCollegeId = dir.collegeIdOf(ctx.actorId) || '';
+  const managedCollegeId = (ctx.membership && ctx.membership.status === 'active'
+    && ctx.membership.role === 'staff' && ctx.membership.collegeId) || '';
+  const myCollegeId = managedCollegeId || dir.collegeIdOf(ctx.actorId) || '';
   const canPickAny = canManageAssociationSpace(ctx);
   const managesOwn = Boolean(myCollegeId) && canSchoolAction(ctx, 'manageCollege', {
     schoolId: ctx.schoolId, association: ctx.association, collegeId: myCollegeId,
@@ -567,8 +571,8 @@ async function commitEventChange(ctx, { event, reads = [], writes = [], nextEven
     const key = JSON.stringify([row.key, row.doc._id]);
     if (!expected.has(key)) expected.set(key, { key: row.key, id: row.doc._id, doc: null });
   }
-  // 身份 6 点读 + 赛事 1 点读/1 写；范围 set 的归属读复用事务快照。
-  if (8 + expected.size + writes.length > 96) return refused(
+  // 身份 6 点读 + 赛事 1 点读/1 写，其余按实际预读的记录和写入数计费。
+  if (8 + expected.size + writes.length > 100) return refused(
     '本次处理规模超过云端单事务安全容量，请减少本次场次或参赛队数后重试', { code: 'TEAM_BATCH_LIMIT' });
   return ctx.repo.transaction(async root => {
     const fresh = await freshContext(root, ctx);
@@ -576,7 +580,9 @@ async function commitEventChange(ctx, { event, reads = [], writes = [], nextEven
     if (!canManageAssociationSpace(fresh)) return refused('当前已无赛事管理权限');
     const tx = root.forScope(fresh);
     const current = await tx.teamEvents.getById(event._id);
-    if (!sameRecord(current, event)) return refused('赛事刚被改过，请刷新后重试');
+    if (!current || Number(current.revision || 0) !== Number(event.revision || 0)) {
+      return refused('赛事刚被改过，请刷新后重试');
+    }
     for (const row of expected.values()) {
       const actual = await tx[row.key].getById(row.id);
       if (!sameRecord(actual, row.doc)) return refused('名单或比赛刚被改过，请刷新后重试');
@@ -848,7 +854,9 @@ async function submitTeamEntry(payload = {}, ctx) {
     const currentTeam = await tx.teams.getById(team._id);
     const currentEntry = await tx.teamEventEntries.getById(key);
     if (!currentEvent || currentEvent.status !== TEAM_EVENT_STATUS.REGISTRATION) return refused('赛事当前不开放报名');
-    if (football && !sameRecord(currentEvent, event)) return refused('赛事或报名刚被改过，请刷新后重试');
+    if (football && Number(currentEvent.revision || 0) !== Number(event.revision || 0)) {
+      return refused('赛事或报名刚被改过，请刷新后重试');
+    }
     if (!currentTeam || currentTeam.status !== TEAM_STATUS.ACTIVE
       || (currentTeam.captainId !== fresh.actorId && !canManageAssociationSpace(fresh)
         && !(currentTeam.type === TEAM_TYPE.COLLEGE && canSchoolAction(fresh, 'manageCollege', {
@@ -1327,9 +1335,10 @@ async function drawTeamEvent(payload = {}, ctx) {
     }
   }
 
+  // 报名、审核与锁定名单在同一事务内推进赛事版本。抽签只用锁定报名的队伍编号，
+  // 复核赛事版本即可；已有场次仍逐场复核，避免覆盖刚保存的赛程或录分。
   return ok(await commitEventChange(ctx, { event,
-    reads: [...entries.map(doc => ({ key: 'teamEventEntries', doc })),
-      ...existingMatches.map(doc => ({ key: 'teamMatches', doc }))], writes,
+    reads: existingMatches.map(doc => ({ key: 'teamMatches', doc })), writes,
     nextEvent: { ...event, draw, status: TEAM_EVENT_STATUS.SCHEDULED, revision: revision + 1, updatedAt: now },
     result: { matchCount: writes.length, rounds: rounds.length, byes: draw.byes || [], seed } }));
 }
@@ -1386,11 +1395,10 @@ async function canRecordTeamMatch(match, ctx, repo) {
   if (canManageAssociationSpace(ctx)) return true;
   // 被指派为这一场的记录员，就负责录这一场——指派了却录不了，等于白指派
   if (ctx.actorId && match.recorderId && match.recorderId === ctx.actorId) return true;
-  const sides = await Promise.all([
-    repo.teams.getById(match.teamA),
-    repo.teams.getById(match.teamB),
-  ]);
-  return sides.some(team => inScope(team, ctx) && team.captainId === ctx.actorId);
+  const teamA = await repo.teams.getById(match.teamA);
+  if (inScope(teamA, ctx) && teamA.captainId === ctx.actorId) return true;
+  const teamB = await repo.teams.getById(match.teamB);
+  return inScope(teamB, ctx) && teamB.captainId === ctx.actorId;
 }
 
 /**
@@ -1999,11 +2007,9 @@ async function updateTeamMatchSchedule(payload = {}, ctx) {
         return refused('这位同学不是本协会会员，不能指派');
       }
       if (role === 'referee') {
-        const sides = await Promise.all([
-          tx.teams.getById(match.teamA),
-          tx.teams.getById(match.teamB),
-        ]);
-        if (sides.some(team => team && team.captainId === targetId)) {
+        const teamA = await tx.teams.getById(match.teamA);
+        const teamB = await tx.teams.getById(match.teamB);
+        if ((teamA && teamA.captainId === targetId) || (teamB && teamB.captainId === targetId)) {
           return refused('参赛队队长不能执法自己队的比赛');
         }
       }
@@ -3251,19 +3257,19 @@ async function getTeamRecord(payload = {}, ctx) {
 
 /** 事务内按固定主键读报名快照与统计，禁止用当前球队成员替代比赛名单。 */
 async function liveStatContext(tx, match, event) {
-  return Promise.all(['A', 'B'].map(async side => {
+  const result = [];
+  for (const side of ['A', 'B']) {
     const teamId = side === 'A' ? match.teamA : match.teamB;
-    const [entry, doc] = await Promise.all([
-      tx.teamEventEntries.getById(entryKey(event._id, teamId)),
-      tx.teamMatchStats.getById(statDocKey(match._id, teamId)),
-    ]);
+    const entry = await tx.teamEventEntries.getById(entryKey(event._id, teamId));
+    const doc = await tx.teamMatchStats.getById(statDocKey(match._id, teamId));
     const lineup = lineupOf(match, side);
     const players = ((entry && entry.roster) || [])
       .filter(row => lineup.length === 0 || lineup.includes(row.userId))
       .map(row => ({ userId: row.userId, name: row.name || row.userId,
         no: Number.isInteger(row.no) ? row.no : null }));
-    return { side, teamId, players, doc };
-  }));
+    result.push({ side, teamId, players, doc });
+  }
+  return result;
 }
 
 /** 保留先前填写的统计。已有整场统计继续按整场累计，不擅自分摊到某一节。 */

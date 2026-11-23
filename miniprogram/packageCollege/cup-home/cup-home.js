@@ -383,7 +383,7 @@ Page({
       const result = await this.client().listCollegeEvents(this.query({ offset: this.data.offset }));
       if (this.unloaded || token !== this.requestToken || key !== JSON.stringify(this.query())) return undefined;
       if (result && result.ok === false) throw new Error(result.message || '加载失败');
-      const rows = this.rows.concat(result.events || []);
+      const rows = this.rows.concat(this.collegeRowsOf(result.events || []));
       this.rows = rows;
       this.update({
         busy: false,

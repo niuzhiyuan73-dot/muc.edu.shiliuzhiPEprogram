@@ -73,11 +73,14 @@ test('刷新首屏后旧翻页不会遗留加载锁', async () => {
   } finally { service.forSchoolIdentity = original; }
 });
 
-test('缺本赛季锚点时同一事务使积分物化失效', async () => {
+test('非零积分缺本赛季锚点时同一事务使积分物化失效', async () => {
   const repo = createSchoolMemoryRepo(createSchoolDemoSeed());
   const id = scopeKey(scope);
   await repo.seasons.set(id, { _id: id, ...scope, resetTime: '2026-11-01T00:00:00Z',
     version: 7, pointsSettledVersion: 7, pointsSchemaVersion: points.POINTS_SCHEMA });
+  const memberKey = schoolMemberKey('demo_muc_member', scope.schoolId);
+  const member = await repo.schoolMembers.getById(memberKey);
+  await repo.schoolMembers.set(memberKey, { ...member, seasonPointsByAssociation: { pkb: 4 } });
   const result = await repo.transaction(tx => points.applyTrainingFactDelta(tx,
     { ...scope, now }, { userId: 'demo_muc_member', delta: 1, effectiveAt: now }));
   assert.equal(result.needsRefresh, true);

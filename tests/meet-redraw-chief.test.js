@@ -16,12 +16,15 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
+const { database } = require('../tools/audit-basketball-cloud.cjs');
 const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
 const meetService = require('../miniprogram/services/meet-service.js');
 const leadService = require('../miniprogram/services/meet-college-lead-service.js');
 const reg = require('../miniprogram/services/meet-registration-service.js');
 const schedule = require('../miniprogram/services/meet-schedule-service.js');
 const advance = require('../miniprogram/services/meet-advance-service.js');
+const { getMeetSessionScores } = require('../miniprogram/services/meet-score-service.js');
 const { meetEventKey } = require('../miniprogram/utils/meet-scope.js');
 const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
 
@@ -122,6 +125,73 @@ test('重抽之后可以改赛制（原先只提示「请先删除场次」，�
   assert.equal(reset.ok, true, reset.message);
   const allowed = await meetService.setMeetEventProcedure({ eventKey, rounds: 'final', heatCapacity: 2 }, admin);
   assert.equal(allowed.ok, true, allowed.message);
+});
+
+test('重抽后恢复待排期的决赛，旧裁判任务失效，同一人可重新指派并开赛', async () => {
+  const { repo, meetId, admin, eventKey } = await makeWorld();
+  const procedure = await meetService.setMeetEventProcedure({
+    eventKey, rounds: 'heat_final', heatCapacity: 4, advance: { mode: 'per_heat', count: 1 },
+  }, admin);
+  assert.equal(procedure.ok, true, procedure.message);
+  assert.equal((await advance.drawMeetHeats({ eventKey }, admin)).ok, true);
+  const final = (await sessionsOf(repo, meetId)).find(row => row.round === 'final');
+  const { sessionKey } = final;
+  const chief = await ctxOf(repo, CHIEF, meetId);
+
+  const initial = await schedule.assignMeetJudge({ sessionKey, judgeId: CHIEF }, admin);
+  assert.equal(initial.data.created, true);
+  assert.equal((await schedule.getMyMeetJudgeTasks({}, chief)).data.items.length, 1);
+
+  assert.equal((await advance.resetMeetDraw({ eventKey }, admin)).ok, true);
+  assert.equal((await advance.drawMeetHeats({ eventKey }, admin)).ok, true);
+  const revived = (await sessionsOf(repo, meetId)).find(row => row.sessionKey === sessionKey);
+  assert.ok(revived, '重抽后应重新显示同一主键的决赛场次');
+  assert.equal(revived.judgeCount, 0);
+  assert.deepEqual((await schedule.getMyMeetJudgeTasks({}, chief)).data.items, []);
+  const judgeSessions = await schedule.listMeetEventSessions({ eventKey }, chief);
+  assert.equal(judgeSessions.data.items.find(row => row.sessionKey === sessionKey).assignedToMe, false);
+  assert.equal((await getMeetSessionScores({ sessionKey }, chief)).data.canEnter, false);
+
+  const saved = await schedule.saveMeetSession({ eventKey, round: 'final', index: 1,
+    startAt: '2026-10-25T10:00:00+08:00', venue: '田径场' }, admin);
+  assert.equal(saved.ok, true, saved.message);
+  assert.equal((await schedule.startMeetEvent({ sessionKey }, admin)).ok, false);
+  const assigned = await schedule.assignMeetJudges({ sessionKeys: [sessionKey], judgeIds: [CHIEF] }, admin);
+  assert.equal(assigned.ok, true, assigned.message);
+  assert.equal(assigned.data.created, 1);
+  assert.equal((await schedule.getMyMeetJudgeTasks({}, chief)).data.items.length, 1);
+  assert.equal((await getMeetSessionScores({ sessionKey }, chief)).data.canEnter, true);
+  assert.equal((await schedule.startMeetEvent({ sessionKey }, admin)).ok, true);
+});
+
+test('三队签表按先读后写提交，自动轮空不妨碍重抽，实判结果仍会阻止', async () => {
+  const scope = { schoolId: SCHOOL, meetId: 'm_bye' };
+  const eventKey = meetEventKey(scope.meetId, 'basketball', 'male');
+  const db = database({
+    schools: [{ _id: SCHOOL, schoolId: SCHOOL, status: 'active' }],
+    users: [{ _id: 'admin', platformRole: 'admin', platformStatus: 'active' }],
+    sportsMeets: [{ _id: scope.meetId, ...scope, status: 'running' }],
+    sportsMeetEvents: [{ _id: eventKey, ...scope, status: 'active', scoreType: 'versus', format: 'single_elim' }],
+    sportsMeetEntries: [1, 2, 3].map(i => ({
+      _id: `entry${i}`, ...scope, eventKey, status: 'approved', collegeId: `c0${i}`,
+    })),
+  });
+  const repo = createRepo(db);
+  const admin = await ctxOf(repo, 'admin', scope.meetId);
+  const sessions = () => repo.forMeet(scope).sportsMeetSessions.listByProject(eventKey);
+
+  assert.equal((await advance.drawMeetBracket({ eventKey, seed: 1 }, admin)).ok, true);
+  const ops = db.traces.at(-1).map(row => row.kind);
+  const firstWrite = ops.indexOf('set');
+  assert.ok(firstWrite > 0 && ops.slice(firstWrite).every(kind => kind === 'set'), ops.join(', '));
+  assert.equal((await sessions()).filter(row => row.winnerEntryKey).length, 1, '已有自动轮空结果');
+  assert.equal((await advance.resetMeetDraw({ eventKey }, admin)).ok, true);
+
+  assert.equal((await advance.drawMeetBracket({ eventKey, seed: 2 }, admin)).ok, true);
+  const match = (await sessions()).find(row => row.round === 'r1' && row.entryKeys.every(Boolean));
+  const result = await advance.setMeetMatchWinner({ sessionKey: match._id, winnerEntryKey: match.entryKeys[0] }, admin);
+  assert.equal(result.ok, true, result.message);
+  assert.equal((await advance.resetMeetDraw({ eventKey }, admin)).ok, false);
 });
 
 test('普通会员不能重抽；总裁判可以', async () => {

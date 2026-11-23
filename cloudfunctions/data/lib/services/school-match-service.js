@@ -45,7 +45,8 @@ const {
 } = require('../utils/school.js');
 const {
   MATCH_TYPE, MATCH_TYPE_LABEL,
-  MATCH_STATUS, MATCH_STATUS_LABEL, MATCH_COMPETITION, MATCH_OUTCOME, EVENT_STATUS, ROLE,
+  MATCH_STATUS, MATCH_STATUS_LABEL, MATCH_COMPETITION, MATCH_OUTCOME,
+  EVENT_STATUS, COLLEGE_EVENT_STATUS, ROLE,
 } = require('../utils/constants.js');
 const {
   canRecordScore, canConfirm, canConfirmIdentity, canAssignReferee, canForfeit, needsScore,
@@ -330,7 +331,7 @@ async function listSchoolMatches(payload = {}, ctx) {
   const dir = legacyRoleOf(ctx) === ROLE.STAFF
     ? await recordDirOfUsers(ctx, participants)
     : EMPTY_RECORD_DIR;
-  const states = page.rows.length ? await ctx.repo.liveScores.listByIds(
+  const states = page.rows.length ? await ctx.repo.forScope(ctx).liveScores.listByIds(
     page.rows.map(doc => schoolLiveKey(doc._id, ctx))) : [];
   const byId = new Map(states.filter(state => belongsToSchoolScope(state, ctx)).map(state => [state._id, state]));
   const matches = page.rows.map(doc => {
@@ -386,6 +387,7 @@ async function pairUsageOf(ctx, record, season) {
     if (doc) usage.set(pair.key, Number(doc.count) || 0);
     else missing.push(pair);
   });
+  usage.missingCount = missing.length;
   if (missing.length === 0) return usage;
 
   const ledger = await scoped.matches.listSince(sinceIsoOf(season));
@@ -465,6 +467,7 @@ async function getSchoolMatch(payload = {}, ctx) {
 async function ensurePairCounters(ctx, record, season, usage) {
   if (!isCasualMatch(record)) return;
   if (!Number.isFinite(RATED_PAIR_LIMIT) || RATED_PAIR_LIMIT <= 0) return;
+  if (usage && usage.missingCount === 0) return;
   const pairs = distinctPairs(record);
   if (pairs.length === 0) return;
 
@@ -560,10 +563,6 @@ async function submitSchoolMatch(payload = {}, ctx) {
         : refused('请求编号已使用，请重新录入');
     }
     const freshSeason = await loadSeason(fresh);
-    // 一对会员本赛季打满上限后不再让录：先按同一份用量判一次（一句人话），
-    // 再按事务内的计数文档复核并占位——后者才是并发下真正管用的那一道。
-    const capped = findCappedPairs(distinctPairs(built.record), pairUsage, { limit: RATED_PAIR_LIMIT });
-    if (!capped.ok) return refused(pairCapMessage(capped.full, { limit: RATED_PAIR_LIMIT, nameOf }));
     // 赛季在事务外/事务内若跨过了重置点，旧赛季的用量不能当成新赛季的初值
     const seedUsage = seasonStampOf(freshSeason) === seasonStampOf(season) ? pairUsage : new Map();
     const occupied = await occupyPairUsage(tx, fresh, built.record, {
@@ -607,6 +606,8 @@ async function submitScheduledMatch(payload, ctx, dir) {
     if (!canReadAssociationSpace(fresh)) return refused('没有读取协会空间的权限');
     const doc = await tx.matches.getById(payload.matchId);
     if (!isMatchDoc(doc) || !belongsToSchoolScope(doc, fresh)) return refused('找不到这场比赛');
+    const finishedReason = await finishedEventBlocker(tx, doc);
+    if (finishedReason) return refused(finishedReason);
     if (!canRecordScore(doc, fresh.actorId, recordOptions(fresh, dir))) {
       return refused('只有参赛者、本学院负责人或管理员可以录入这场比赛的成绩');
     }
@@ -695,10 +696,25 @@ async function advanceCollegeAfterResolved(ctx, result) {
  * @returns {Promise<string>} 非空即为拒绝理由
  */
 async function finishedEventBlocker(tx, doc) {
-  if (typeof doc.eventId !== 'string' || !doc.eventId) return '';
-  const event = await tx.events.getById(doc.eventId);
-  if (!event || event.status !== EVENT_STATUS.FINISHED) return '';
-  return '赛事已结束，比赛记录不可再改';
+  if (typeof doc.eventId === 'string' && doc.eventId) {
+    const event = await tx.events.getById(doc.eventId);
+    if (event && event.status === EVENT_STATUS.FINISHED) {
+      return '赛事已结束，比赛记录不可再改';
+    }
+  }
+  let collegeEventId = typeof doc.collegeEventId === 'string' && doc.collegeEventId
+    ? doc.collegeEventId : '';
+  if (!collegeEventId && typeof doc.tieId === 'string' && doc.tieId && tx.ties) {
+    const tie = await tx.ties.getById(doc.tieId);
+    collegeEventId = (tie && tie.eventId) || '';
+  }
+  if (collegeEventId && tx.collegeEvents) {
+    const collegeEvent = await tx.collegeEvents.getById(collegeEventId);
+    if (collegeEvent && collegeEvent.status === COLLEGE_EVENT_STATUS.FINISHED) {
+      return '学院赛已结束，比赛记录不可再改';
+    }
+  }
+  return '';
 }
 
 async function rejectSchoolMatch(payload = {}, ctx) {

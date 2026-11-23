@@ -20,7 +20,7 @@ const { loadSchoolEventsPanelView } = require('../../services/school-events-pane
 // 积分榜的搜索框与排行榜页是同一套逻辑，直接复用它的纯函数，
 // 免得「怎么算命中、怎么拼文案」在两处各写一份、改一处漏一处。
 const { describeSearch } = require('../../services/rank-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 // 两类赛事的读取与置顶均走同一 S2 范围。
 const schoolSession = require('../../services/school-session.js');
@@ -34,6 +34,10 @@ Component({
     styleIsolation: 'apply-shared',
   },
 
+  properties: {
+    active: { type: Boolean, value: true },
+  },
+
   data: {
     /** 首屏加载中 */
     loading: true,
@@ -45,7 +49,7 @@ Component({
     // 初值给空对象而不是 null，WXML 里的 {{view.xxx}} 才不会报错。
     view: {},
     /** 开发期在页脚标注数据来源 */
-    isMock,
+    isMock: false,
     /** 当前是否在浏览外校（演示）赛事：为真时整页只读，隐藏发布 / 置顶入口 */
     demoSchool: false,
     /** 演示学校简称，供只读提示条显示 */
@@ -72,6 +76,7 @@ Component({
 
   lifetimes: {
     attached() {
+      this.setData({ isMock: isMockNow() });
       this.onLoad();
     },
     detached() {
@@ -99,7 +104,7 @@ Component({
 
     /** 从详情 / 发布页返回时刷新一次，刚报的名、刚发的赛事才在列表里 */
     onShow() {
-      if (!this.loaded) return undefined;
+      if (!this.loaded || this.data.active === false) return undefined;
       return this.refresh();
     },
 

@@ -338,7 +338,7 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
   const doc = await tx.seasons.getById(id);
   const season = doc && doc.schoolId === ctx.schoolId ? doc : null;
   if (!season || !isSettled(season)) {
-    await bumpSeasonVersion(tx, ctx, new Date(ctx.now));
+    await bumpSeasonVersion(tx, ctx, new Date(ctx.now || Date.now()));
     return { applied: false, needsRefresh: true };
   }
 
@@ -353,15 +353,18 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
   const association = String(ctx.association);
   const key = schoolMemberKey(userId, ctx.schoolId);
   const row = await tx.schoolMembers.getById(key);
+  const points = pointsOfRow(row, association);
+  const rowAnchor = anchorOfRow(row, association);
   const marked = row && row[VERSION_FIELD] && row[VERSION_FIELD][association];
-  if (!row || anchorOfRow(row, association) !== anchor
+  const isUnmaterializedZero = points === 0 && rowAnchor === '';
+  if (!row || (rowAnchor !== anchor && !isUnmaterializedZero)
       || marked !== undefined && Number(marked) > seasonVersionOf(season)) {
-    await bumpSeasonVersion(tx, ctx, new Date(ctx.now));
+    await bumpSeasonVersion(tx, ctx, new Date(ctx.now || Date.now()));
     return { applied: false, needsRefresh: true };
   }
 
   const nowIso = new Date(ctx.now || Date.now()).toISOString();
-  const next = Math.max(0, pointsOfRow(row, association) + amount);
+  const next = Math.max(0, points + amount);
   await tx.schoolMembers.set(key, {
     ...row,
     // 只改本协会那两格，别的协会原样带回（会员行是学校级的，见文件头）

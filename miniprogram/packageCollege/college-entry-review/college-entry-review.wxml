@@ -91,7 +91,7 @@
       <view class="panel-actions">
         <view class="btn btn-outline panel-btn" bindtap="onCancelReject">取消</view>
         <view
-          class="btn btn-primary panel-btn {{acting ? 'btn-disabled' : ''}}"
+          class="btn btn-danger panel-btn {{acting ? 'btn-disabled' : ''}}"
           bindtap="onSubmitReject"
         >确认退回</view>
       </view>

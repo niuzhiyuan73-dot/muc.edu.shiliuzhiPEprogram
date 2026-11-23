@@ -17,7 +17,7 @@
  */
 
 const { loadSchoolEventListView } = require('../../services/school-event-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { EVENT_STATUS } = require('../../utils/constants.js');
 const appSession = require('../../services/app-session.js');
@@ -66,7 +66,7 @@ Page({
     /** 视图模型，形状见 services/school-event-view.js 的 loadSchoolEventListView */
     view: {},
     /** 开发期在页脚标注数据来源 */
-    isMock,
+    isMock: false,
     /** 固定为全部赛事；保留字段是为了兼容旧模板与测试 */
     type: 'event',
     /** 导航栏与页内标题 */
@@ -97,6 +97,7 @@ Page({
       }
       return undefined;
     }
+    if (typeof this.setData === 'function') this.setData({ isMock: isMockNow() });
 
     this.setData({ type: 'event', title: '全部赛事' });
     if (typeof wx !== 'undefined' && typeof wx.setNavigationBarTitle === 'function') {

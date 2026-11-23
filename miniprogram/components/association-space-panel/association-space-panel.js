@@ -82,6 +82,10 @@ Component({
     styleIsolation: 'apply-shared',
   },
 
+  properties: {
+    active: { type: Boolean, value: true },
+  },
+
   data: {
     loading: true,
     /* 首屏加载失败：只有这种「整块取不到数」才替换整个面板 */
@@ -239,7 +243,7 @@ Component({
      * loaded 只在首屏落地后置真，避免 attached 后紧跟的 show 白刷一遍。
      */
     onShow() {
-      if (!this.loaded) return undefined;
+      if (!this.loaded || this.data.active === false) return undefined;
       return this.refresh();
     },
 
@@ -1060,6 +1064,7 @@ Component({
         canceled: row.state === 'canceled',
         finishable: row.state === 'finished' && row.status === 'published',
         audienceMode: row.audienceMode,
+        audienceGroupIds: Array.isArray(row.audienceGroupIds) ? [...row.audienceGroupIds] : [],
         audienceText: row.audienceMode === 'groups' ? `限 ${(row.audienceGroupIds || []).length} 个小组` : '不限小组',
         revision: row.revision,
       };

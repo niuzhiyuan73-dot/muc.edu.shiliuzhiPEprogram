@@ -30,7 +30,7 @@ const { meetReadable, canManageMeet, isChiefJudge } = require('./meet-permission
 const { loadColleges } = require('./college-directory.js');
 
 const {
-  touchEvent, liveMeet, scheduleRevisionOf, unchangedScheduleRevision,
+  touchEvent, liveMeet, scheduleRevisionOf, unchangedScheduleRevision, isCurrentJudgeAssignment,
 } = require('./meet-consistency.js');
 const { compareCode } = require('../utils/text-order.js');
 
@@ -182,13 +182,18 @@ async function saveMeetSession(payload = {}, ctx) {
       createdAt: current ? (current.createdAt || now) : now,
       updatedAt: now,
     };
-    await touchEvent(tx, eventKey);
-    await tx.sportsMeetSessions.set(key, doc);
-    // 时间/场地属于「赛程面」，递增届次赛程版本；复用上面已读到的 meet，只多一次写。
-    await tx.sportsMeets.set(fresh.meetId, {
-      ...meet, scheduleRevision: scheduleRevisionOf(meet) + 1,
+    await tx.sportsMeetEvents.set(eventKey, {
+      ...event, revision: Number(event.revision || 0) + 1,
     });
-    return ok({ session: sessionSummary(doc) });
+    await tx.sportsMeetSessions.set(key, doc);
+    // 时间/场地属于「赛程面」且变更了项目内容：单次写回同时递增 contentRevision 与 scheduleRevision，
+    // 避免 touchEvent 先写 sportsMeets 后又被旧 meet 快照覆盖回滚 contentRevision。
+    await tx.sportsMeets.set(fresh.meetId, {
+      ...meet,
+      contentRevision: Number(meet.contentRevision || 0) + 1,
+      scheduleRevision: scheduleRevisionOf(meet) + 1,
+    });
+    return ok({ session: sessionSummary({ ...doc, _id: key }) });
   });
 }
 
@@ -289,7 +294,7 @@ async function assignMeetJudge(payload = {}, ctx) {
 
     const sessionKey = String(payload.sessionKey || '').trim();
     const session = await tx.sportsMeetSessions.getById(sessionKey);
-    if (!session || session.meetId !== fresh.meetId) return refused('场次不存在或不属于本届运动会');
+    if (!session || session.voidedAt || session.meetId !== fresh.meetId) return refused('场次不存在或不属于本届运动会');
 
     const judgeId = String(payload.judgeId || '').trim();
     if (!judgeId) return refused('请选择裁判');
@@ -302,7 +307,8 @@ async function assignMeetJudge(payload = {}, ctx) {
 
     const key = meetJudgeKey(fresh.meetId, sessionKey, judgeId);
     const current = await tx.sportsMeetJudgeAssignments.getById(key);
-    if (current && current.status === 'active') return ok({ assignment: current, created: false });
+    const sameRevision = isCurrentJudgeAssignment(session, current);
+    if (sameRevision && current.status === 'active') return ok({ assignment: current, created: false });
 
     const now = toIso(fresh.now);
     const doc = {
@@ -311,9 +317,10 @@ async function assignMeetJudge(payload = {}, ctx) {
       sessionKey,
       eventKey: session.eventKey,
       judgeId,
+      judgeAssignmentRevision: session.judgeAssignmentRevision || 0,
       status: 'active',
       assignedBy: fresh.actorId,
-      assignedAt: current ? (current.assignedAt || now) : now,
+      assignedAt: (sameRevision && current.assignedAt) || now,
       updatedAt: now,
     };
     await touchEvent(tx, session.eventKey);
@@ -388,10 +395,12 @@ async function assignMeetJudges(payload = {}, ctx) {
   for (const member of members) {
     if (member.status === SCHOOL_MEMBER_STATUS.ACTIVE) activeMember.set(member.userId, member);
   }
+  const users = judgeIds.length ? await ctx.repo.users.listByIds(judgeIds) : [];
+  const userById = new Map(users.map((u) => [u._id, u]));
   const valid = [];
   for (const judgeId of judgeIds) {
     if (!activeMember.has(judgeId)) return refused(`「${judgeId}」不是本校在册成员`);
-    const user = await ctx.repo.users.getById(judgeId);
+    const user = userById.get(judgeId);
     if (!user || user.platformStatus !== 'active' || user.primarySchoolId !== ctx.schoolId) return refused(`「${judgeId}」账号无效或不属于本校`);
     valid.push(judgeId);
   }
@@ -430,17 +439,34 @@ async function assignMeetJudges(payload = {}, ctx) {
           const currentSessions = [];
           for (const target of batch) {
             const current = await tx.sportsMeetSessions.getById(target._id);
-            if (!current || current.voidedAt || current.meetId !== fresh.meetId || current.schoolId !== fresh.schoolId) return refused('场次已变化，请刷新后重试');
+            if (!current || current.voidedAt || current.meetId !== fresh.meetId || current.schoolId !== fresh.schoolId
+              || (current.judgeAssignmentRevision || 0) !== (target.judgeAssignmentRevision || 0)) {
+              return refused('场次已变化，请刷新后重试');
+            }
             currentSessions.push(current);
+          }
+          const existingAssignments = new Map();
+          const eventDocs = new Map();
+          for (const current of currentSessions) {
+            if (!eventDocs.has(current.eventKey)) {
+              eventDocs.set(current.eventKey, await tx.sportsMeetEvents.getById(current.eventKey));
+            }
+            for (const judgeId of judges) {
+              const key = meetJudgeKey(fresh.meetId, current._id, judgeId);
+              existingAssignments.set(key, await tx.sportsMeetJudgeAssignments.getById(key));
+            }
           }
           let batchCreated = 0;
           let batchExisted = 0;
+          let contentTouched = 0;
           for (const current of currentSessions) {
             const ids = Array.isArray(current.judgeIds) ? [...current.judgeIds] : [];
             for (const judgeId of judges) {
               const key = meetJudgeKey(fresh.meetId, current._id, judgeId);
-              const assignment = await tx.sportsMeetJudgeAssignments.getById(key);
-              if (assignment && assignment.status === 'active') {
+              const assignment = existingAssignments.get(key);
+              const sameRevision = isCurrentJudgeAssignment(current, assignment);
+              if (!ids.includes(judgeId)) ids.push(judgeId);
+              if (sameRevision && assignment.status === 'active') {
                 batchExisted += 1;
                 continue;
               }
@@ -450,17 +476,27 @@ async function assignMeetJudges(payload = {}, ctx) {
                 sessionKey: current._id,
                 eventKey: current.eventKey,
                 judgeId,
+                judgeAssignmentRevision: current.judgeAssignmentRevision || 0,
                 status: 'active',
                 assignedBy: fresh.actorId,
-                assignedAt: assignment ? (assignment.assignedAt || now) : now,
+                assignedAt: (sameRevision && assignment.assignedAt) || now,
                 updatedAt: now,
               });
-              if (!ids.includes(judgeId)) ids.push(judgeId);
               batchCreated += 1;
             }
-            await touchEvent(tx, current.eventKey);
+            const evDoc = eventDocs.get(current.eventKey);
+            if (evDoc) {
+              evDoc.revision = Number(evDoc.revision || 0) + 1;
+              await tx.sportsMeetEvents.set(current.eventKey, { ...evDoc });
+              contentTouched += 1;
+            }
             await tx.sportsMeetSessions.set(current._id, {
               ...current, judgeIds: ids, judgeCount: ids.length, updatedAt: now,
+            });
+          }
+          if (contentTouched > 0 && fresh.meet) {
+            await tx.sportsMeets.set(fresh.meetId, {
+              ...fresh.meet, contentRevision: Number(fresh.meet.contentRevision || 0) + contentTouched,
             });
           }
           return ok({ created: batchCreated, existed: batchExisted });
@@ -524,8 +560,10 @@ async function listMeetEventSessions(payload = {}, ctx) {
   const event = events.find((doc) => doc._id === eventKey);
   if (!event) return refused('项目组别不存在');
 
+  const sessionByKey = new Map(sessions.map((doc) => [doc._id, doc]));
   const mine = new Set(assignments
-    .filter((doc) => doc.status === 'active' && doc.judgeId === ctx.actorId)
+    .filter((doc) => doc.status === 'active' && doc.judgeId === ctx.actorId
+      && isCurrentJudgeAssignment(sessionByKey.get(doc.sessionKey), doc))
     .map((doc) => doc.sessionKey));
 
   const items = sessions
@@ -580,8 +618,9 @@ async function removeMeetJudge(payload = {}, ctx) {
     const sessionKey = String(payload.sessionKey || '').trim();
     const judgeId = String(payload.judgeId || '').trim();
     const key = meetJudgeKey(fresh.meetId, sessionKey, judgeId);
+    const session = await tx.sportsMeetSessions.getById(sessionKey);
     const current = await tx.sportsMeetJudgeAssignments.getById(key);
-    if (!current || current.status !== 'active') return refused('该裁判没有在任指派');
+    if (!isCurrentJudgeAssignment(session, current) || current.status !== 'active') return refused('该裁判没有在任指派');
 
     // N4（已裁决）：只允许撤换**已提交成绩**的裁判。
     //
@@ -590,18 +629,15 @@ async function removeMeetJudge(payload = {}, ctx) {
     //
     // 事务内不能查询，所以在事务外读一次快照；本动作不是名额类操作，接受快照。
     const now = toIso(fresh.now);
+    await touchEvent(tx, session.eventKey);
     await tx.sportsMeetJudgeAssignments.set(key, {
       ...current, status: 'revoked', revokedBy: fresh.actorId, revokedAt: now, updatedAt: now,
     });
-    const session = await tx.sportsMeetSessions.getById(sessionKey);
-    if (session) {
-      await touchEvent(tx, session.eventKey);
-      const ids = (Array.isArray(session.judgeIds) ? session.judgeIds : [])
-        .filter((id) => id !== judgeId);
-      await tx.sportsMeetSessions.set(sessionKey, {
-        ...session, judgeIds: ids, judgeCount: ids.length, updatedAt: now,
-      });
-    }
+    const ids = (Array.isArray(session.judgeIds) ? session.judgeIds : [])
+      .filter((id) => id !== judgeId);
+    await tx.sportsMeetSessions.set(sessionKey, {
+      ...session, judgeIds: ids, judgeCount: ids.length, updatedAt: now,
+    });
     return ok({ sessionKey, judgeId });
   });
 }
@@ -620,7 +656,7 @@ async function startMeetEvent(payload = {}, ctx) {
 
     const sessionKey = String(payload.sessionKey || '').trim();
     const session = await tx.sportsMeetSessions.getById(sessionKey);
-    if (!session || session.meetId !== fresh.meetId) return refused('场次不存在或不属于本届运动会');
+    if (!session || session.voidedAt || session.meetId !== fresh.meetId) return refused('场次不存在或不属于本届运动会');
     if (fresh.meet.status === MEET_STATUS.FINISHED) return refused('运动会已结束，不能重新开赛');
     if (!session.startAt || !session.venue) return refused('该场次还没配齐时间与场地');
 
@@ -663,7 +699,9 @@ async function getMeetSchedule(payload = {}, ctx) {
   if (meet.status === MEET_STATUS.DRAFT && !isAdmin) return refused('运动会尚未发布');
 
   const judgesOf = new Map();
-  for (const row of assignments.filter((doc) => doc.status === 'active')) {
+  const sessionByKey = new Map(sessions.map((doc) => [doc._id, doc]));
+  for (const row of assignments) {
+    if (row.status !== 'active' || !isCurrentJudgeAssignment(sessionByKey.get(row.sessionKey), row)) continue;
     const list = judgesOf.get(row.sessionKey) || [];
     list.push(row.judgeId);
     judgesOf.set(row.sessionKey, list);
@@ -770,8 +808,10 @@ async function getMyMeetJudgeTasks(payload = {}, ctx) {
     listAliveEvents(ctx.repo.forMeet(scope).sportsMeetEvents),
   ]);
   const eventOf = new Map(events.map((doc) => [doc._id, doc]));
+  const sessionByKey = new Map(sessions.map((doc) => [doc._id, doc]));
   const mine = new Set(assignments
-    .filter((doc) => doc.status === 'active' && doc.judgeId === ctx.actorId)
+    .filter((doc) => doc.status === 'active' && doc.judgeId === ctx.actorId
+      && isCurrentJudgeAssignment(sessionByKey.get(doc.sessionKey), doc))
     .map((doc) => doc.sessionKey));
 
   const items = sessions

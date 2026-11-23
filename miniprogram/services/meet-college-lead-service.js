@@ -36,13 +36,25 @@ const ok = (data) => ({ ok: true, data: { ...data, ok: data.ok === undefined ? t
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
 
 const MAX_ID_LENGTH = 40;
+const MAX_USER_ID_LENGTH = 80;
 
-/** 学院编号 / 用户编号：非空字符串，限制长度，不接受对象。 */
+/** 学院编号：非空字符串，限制长度，不含分隔符。 */
 function idOf(value, label) {
   const text = String(value == null ? '' : value).trim();
   if (!text) return { ok: false, message: `请填写${label}` };
   if (text.length > MAX_ID_LENGTH) return { ok: false, message: `${label}过长` };
   if (text.includes(':')) return { ok: false, message: `${label}格式不正确` };
+  return { ok: true, value: text };
+}
+
+/** 用户编号：兼容真实注册账号 `acc:<40位hex>`（含冒号、长 44）与演示短编号。 */
+function userIdOf(value, label = '成员') {
+  const text = String(value == null ? '' : value).trim();
+  if (!text) return { ok: false, message: `请填写${label}` };
+  if (text.length > MAX_USER_ID_LENGTH) return { ok: false, message: `${label}过长` };
+  if (text.includes(':') && !/^acc:[0-9a-zA-Z_-]+$/.test(text)) {
+    return { ok: false, message: `${label}格式不正确` };
+  }
   return { ok: true, value: text };
 }
 
@@ -67,7 +79,7 @@ async function grantMeetCollegeLead(payload = {}, ctx) {
   if (!ctx.actorId) return refused('请先登录');
   const college = idOf(payload.collegeId, '学院');
   if (!college.ok) return refused(college.message);
-  const user = idOf(payload.userId, '成员');
+  const user = userIdOf(payload.userId, '成员');
   if (!user.ok) return refused(user.message);
 
   return ctx.repo.transaction(async (tx) => {
@@ -156,9 +168,12 @@ async function listMeetCollegeLeads(payload = {}, ctx) {
   const nameOf = new Map(colleges.map((doc) => [doc.collegeId, doc.name]));
   const active = leads.filter((doc) => doc.schoolId === fresh.schoolId && isActiveMeetLead(doc));
   // 姓名一并给出：页面上只显示 userId 时，管理员根本看不出这位部长是谁
+  const userIds = [...new Set(active.map((doc) => doc.userId).filter(Boolean))];
+  const users = userIds.length ? await ctx.repo.users.listByIds(userIds) : [];
+  const userById = new Map(users.map((u) => [u._id, u]));
   const personName = new Map();
   for (const doc of active) {
-    const user = await ctx.repo.users.getById(doc.userId);
+    const user = userById.get(doc.userId);
     personName.set(doc.userId, (user && (user.realName || user.nickName)) || doc.userId);
   }
   const items = active

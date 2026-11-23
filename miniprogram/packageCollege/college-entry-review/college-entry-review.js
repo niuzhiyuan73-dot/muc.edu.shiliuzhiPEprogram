@@ -19,7 +19,7 @@
  */
 
 const { loadCollegeEntryReviewView } = require('../../services/school-college-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 // 审核动作与入会审核共用同一套取值，直接复用，免得两处各写一份字符串
 const { REVIEW_ACTION } = require('../../services/member-review.js');
 const { currentThemeClass } = require('../../services/branding.js');
@@ -40,7 +40,7 @@ Page({
     /** 视图模型，形状见 services/college-view.js */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 正在处理的名单编号，防止连点 */
     acting: '',
     /** 退回面板。open 为 false 时不渲染 */
@@ -57,6 +57,7 @@ Page({
    */
   onLoad(query = {}) {
     this.eventId = query.eventId || '';
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
@@ -137,10 +138,17 @@ Page({
     if (!row) return undefined;
 
     this.setData({ acting: entryId });
-    const result = await space.forScope(this.scope || this.currentScope()).reviewCollegeEntry({
-      eventId: this.eventId, college: row.college, action: REVIEW_ACTION.APPROVE, reason: '',
-    });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope()).reviewCollegeEntry({
+        eventId: this.eventId, college: row.college, action: REVIEW_ACTION.APPROVE, reason: '',
+      });
+    } catch (err) {
+      this.showToast((err && err.message) || '操作失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '操作失败');
@@ -181,10 +189,17 @@ Page({
 
     const { entryId, college } = this.data.reject;
     this.setData({ acting: entryId, actionError: '' });
-    const result = await space.forScope(this.scope || this.currentScope()).reviewCollegeEntry({
-      eventId: this.eventId, college, action: REVIEW_ACTION.REJECT, reason,
-    });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope()).reviewCollegeEntry({
+        eventId: this.eventId, college, action: REVIEW_ACTION.REJECT, reason,
+      });
+    } catch (err) {
+      this.setData({ actionError: (err && err.message) || '操作失败，请重试' });
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.setData({ actionError: (result && (result.firstError || result.message)) || '操作失败' });

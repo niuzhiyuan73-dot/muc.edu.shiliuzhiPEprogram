@@ -27,6 +27,10 @@ Component({
     styleIsolation: 'apply-shared',
   },
 
+  properties: {
+    active: { type: Boolean, value: true },
+  },
+
   data: {
     loading: true,
     error: '',
@@ -47,7 +51,7 @@ Component({
   pageLifetimes: {
     // 从建赛 / 详情页返回时刷新：刚建的赛事、刚发布的名次要立刻出现
     show() {
-      if (!this.loaded) return undefined;
+      if (!this.loaded || this.data.active === false) return undefined;
       return this.refresh();
     },
   },

@@ -76,33 +76,26 @@ const DAILY_LIMITS = Object.freeze({ read: 4000, write: 1500 });
  * 键是动作名；不在表里的一律 1 点（绝大多数读接口只点读几份文档）。
  */
 const ACTION_READ_COST = Object.freeze({
-  // 整校名册 + 全部账号：平铺模式最贵；countOnly / page 分支在 readCostOf 里降回 1
+  // 整校名册 + 全部账号：平铺模式最贵；countOnly / page / userIds 分支在 readCostOf 里降档
   listSchoolMembers: 40,
-  // 榜单 / 积分 / 名册类全表读
-  getSchoolRanking: 30,
+  // 榜单（TopN + 计数）与名册批读
+  getSchoolRanking: 5,
   getSchoolMemberStats: 30,
   // 球队列表：teams + teamMembers 两份整表
   listTeams: 30,
-  // 录分入口要读全校名册目录
-  getSchoolMatchEntryContext: 20,
+  // 录分入口已改窄查
+  getSchoolMatchEntryContext: 5,
   getMySportsDashboard: 20,
-  // 赛事 / 比赛 / 训练列表：整表读后内存筛选
-  listSchoolEvents: 10,
-  listCollegeEvents: 10,
-  listSchoolMatches: 10,
+  // 赛事 / 比赛分页下推；训练列表仍为范围扫描
+  listSchoolEvents: 2,
+  listCollegeEvents: 2,
+  listSchoolMatches: 3,
   listTrainings: 10,
-  // 运动会 / 团队域整表读（第十七轮 P2）：成本表此前只覆盖 school-space 域，
-  // 这四个动作按 1 点计，等于最贵的接口与点读同价。按读量级保守取值。
-  listMeetPublishedResults: 20, // 一次 Promise.all 整表读 6 个集合，结果行约 10 页
-  listTeamEvents: 20,           // 历届赛事 + 全部报名快照两份整表，且全量下发
-  getMyMeetHonors: 10,          // 一届约 800 条荣誉整表读后筛本人
-  getMeetStandings: 10,         // 学院 / 名次 / 发布 / 总榜 4 集合整表读
-  // 个人主页（第十八轮审查 P1）：单次最多回放 500 场本人比赛 + 整表 events，
-  // 再加名册 / 角色 / 会籍 / 学院 / 评级计数 6 次点读。此前按 1 点计，
-  // 而门槛只是「在册会员」——4000 点日预算等于放行 4000 次 × 500 条文档读，
-  // 是全站日配额（5 万）的几十倍。按读量级保守取 60。
+  listMeetPublishedResults: 20,
+  listTeamEvents: 20,
+  getMyMeetHonors: 3,
+  getMeetStandings: 10,
   getSchoolMemberProfile: 60,
-  // 荣誉：整表读 events 后按人筛，与 getMeetStandings 同一量级。
   getSchoolMemberHonors: 10,
 });
 
@@ -155,7 +148,10 @@ function readCostOf(action, payload) {
   const base = ACTION_READ_COST[action];
   if (!base) return 1;
   if (action === 'listSchoolMembers' && payload
-    && (payload.countOnly === true || payload.page === true)) return 1;
+    && (payload.countOnly === true || payload.page === true
+      || (Array.isArray(payload.userIds) && payload.userIds.length > 0))) return 1;
+  if (action === 'getSchoolMemberStats' && payload
+    && Array.isArray(payload.userIds) && payload.userIds.length > 0) return 2;
   return base;
 }
 
@@ -264,32 +260,27 @@ function guardDaily(key, kind, action, nowMs, anon, cost = 1, extraRead = 0) {
     daily.set(key, row);
   }
   if (POLL_ACTIONS.has(action)) {
-    row.poll += Math.max(1, Math.floor(cost) || 1);
-    if (row.poll > POLL_DAILY_LIMIT) return {
+    const pollCost = Math.max(1, Math.floor(cost) || 1);
+    if (row.poll + pollCost > POLL_DAILY_LIMIT) return {
       message: '今日实时观赛读取额度已用尽，请明天再试',
       kind: 'read', limit: POLL_DAILY_LIMIT, scope: 'day',
     };
+    row.poll += pollCost;
     return null;
   }
-  // 先把读成本记上（读动作按成本表，写动作按它附带的整表读）。
   const readCost = (kind === 'read' ? Math.max(1, Math.floor(cost) || 1) : 0)
     + Math.max(0, Math.floor(extraRead) || 0);
-  if (readCost > 0) {
-    row.read += readCost;
-    if (row.read > readLimit) {
-      return {
-        message: kind === 'write'
-          ? '今日读取配额已用尽（结算等操作会附带大量读取），请明天再试'
-          : '今日使用次数已达上限，请明天再试',
-        kind: 'read',
-        limit: readLimit,
-        scope: 'day',
-      };
-    }
+  if (readCost > 0 && row.read + readCost > readLimit) {
+    return {
+      message: kind === 'write'
+        ? '今日读取配额已用尽（结算等操作会附带大量读取），请明天再试'
+        : '今日使用次数已达上限，请明天再试',
+      kind: 'read',
+      limit: readLimit,
+      scope: 'day',
+    };
   }
-  // 写动作的「次数」恒为 1：真正的成本在事务预算与上面的读成本里。
-  if (kind === 'write') row.write += 1;
-  if (row[kind] > limit) {
+  if (row[kind] + 1 > limit) {
     return {
       message: kind === 'write'
         ? '今日操作次数已达上限，请明天再试'
@@ -299,6 +290,9 @@ function guardDaily(key, kind, action, nowMs, anon, cost = 1, extraRead = 0) {
       scope: 'day',
     };
   }
+  if (readCost > 0) row.read += readCost;
+  // 写动作的「次数」恒为 1：真正的成本在事务预算与上面的读成本里。
+  if (kind === 'write') row.write += 1;
   return null;
 }
 
@@ -344,7 +338,6 @@ function guardRate(openId, action, nowMs = Date.now(), meta = {}) {
   bucket[kind] += 1;
 
   if (bucket[kind] > limit) {
-    sweep(nowSec);
     return {
       message: kind === 'write' ? '操作过于频繁，请稍后再试' : '请求过于频繁，请稍后再试',
       kind,

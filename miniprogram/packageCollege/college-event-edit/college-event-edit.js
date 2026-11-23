@@ -46,7 +46,7 @@ const {
   LEG_PLAN_MAX,
 } = require('../../services/college-event.js');
 const { canPublishCollegeEvent } = require('../../services/school-college-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -114,7 +114,7 @@ Page(withFormExperience({
   data: {
     /** 提交中，防止连点重复提交 */
     submitting: false,
-    isMock,
+    isMock: false,
     /** 当前协会的主题类，挂在页面根节点上 */
     themeClass: '',
 
@@ -181,6 +181,7 @@ Page(withFormExperience({
   },
 
   async onLoad(query = {}) {
+    this.setData({ isMock: isMockNow() });
     // 石榴籽杯首页带项目进来：直接锁定到该项目，避免落到全局默认协会。
     // 关键兜底——用户不经杯赛首页、直接从小程序码 / 分享链接进发布页时，
     // 全局当前协会可能仍是别的球类，必须按参数强制归属，否则会发到错误的项目。

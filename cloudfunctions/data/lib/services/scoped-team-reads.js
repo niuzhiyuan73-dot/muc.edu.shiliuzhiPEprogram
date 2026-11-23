@@ -44,11 +44,17 @@ function attachTeamReads(surface, { inTx, query, byIds, command }) {
     const teams = timed.flatMap(row => [row.teamA, row.teamB]);
     const pages = await Promise.all([['teamA', teams], ['teamB', teams],
       ['location', timed.map(row => row.location)], ['refereeId', timed.map(row => row.refereeId)]]
-      .map(([field, values]) => {
+      .map(async ([field, values]) => {
         const ids = [...new Set(values.filter(Boolean))];
-        return ids.length ? query('teamMatches', command.and([
-          { ...scope, [field]: command.in(ids) }, { matchTime: command.gte(low) }, { matchTime: command.lte(high) },
-        ])) : [];
+        const rows = [];
+        for (let index = 0; index < ids.length; index += 100) {
+          rows.push(...await query('teamMatches', command.and([
+            { ...scope, [field]: command.in(ids.slice(index, index + 100)) },
+            { matchTime: command.gte(low) },
+            { matchTime: command.lte(high) },
+          ])));
+        }
+        return rows;
       }));
     return unique(pages.flat());
   };

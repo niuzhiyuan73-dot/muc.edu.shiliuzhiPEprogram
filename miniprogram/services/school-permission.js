@@ -68,7 +68,9 @@ function schoolReadable(ctx) {
  * @returns {boolean}
  */
 function isPlatformAdminCtx(ctx) {
-  return Boolean(ctx && ctx.actor && ctx.actor.platformRole === PLATFORM_ROLE.ADMIN);
+  return Boolean(ctx && ctx.actor
+    && ctx.actor.platformStatus === PLATFORM_STATUS.ACTIVE
+    && ctx.actor.platformRole === PLATFORM_ROLE.ADMIN);
 }
 
 /**

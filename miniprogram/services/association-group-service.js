@@ -107,23 +107,14 @@ function normalizeMemberIds(input, max = MAX_MEMBERS_PER_WRITE) {
  * @returns {{ok:boolean, message:string}}
  */
 async function assertEligibleMembers(tx, ctx, userIds) {
-  // 分批并发读：串行 28 人 = 28 个 RTT，每次两人份点读；10 人一批能把往返压到 3 轮，
-  // 事务内的操作数不变（仍是每人 2 次读），预算口径不受影响（第二十二轮 P3）。
-  for (let offset = 0; offset < userIds.length; offset += 10) {
-    const chunk = userIds.slice(offset, offset + 10);
-    const rows = await Promise.all(chunk.map(async (userId) => {
-      const [member, user] = await Promise.all([
-        tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId)),
-        tx.users.getById(userId),
-      ]);
-      return { userId, member, user };
-    }));
-    for (const { userId, member, user } of rows) {
-      if (!member || member.userId !== userId || member.schoolId !== ctx.schoolId ||
-          member.status !== SCHOOL_MEMBER_STATUS.ACTIVE ||
-          !user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) {
-        return { ok: false, message: '只能选择本协会在册会员' };
-      }
+  // 事务内禁止 Promise.all 并发读：微信云开发事务要求串行 await。
+  for (const userId of userIds) {
+    const member = await tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId));
+    const user = await tx.users.getById(userId);
+    if (!member || member.userId !== userId || member.schoolId !== ctx.schoolId ||
+        member.status !== SCHOOL_MEMBER_STATUS.ACTIVE ||
+        !user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) {
+      return { ok: false, message: '只能选择本协会在册会员' };
     }
   }
   return { ok: true, message: '' };

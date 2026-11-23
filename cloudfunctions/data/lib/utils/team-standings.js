@@ -111,6 +111,7 @@ function computeTeamTable({ entries, matches } = {}) {
     const wins = new Map(group.map((row) => [row.teamId, 0]));
     finals.forEach((match) => {
       if (!ids.has(match.teamA) || !ids.has(match.teamB)) return;
+      if (match.winner !== 'A' && match.winner !== 'B') return;
       const winner = match.winner === 'A' ? match.teamA : match.teamB;
       wins.set(winner, (wins.get(winner) || 0) + 1);
     });

@@ -216,14 +216,17 @@ function buildScoped(repo, io, inTx, options) {
     // schoolMembers 后来也用上同一条路（2026-10-23 第三轮 X-3）：比赛列表只需
     // 「这一页参赛者属于哪个学院」，不必为此读全校名册。
     if (key === 'schoolMembers' || key === 'schoolRoles' || key === 'memberships'
-      || key === 'memberRatings') {
+      || key === 'memberRatings' || key === 'liveScores') {
       // memberRatings（2026-10-26 只读审查 P2-6）：`getSchoolMemberStats` 指定
       // userIds 时按「学校 + 协会 + 人 + 池」的确定性主键批读，不再整表读全范围
       // 评级。它是协会级集合，范围字段要带 association。
-      const scopeFields = key === 'memberships' || key === 'memberRatings'
+      const scopeFields = key === 'memberships' || key === 'memberRatings' || key === 'liveScores'
         ? { schoolId: scope.schoolId, association: scope.association }
         : { schoolId: scope.schoolId };
-      result[key].listByIds = (ids) => io.byIds(key, ids, scopeFields);
+      result[key].listByIds = (ids) => {
+        if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
+        return io.byIds(key, ids, scopeFields);
+      };
     }
     // ── 名册分页与按状态/学号取（2026-10-26 第四轮审查 P-2 / P-3 / P-7）──
     //

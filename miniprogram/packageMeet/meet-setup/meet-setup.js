@@ -127,6 +127,10 @@ Page({
 
   onUnload() {
     this.unloaded = true;
+    if (this.inputTimers) {
+      Object.values(this.inputTimers).forEach((timer) => clearTimeout(timer));
+      this.inputTimers = null;
+    }
   },
 
   update(values) {
@@ -344,12 +348,22 @@ Page({
   },
 
   /** 改了一行之后：先写库，再刷新界面 */
-  async applyChange(index, patch) {
+  async applyChange(index, patch, { debounce = false } = {}) {
     const picked = [...this.data.picked];
     const row = { ...picked[index], ...patch };
     picked[index] = row;
     this.update({ picked });
-    await this.persist(row);
+    if (!debounce) {
+      await this.persist(row);
+      return row;
+    }
+    this.inputTimers = this.inputTimers || {};
+    if (this.inputTimers[index]) clearTimeout(this.inputTimers[index]);
+    this.inputTimers[index] = setTimeout(() => {
+      delete this.inputTimers[index];
+      const latest = this.data.picked[index];
+      if (latest) this.persist(latest);
+    }, 250);
     return row;
   },
 
@@ -360,7 +374,7 @@ Page({
     const row = this.data.picked[index];
     if (!row || !Number.isFinite(value) || row.fixedMembers) return;
     const members = Math.max(0, Math.min(200, Math.trunc(value)));
-    this.applyChange(index, { members, membersUnlimited: members === 0 });
+    this.applyChange(index, { members, membersUnlimited: members === 0 }, { debounce: true });
   },
 
   onLimitInput(event) {
@@ -369,7 +383,7 @@ Page({
     const row = this.data.picked[index];
     if (!row || !Number.isFinite(value)) return;
     const limit = Math.max(0, Math.min(20, Math.trunc(value)));
-    this.applyChange(index, { limit, limitUnlimited: limit === 0 });
+    this.applyChange(index, { limit, limitUnlimited: limit === 0 }, { debounce: true });
   },
 
   onToggleMembersUnlimited(event) {
@@ -412,18 +426,33 @@ Page({
       this.update({ error: '请至少选择一个项目再继续' });
       return undefined;
     }
-    const failed = this.data.picked.filter((row) => !row.saved);
-    if (failed.length > 0) {
-      // 逐项重试一次：多数是网络抖动，重试就能过
-      for (const row of failed) await this.persist(row);
-      const stillFailed = this.data.picked.filter((row) => !row.saved);
-      if (stillFailed.length > 0) {
-        this.update({ error: `还有 ${stillFailed.length} 项没有保存成功，请检查后重试` });
-        return undefined;
+    this.update({ busy: true, error: '' });
+    try {
+      if (this.inputTimers) {
+        const pendingIndexes = Object.keys(this.inputTimers);
+        pendingIndexes.forEach((idx) => {
+          clearTimeout(this.inputTimers[idx]);
+          delete this.inputTimers[idx];
+        });
+        for (const idx of pendingIndexes) {
+          const row = this.data.picked[Number(idx)];
+          if (row) await this.persist(row);
+        }
       }
+      const failed = this.data.picked.filter((row) => !row.saved);
+      if (failed.length > 0) {
+        // 逐项重试一次：多数是网络抖动，重试就能过
+        for (const row of failed) await this.persist(row);
+        const stillFailed = this.data.picked.filter((row) => !row.saved);
+        if (stillFailed.length > 0) {
+          this.update({ error: `还有 ${stillFailed.length} 项没有保存成功，请检查后重试` });
+          return undefined;
+        }
+      }
+      return wx.redirectTo({ url: `/packageMeet/meet-detail/meet-detail?meetId=${this.data.meetId}` });
+    } finally {
+      this.update({ busy: false });
     }
-    this.update({ busy: false });
-    return wx.redirectTo({ url: `/packageMeet/meet-detail/meet-detail?meetId=${this.data.meetId}` });
   },
 
   onBackToBasic() {

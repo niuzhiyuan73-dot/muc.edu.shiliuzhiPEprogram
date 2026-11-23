@@ -50,12 +50,18 @@ for (const [name, factory] of [['演示仓储', createSchoolMemoryRepo], ['云�
     assert.equal(result.items.length, 1); assert.equal(result.hasMore, false);
     assert.deepEqual(result.items[0].roles.sort(), ['参赛名单', '裁判', '记录员'].sort());
   });
-  test(`${name}：运动会本人报名和执裁合并，作废后消失`, async () => {
+  test(`${name}：运动会本人报名和执裁合并，作废后消失，重抽后只显示新指派`, async () => {
     const f = fixture(meetDocs(), factory);
     const first = await f.call({ section: 'schedule', project: 'meet' });
     assert.equal(first.items.length, 1); assert.deepEqual(first.items[0].roles.sort(), ['参赛', '裁判'].sort());
     await patch(f.repo.sportsMeetSessions, 'slot', { voidedAt: NOW.toISOString() });
     assert.equal((await f.call({ section: 'schedule', project: 'meet' })).items.length, 0);
+    await patch(f.repo.sportsMeetSessions, 'slot', { voidedAt: null, judgeAssignmentRevision: 1 });
+    const redrawn = await f.call({ section: 'schedule', project: 'meet' });
+    assert.deepEqual(redrawn.items[0].roles, ['参赛']);
+    await patch(f.repo.sportsMeetJudgeAssignments, 'judge', { judgeAssignmentRevision: 1 });
+    const reassigned = await f.call({ section: 'schedule', project: 'meet' });
+    assert.deepEqual(reassigned.items[0].roles.sort(), ['参赛', '裁判'].sort());
   });
   test(`${name}：事务中拒绝聚合读取`, async () => {
     await assert.rejects(fixture({}, factory).repo.transaction(tx => tx.personalSports.readPage('personalSchedule', { schoolId: 'muc', userId: 'u' }, { asOf: NOW.toISOString() })), /事务/);

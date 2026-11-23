@@ -283,6 +283,40 @@ async function markInterestsSelected(ctx, eventKey, userIds, entryKey, nowIso) {
   }
 }
 
+/**
+ * 把撤回/驳回名单里的成员意向落回「待选拔」。
+ *
+ * 【为什么也独立成事务】（2026-11-23 第 23 轮复验）
+ * 20 人「多人协作组」在释放名单时，主事务已要读写额度、声明与兼项计数；
+ * 再把 20 条意向的读与写塞进去，总数正好越过 100 次预算（读 49 / 写 52）。
+ * 意向是**展示态**：名额、声明与计数才是权威事实。按提交侧同一套做法，
+ * 拆到主事务之后按 20 人一批提交，主事务回落到约 60 次。
+ *
+ * 【失败为什么不回滚】
+ * 名单已经撤回/驳回并已释放名额；此时把整次操作判失败，会让部长无法重试
+ * （名单已不是待审/待撤状态）。失败只影响申请人池的展示，学生重新点一次
+ * 「提交意向」即可把这条旧意向覆盖回待选拔。
+ */
+async function markInterestsPending(ctx, eventKey, userIds, nowIso) {
+  const CHUNK = 20;
+  for (let i = 0; i < userIds.length; i += CHUNK) {
+    const chunk = userIds.slice(i, i + CHUNK);
+    await ctx.repo.transaction(async (tx) => {
+      for (const userId of chunk) {
+        const key = meetInterestKey(ctx.meetId, eventKey, userId);
+        const interest = await tx.sportsMeetInterests.getById(key);
+        if (!interest) continue;
+        if (interest.status === MEET_INTEREST_STATUS.PENDING && !interest.entryKey) continue;
+        // 驳回/撤回落回「待选拔」，该院该项目的意向入口随之重新打开（B5）
+        await tx.sportsMeetInterests.set(key, {
+          ...interest, status: MEET_INTEREST_STATUS.PENDING, entryKey: '', updatedAt: nowIso,
+        });
+      }
+      return null;
+    });
+  }
+}
+
 // ---------------------------------------------------------------- 学生端
 
 /** 学生提交参赛意向（不占名额，D10） */
@@ -343,20 +377,31 @@ async function submitMeetInterest(payload = {}, ctx) {
 
 /** 学生撤回意向（D19：正式入选前可撤回） */
 async function withdrawMeetInterest(payload = {}, ctx) {
+  if (!meetReadable(ctx)) return refused('请先登录');
   if (!ctx.meetId || !ctx.actorId) return refused('请指定运动会');
 
   return ctx.repo.transaction(async (tx) => {
-    const event = await loadEvent(tx, ctx, payload.eventKey);
+    const fresh = await freshMeetContext(tx, ctx);
+    if (!meetReadable(fresh) || !fresh.actorId) return refused('请先登录');
+    const meet = await tx.sportsMeets.getById(fresh.meetId);
+    if (!meet || meet.schoolId !== fresh.schoolId || meet.status === MEET_STATUS.DELETED) {
+      return refused('运动会不存在或已删除');
+    }
+    if (meet.status === MEET_STATUS.FINISHED || meet.status === MEET_STATUS.ARCHIVED) {
+      return refused('运动会已结束');
+    }
+
+    const event = await loadEvent(tx, fresh, payload.eventKey);
     if (!event.ok) return refused(event.message);
 
-    const key = meetInterestKey(ctx.meetId, event.doc._id, ctx.actorId);
+    const key = meetInterestKey(fresh.meetId, event.doc._id, fresh.actorId);
     const current = await tx.sportsMeetInterests.getById(key);
     // 先判「已入选」：这类意向状态是 selected，若先判 pending 会误报成「没有意向」
     if (current && current.entryKey) return refused('已被选入正式名单，请联系学院部长');
     if (!isActiveInterest(current)) return refused('没有可撤回的参赛意向');
 
     await tx.sportsMeetInterests.set(key, {
-      ...current, status: MEET_INTEREST_STATUS.WITHDRAWN, updatedAt: toIso(ctx.now),
+      ...current, status: MEET_INTEREST_STATUS.WITHDRAWN, updatedAt: toIso(fresh.now),
     });
     return ok({ eventKey: event.doc._id });
   });
@@ -617,6 +662,12 @@ async function submitMeetCollegeEntry(payload = {}, ctx) {
       rejectReason: '',
       updatedAt: now,
     };
+    const counters = new Map();
+    if (countsPersonal) {
+      for (const userId of userIds) {
+        counters.set(userId, await counterOf(tx, fresh.meetId, userId));
+      }
+    }
     await touchEvent(tx, event.doc._id);
     await tx.sportsMeetEntries.set(key, entry);
     await tx.sportsMeetQuotaUsage.set(meetQuotaKey(fresh.meetId, event.doc._id, collegeId), {
@@ -636,7 +687,7 @@ async function submitMeetCollegeEntry(payload = {}, ctx) {
       // （只有 personal 参与 PERSONAL_LIMIT 判定），却是每人 2 个事务操作，
       // 正好把 10~20 人的团体名单顶出预算。团体人数看 entry.userIds 即可。
       if (countsPersonal) {
-        const counter = await counterOf(tx, fresh.meetId, userId);
+        const counter = counters.get(userId);
         await tx.sportsMeetParticipantClaims.set(meetParticipantCounterKey(fresh.meetId, userId), {
           kind: 'counter',
           schoolId: fresh.schoolId, meetId: fresh.meetId, userId,
@@ -675,7 +726,8 @@ async function submitMeetCollegeEntry(payload = {}, ctx) {
 async function withdrawMeetCollegeEntry(payload = {}, ctx) {
   if (!ctx.meetId) return refused('请指定运动会');
 
-  return ctx.repo.transaction(async (tx) => {
+  let released = null;
+  const result = await ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
     const key = String(payload.entryKey || '').trim();
     if (!key) return refused('请指定要撤回的名单');
@@ -693,23 +745,46 @@ async function withdrawMeetCollegeEntry(payload = {}, ctx) {
     const window = registrationWindow(meet, fresh.now);
     if (!window.open) return refused('当前不在报名时间内');
 
+    released = { eventKey: entry.eventKey, userIds: Array.isArray(entry.userIds) ? [...entry.userIds] : [] };
     await releaseEntry(tx, fresh, entry, MEET_ENTRY_STATUS.WITHDRAWN);
     return ok({ entryKey: key });
   });
+  if (released && result && result.ok) {
+    try {
+      await markInterestsPending(ctx, released.eventKey, released.userIds, toIso(ctx.now));
+    } catch (err) {
+      // 名单与名额已释放；意向只是申请人池的展示态，失败不回滚（见 markInterestsPending）
+      console.warn('[meet] 意向状态回写失败', err && (err.message || err));
+    }
+  }
+  return result;
 }
 
 /**
  * 释放一条名单占用的额度、声明与兼项计数。
  * 撤回与驳回共用一份逻辑：两处各写一遍必然漏掉其中一项（最常见是漏减 personal）。
+ *
+ * 【意向状态不在这里写】（2026-11-23 第 23 轮复验）
+ * 20 人「多人协作组」逐人读写意向会让本事务越过 100 次预算；意向是展示态，
+ * 由调用方在主事务提交后走 `markInterestsPending` 分批回写。这里的额度、
+ * 声明与计数仍是原子事实。
  */
 async function releaseEntry(tx, ctx, entry, nextStatus) {
+  const userIds = entry.userIds || [];
+  const quota = await quotaOf(tx, ctx.meetId, entry.eventKey, entry.collegeId);
+  const event = await tx.sportsMeetEvents.getById(entry.eventKey);
+  const personal = event ? countsTowardPersonalQuota(event.entryForm) : true;
+  const counters = new Map();
+  if (personal) {
+    for (const userId of userIds) counters.set(userId, await counterOf(tx, ctx.meetId, userId));
+  }
+
   await touchEvent(tx, entry.eventKey);
   const now = toIso(ctx.now);
   await tx.sportsMeetEntries.set(entry._id, {
     ...entry, status: nextStatus, updatedAt: now,
   });
 
-  const quota = await quotaOf(tx, ctx.meetId, entry.eventKey, entry.collegeId);
   const wasApproved = entry.status === MEET_ENTRY_STATUS.APPROVED;
   await tx.sportsMeetQuotaUsage.set(meetQuotaKey(ctx.meetId, entry.eventKey, entry.collegeId), {
     schoolId: ctx.schoolId, meetId: ctx.meetId, eventKey: entry.eventKey, collegeId: entry.collegeId,
@@ -719,25 +794,18 @@ async function releaseEntry(tx, ctx, entry, nextStatus) {
     updatedAt: now,
   });
 
-  const event = await tx.sportsMeetEvents.getById(entry.eventKey);
-  const personal = event ? countsTowardPersonalQuota(event.entryForm) : true;
-  for (const userId of entry.userIds || []) {
+  for (const userId of userIds) {
     await tx.sportsMeetParticipantClaims.set(meetClaimKey(ctx.meetId, entry.eventKey, userId), {
       kind: 'claim', schoolId: ctx.schoolId, meetId: ctx.meetId, eventKey: entry.eventKey,
       userId, entryKey: entry._id, collegeId: entry.collegeId, status: 'released', updatedAt: now,
     });
-    const counter = await counterOf(tx, ctx.meetId, userId);
-    await tx.sportsMeetParticipantClaims.set(meetParticipantCounterKey(ctx.meetId, userId), {
-      kind: 'counter', schoolId: ctx.schoolId, meetId: ctx.meetId, userId,
-      personal: Math.max(0, counter.personal - (personal ? 1 : 0)),
-      team: Math.max(0, counter.team - (personal ? 0 : 1)),
-      updatedAt: now,
-    });
-    const interest = await tx.sportsMeetInterests.getById(meetInterestKey(ctx.meetId, entry.eventKey, userId));
-    if (interest) {
-      // 驳回/撤回落回「待选拔」，该院该项目的意向入口随之重新打开（B5）
-      await tx.sportsMeetInterests.set(meetInterestKey(ctx.meetId, entry.eventKey, userId), {
-        ...interest, status: MEET_INTEREST_STATUS.PENDING, entryKey: '', updatedAt: now,
+    if (personal) {
+      const counter = counters.get(userId);
+      await tx.sportsMeetParticipantClaims.set(meetParticipantCounterKey(ctx.meetId, userId), {
+        kind: 'counter', schoolId: ctx.schoolId, meetId: ctx.meetId, userId,
+        personal: Math.max(0, counter.personal - 1),
+        team: counter.team,
+        updatedAt: now,
       });
     }
   }
@@ -751,7 +819,8 @@ async function reviewMeetEntry(payload = {}, ctx) {
   const decision = String(payload.decision || '');
   if (!['approve', 'reject'].includes(decision)) return refused('请选择通过或驳回');
 
-  return ctx.repo.transaction(async (tx) => {
+  let released = null;
+  const result = await ctx.repo.transaction(async (tx) => {
     const fresh = await freshMeetContext(tx, ctx);
     if (!canManageMeet(fresh)) return refused('只有校级管理员及以上可以审核名单');
     if (!fresh.meet || ['deleted','finished'].includes(fresh.meet.status)) return refused('运动会已结束或不存在，不能审核名单');
@@ -765,6 +834,7 @@ async function reviewMeetEntry(payload = {}, ctx) {
 
     const now = toIso(fresh.now);
     if (decision === 'reject') {
+      released = { eventKey: entry.eventKey, userIds: Array.isArray(entry.userIds) ? [...entry.userIds] : [] };
       await releaseEntry(tx, fresh, entry, MEET_ENTRY_STATUS.REJECTED);
       const rejected = await tx.sportsMeetEntries.getById(key);
       await tx.sportsMeetEntries.set(key, {
@@ -785,6 +855,15 @@ async function reviewMeetEntry(payload = {}, ctx) {
     });
     return ok({ entryKey: key, status: MEET_ENTRY_STATUS.APPROVED });
   });
+  if (released && result && result.ok) {
+    try {
+      await markInterestsPending(ctx, released.eventKey, released.userIds, toIso(ctx.now));
+    } catch (err) {
+      // 名单与名额已释放；意向只是申请人池的展示态，失败不回滚（见 markInterestsPending）
+      console.warn('[meet] 意向状态回写失败', err && (err.message || err));
+    }
+  }
+  return result;
 }
 
 /** 管理员开补报窗口（D27）：覆盖报名时间判断，仍由部长提交 */

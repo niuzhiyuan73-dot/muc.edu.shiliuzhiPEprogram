@@ -17,7 +17,7 @@
  */
 
 const { loadSchoolProfileSummaryView } = require('../../services/profile-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { resetBranding } = require('../../services/branding.js');
 const associationScope = require('../../services/association-scope.js');
 const { isTeamSport } = require('../../utils/associations.js');
@@ -33,7 +33,7 @@ Page({
      *  初值给空对象，WXML 里的 {{...view}} 展开才不会出错 */
     view: {},
     /** 开发期在页脚标注数据来源，以免把演示数据当成真实成绩 */
-    isMock,
+    isMock: isMockNow(),
     /** 是否已登录。退出登录按钮与头卡据此显隐 */
     loggedIn: false,
     /** 当前全局协会 id，供切换徽章显示；切换器只改全局，本页内容不重取 */
@@ -53,6 +53,7 @@ Page({
 
   onLoad() {
     this.unloaded = false;
+    this.setData({ isMock: isMockNow() });
     // 「我的」是全局页，套中性品牌（与首页一致）
     resetBranding();
     // 入口与荣誉数据互不依赖，各算各的，不必串成一条链

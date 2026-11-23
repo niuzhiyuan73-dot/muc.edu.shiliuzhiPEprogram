@@ -79,7 +79,8 @@ const STATUS_LABEL = Object.freeze({
 });
 
 const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
-const TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/;
+const TIME_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?(Z|[+-]\d{2}:\d{2})?$/;
+const stripTimeZone = (value) => String(value || '').replace(/(?::00)?(?:Z|[+-]\d{2}:\d{2})$/, '');
 
 /**
  * 剥掉零宽字符再判空。
@@ -142,10 +143,10 @@ function registrationView(meet, now) {
   if (!reg || !reg.openAt || !reg.closeAt) return null;
   const state = registrationWindow(meet, now);
   const lateEnd = meet.lateWindow && meet.lateWindow.closeAt
-    ? String(meet.lateWindow.closeAt).replace('T', ' ') : '';
+    ? stripTimeZone(meet.lateWindow.closeAt).replace('T', ' ') : '';
   return {
-    openAt: String(reg.openAt).replace('T', ' '),
-    closeAt: String(reg.closeAt).replace('T', ' '),
+    openAt: stripTimeZone(reg.openAt).replace('T', ' '),
+    closeAt: stripTimeZone(reg.closeAt).replace('T', ' '),
     open: Boolean(state.open),
     late: Boolean(state.late),
     lateEndText: lateEnd,

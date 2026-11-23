@@ -52,6 +52,7 @@ Page({
   },
 
   onLoad(query = {}) {
+    this.unloaded = false;
     const schoolId = schoolSession.getSchoolId() || LEGACY_SCHOOL_ID;
     this.scope = { schoolId, association: associationScope.getAssociation() };
     this.setData({
@@ -61,10 +62,17 @@ Page({
     return this.refresh();
   },
 
+  onUnload() {
+    this.unloaded = true;
+    this.loadEpoch = (this.loadEpoch || 0) + 1;
+  },
+
   async refresh() {
+    const epoch = this.loadEpoch = (this.loadEpoch || 0) + 1;
     this.setData({ loading: true, error: '' });
     try {
       const result = await space.forScope(this.scope).getTeam({ teamId: this.data.teamId });
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       if (!result.ok) {
         this.setData({ loading: false, error: result.message || '球队不存在',
           team: null, members: [], pendingCount: 0 });
@@ -77,11 +85,12 @@ Page({
         pendingCount: Number(result.pendingCount) || 0,
       });
       // 战绩与名单互不依赖：单独取，失败也不该把整页打成加载失败
-      this.loadRecord();
+      this.loadRecord(epoch);
       // 院队要额外拿候选池（本院会员），普通球队不需要
-      this.loadCandidates(result.team);
+      this.loadCandidates(result.team, epoch);
       return undefined;
     } catch (err) {
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       console.error('[team-detail] 加载失败', err);
       this.setData({ loading: false, error: '球队加载失败，请稍后重试',
         team: null, members: [], pendingCount: 0 });
@@ -95,13 +104,14 @@ Page({
    * 只读、对所有人开放（包括归档球队）——「这支队往年打得怎么样」是公开事实，
    * 与「谁能改这支队的名单」是两件事。
    */
-  async loadRecord() {
+  async loadRecord(epoch = this.loadEpoch) {
     if (teamSportStrategyFor(this.scope?.association)?.supportsMatchData === false) {
       this.setData({ recordSupported: false, record: null, recordError: '' });
       return;
     }
     try {
       const result = await space.forScope(this.scope).getTeamRecord({ teamId: this.data.teamId });
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       if (!result || result.ok !== true) {
         this.setData({ record: null, recordError: (result && result.message) || '战绩加载失败' });
         return undefined;
@@ -109,6 +119,7 @@ Page({
       this.setData({ record: result, recordError: '' });
       return undefined;
     } catch (err) {
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       console.error('[team-detail] 战绩加载失败', err);
       this.setData({ record: null, recordError: '战绩加载失败，请稍后重试' });
       return undefined;
@@ -122,13 +133,14 @@ Page({
    * 普通球队打开详情不需要「全院会员」这份名单；只有院队的负责人挑人时才用得上。
    * 放在 getTeam 里一起下发，等于每次看任何一支队都要多查一遍会员与在册状态。
    */
-  async loadCandidates(team) {
+  async loadCandidates(team, epoch = this.loadEpoch) {
     if (!team || !team.isCollegeTeam) {
       this.setData({ collegeTeam: null, canPickMembers: false, candidates: [], visibleCandidates: [] });
       return undefined;
     }
     try {
       const result = await space.forScope(this.scope).getCollegeTeam({ teamId: this.data.teamId });
+      if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       if (!result || result.ok !== true) return undefined;
       const candidates = result.candidates || [];
       this.setData({
@@ -180,6 +192,7 @@ Page({
   },
 
   async onSavePick() {
+    if (this.data.picking) return undefined;
     const picked = (this.data.candidates || []).filter(row => row.picked).map(row => row.userId);
     if (picked.length === 0) {
       this.setData({ notice: '还没有勾选队员', noticeError: true });

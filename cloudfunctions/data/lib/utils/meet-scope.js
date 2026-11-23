@@ -120,6 +120,17 @@ function part(value, label) {
 }
 
 /**
+ * 用户 / 裁判编号段：真实微信注册账号由 `schoolAccountKey(openId)` 生成，
+ * 形如 `acc:<40位hex>`（含冒号且长 44）。经 `encodeURIComponent` 编码后不含冒号、
+ * 不与相邻段碰撞，且对 `u1` / `demo_*` 等无冒号账号保持原串不变。
+ */
+function userPart(value, label) {
+  const text = String(value == null ? '' : value).trim();
+  if (!text) throw new Error(`运动会键缺少${label}`);
+  return encodeURIComponent(text);
+}
+
+/**
  * 内嵌键的段：允许冒号。
  *
  * 事件 / 参赛记录 / 发布编号本身就是「前一级的键」，它们内部以冒号分段。
@@ -175,7 +186,7 @@ function meetCollegeKey(meetId, collegeId) {
 
 /** 学生意向：一人一项目组别一条，可撤回（D19）。 */
 function meetInterestKey(meetId, eventKey, userId) {
-  return `mti:${part(meetId, '运动会')}:${rawPart(eventKey, '项目组别')}:${part(userId, '用户')}`;
+  return `mti:${part(meetId, '运动会')}:${rawPart(eventKey, '项目组别')}:${userPart(userId, '用户')}`;
 }
 
 /**
@@ -196,7 +207,7 @@ function meetQuotaKey(meetId, eventKey, collegeId) {
 
 /** 兼项与重复报名声明：一人一项目组别一条，事务内点读即可判重。 */
 function meetClaimKey(meetId, eventKey, userId) {
-  return `mtc:${part(meetId, '运动会')}:${rawPart(eventKey, '项目组别')}:${part(userId, '用户')}`;
+  return `mtc:${part(meetId, '运动会')}:${rawPart(eventKey, '项目组别')}:${userPart(userId, '用户')}`;
 }
 
 /**
@@ -207,7 +218,7 @@ function meetClaimKey(meetId, eventKey, userId) {
  * 并发提交时两条写入会撞在同一个文档上，天然串行。
  */
 function meetParticipantCounterKey(meetId, userId) {
-  return `mtcnt:${part(meetId, '运动会')}:${part(userId, '用户')}`;
+  return `mtcnt:${part(meetId, '运动会')}:${userPart(userId, '用户')}`;
 }
 
 /**
@@ -238,12 +249,12 @@ function meetSessionKey(meetId, eventKey, round, index) {
 
 /** 裁判指派：场次 + 裁判，一人一场一条（撤换即改状态，不新增文档）。 */
 function meetJudgeKey(meetId, sessionKey, judgeId) {
-  return `mtj:${part(meetId, '运动会')}:${rawPart(sessionKey, '场次')}:${part(judgeId, '裁判')}`;
+  return `mtj:${part(meetId, '运动会')}:${rawPart(sessionKey, '场次')}:${userPart(judgeId, '裁判')}`;
 }
 
 /** 裁判成绩：参赛记录 + 场次 + 裁判，唯一键防重复提交（含 revision）。 */
 function meetScoreKey(entryKey, sessionKey, judgeId) {
-  return `mtx:${rawPart(entryKey, '参赛记录')}:${rawPart(sessionKey, '场次')}:${part(judgeId, '裁判')}`;
+  return `mtx:${rawPart(entryKey, '参赛记录')}:${rawPart(sessionKey, '场次')}:${userPart(judgeId, '裁判')}`;
 }
 
 /**

@@ -24,7 +24,7 @@ const { loadCollegeEventDetailView, buildSeedRows } = require('../../services/sc
 const { buildPickerRows, pickerEmptyText } = require('../../services/match-entry-view.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
 const { applyLiveTies } = require('../../services/live-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -43,7 +43,7 @@ Page(withDetailExperience({
     /** 视图模型，形状见 services/college-view.js */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 正在处理的按钮标识（tieId 或固定动作名），防止连点 */
     acting: '',
     /** 已点选的种子学院（按点击顺序） */
@@ -82,6 +82,7 @@ Page(withDetailExperience({
     this.destroyed = false;
     this.visible = true;
     this.refreshSeq = 0;
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
@@ -104,6 +105,11 @@ Page(withDetailExperience({
     // syncLiveWatch —— 订阅是单例，它会把**当前页面**的轮询顶掉。
     this.destroyed = true;
     this.visible = false;
+    this.refereeRequest = (this.refereeRequest || 0) + 1;
+    if (this.refereeTimer) {
+      clearTimeout(this.refereeTimer);
+      this.refereeTimer = null;
+    }
     if (this.liveHandle) {
       this.liveHandle();
       this.liveHandle = null;
@@ -252,10 +258,17 @@ Page(withDetailExperience({
     if (this.data.acting) return undefined;
 
     this.setData({ acting: 'draw' });
-    // 抽签结果必须可复核：随机值取此刻时间戳并落库，同一个值重跑得同一张签表
-    const result = await space.forScope(this.scope || this.currentScope())
-      .drawCollegeEvent({ eventId: this.eventId, seedColleges: this.data.seeds, seedValue: Date.now() });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      // 抽签结果必须可复核：随机值取此刻时间戳并落库，同一个值重跑得同一张签表
+      result = await space.forScope(this.scope || this.currentScope())
+        .drawCollegeEvent({ eventId: this.eventId, seedColleges: this.data.seeds, seedValue: Date.now() });
+    } catch (err) {
+      this.showToast((err && err.message) || '抽签失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '抽签失败');
@@ -272,9 +285,16 @@ Page(withDetailExperience({
     if (this.data.acting) return undefined;
 
     this.setData({ acting: 'startEvent' });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .startCollegeEvent({ eventId: this.eventId });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .startCollegeEvent({ eventId: this.eventId });
+    } catch (err) {
+      this.showToast((err && err.message) || '开始失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '开始失败');
@@ -291,9 +311,16 @@ Page(withDetailExperience({
     if (!tieId || this.data.acting) return undefined;
 
     this.setData({ acting: tieId });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .startCollegeTie({ tieId });
-    this.setData({ acting: '' });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .startCollegeTie({ tieId });
+    } catch (err) {
+      this.showToast((err && err.message) || '开始失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ acting: '' });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '开始失败');
@@ -337,25 +364,34 @@ Page(withDetailExperience({
 
   /** 按关键字刷新面板列表（输入有防抖，见 onInputRefereeKeyword） */
   async applyRefereeKeyword(keyword, append = false) {
+    const request = this.refereeRequest = (this.refereeRequest || 0) + 1;
     this.setData({ 'referee.loading': true });
-    const page = await this.loadPickerPage(keyword, append);
-    if (!page.ok) {
+    try {
+      const page = await this.loadPickerPage(keyword, append);
+      if (this.destroyed || request !== this.refereeRequest) return;
+      if (!page.ok) {
+        this.setData({ 'referee.loading': false, 'referee.rows': append ? this.data.referee.rows : [],
+          'referee.hasMore': false, 'referee.emptyText': '候选读取失败，请重试' });
+        return;
+      }
+      const merged = append
+        ? [...this.data.referee.rows, ...buildPickerRows(page.rows, '', this.data.referee.selectedId)]
+        : buildPickerRows(page.rows, '', this.data.referee.selectedId);
+      const seen = new Set();
+      const rows = merged.filter((row) => (seen.has(row.id) ? false : seen.add(row.id)));
+      this.setData({
+        'referee.keyword': keyword,
+        'referee.rows': rows,
+        'referee.hasMore': page.hasMore,
+        'referee.loading': false,
+        'referee.emptyText': pickerEmptyText(keyword),
+      });
+    } catch (err) {
+      if (this.destroyed || request !== this.refereeRequest) return;
+      console.error('[college-event-detail] 裁判候选加载失败', err);
       this.setData({ 'referee.loading': false, 'referee.rows': append ? this.data.referee.rows : [],
         'referee.hasMore': false, 'referee.emptyText': '候选读取失败，请重试' });
-      return;
     }
-    const merged = append
-      ? [...this.data.referee.rows, ...buildPickerRows(page.rows, '', this.data.referee.selectedId)]
-      : buildPickerRows(page.rows, '', this.data.referee.selectedId);
-    const seen = new Set();
-    const rows = merged.filter((row) => (seen.has(row.id) ? false : seen.add(row.id)));
-    this.setData({
-      'referee.keyword': keyword,
-      'referee.rows': rows,
-      'referee.hasMore': page.hasMore,
-      'referee.loading': false,
-      'referee.emptyText': pickerEmptyText(keyword),
-    });
   },
 
   /** 打开指派面板。当前是谁当头一版勾出来 */
@@ -436,9 +472,16 @@ Page(withDetailExperience({
     if (!tieId) return undefined;
 
     this.setData({ refereeActing: true });
-    const result = await space.forScope(this.scope || this.currentScope())
-      .assignCollegeTieReferee({ tieId, refereeId });
-    this.setData({ refereeActing: false });
+    let result;
+    try {
+      result = await space.forScope(this.scope || this.currentScope())
+        .assignCollegeTieReferee({ tieId, refereeId });
+    } catch (err) {
+      this.showToast((err && err.message) || '指派失败，请重试');
+      return undefined;
+    } finally {
+      this.setData({ refereeActing: false });
+    }
 
     if (!result || !result.ok) {
       this.showToast((result && (result.firstError || result.message)) || '指派失败');

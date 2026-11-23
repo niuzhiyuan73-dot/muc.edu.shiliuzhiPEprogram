@@ -255,10 +255,12 @@ async function readDoc(scope, name, id) {
  * @returns {Object}
  */
 function cursorCond(where, lastId, cmd) {
-  const base = where && Object.keys(where).length > 0 ? where : null;
+  const isPlain = where && Object.getPrototypeOf(where) === Object.prototype;
+  const base = where && (!isPlain || Object.keys(where).length > 0) ? where : null;
   if (lastId === null || lastId === undefined) return base;
   const next = { _id: cmd.gt(lastId) };
   if (!base) return next;
+  if (!isPlain) return cmd.and([base, next]);
   if (base._id === undefined) return { ...base, ...next };
   // 【为什么这里直接抛，而不是 and 起来】（2026-10-22 第二轮审查 B-5）
   // 原实现写的是 `cmd.and([base, next])`，但 `db.command.and` 收的是**查询命令**
@@ -401,6 +403,7 @@ function buildCollections(scope, inTx, cmd) {
   };
 
   const repo = {
+    inTx: Boolean(inTx),
     users: {
       list: () => list('users'),
       getById: (id) => readDoc(scope, COLLECTIONS.users, id),

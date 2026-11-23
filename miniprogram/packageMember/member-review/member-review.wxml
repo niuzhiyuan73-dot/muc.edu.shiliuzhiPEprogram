@@ -98,7 +98,7 @@
       <view class="sheet-actions">
         <view class="btn btn-outline sheet-btn" bindtap="onCancelAction">取消</view>
         <view
-          class="btn btn-primary sheet-btn {{acting ? 'btn-disabled' : ''}}"
+          class="btn {{action.mode === 'reject' ? 'btn-danger' : 'btn-primary'}} sheet-btn {{acting ? 'btn-disabled' : ''}}"
           bindtap="onSubmitAction"
         >确定</view>
       </view>

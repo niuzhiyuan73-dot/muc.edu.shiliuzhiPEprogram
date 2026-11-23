@@ -852,8 +852,8 @@ function placementsFromBracket(event, bracket, matches) {
       continue;
     }
 
-    // 八强战的四名负者
-    if (losers.length === 4) {
+    // 八强战的四名负者（必须同时是四强产生轮，避免 12 人赛首轮 4 场负者误命中）
+    if (round === totalRounds - 2 && winners.length === 4 && losers.length === 4) {
       if (event.placementMode === EVENT_PLACEMENT_MODE.TOP8) {
         const first = [
           decided(eventMatchKey(eventId, round + 1, BRACKET_STAGE.PLACEMENT, 0)),

@@ -45,7 +45,9 @@ const {
 const { matchesOf, roundNoOf } = require('./meet-advance-service.js');
 const { buildMeetContext, freshMeetContext } = require('./meet-context.js');
 const { collegeKey } = require('../utils/school.js');
-const { unchangedEvent, touchEvent, liveMeet, publishedRowsOf } = require('./meet-consistency.js');
+const {
+  unchangedEvent, touchEvent, liveMeet, publishedRowsOf, isCurrentJudgeAssignment,
+} = require('./meet-consistency.js');
 const { meetReadable, canManageMeet, canPublishMeetResult } = require('./meet-permission.js');
 const { compareCode } = require('../utils/text-order.js');
 
@@ -62,6 +64,14 @@ const SCORE_STATE = Object.freeze({ DRAFT: 'draft', SUBMITTED: 'submitted' });
 const ROW_STATUS = Object.freeze({ RESULT: 'result', VOID: 'void' });
 
 const isAlive = (doc) => Boolean(doc && doc.status && doc.status !== MEET_STATUS.DELETED);
+
+function activeJudgeIdsOf(session, assignments) {
+  if (!session) return [];
+  return assignments
+    .filter((doc) => doc.sessionKey === session._id && doc.status === 'active'
+      && isCurrentJudgeAssignment(session, doc))
+    .map((doc) => doc.judgeId);
+}
 
 /**
  * 首次录分即视为开赛（F9）。
@@ -206,17 +216,16 @@ async function entryLabels(ctx, entries) {
     Promise.all(collegeIds.map((collegeId) => ctx.repo.colleges.getById(
       collegeKey(ctx.schoolId, collegeId),
     ))),
-    Promise.all(userIds.map((userId) => ctx.repo.users.getById(userId))),
+    userIds.length ? ctx.repo.users.listByIds(userIds) : [],
   ]);
   const collegeName = new Map();
   collegeIds.forEach((collegeId, index) => {
     collegeName.set(collegeId, (colleges[index] && colleges[index].name) || collegeId);
   });
   const memberName = new Map();
-  userIds.forEach((userId, index) => {
-    const user = users[index];
-    memberName.set(userId, (user && (user.realName || user.nickName)) || userId);
-  });
+  for (const user of users) {
+    memberName.set(user._id, user.realName || user.nickName || user._id);
+  }
   const labels = new Map();
   for (const entry of entries) {
     const names = (Array.isArray(entry.userIds) ? entry.userIds : [])
@@ -288,9 +297,9 @@ async function getMeetSessionScores(payload = {}, ctx) {
   const docEvent = doc || {};
   // 本项目有哪些场次：判「我被指派到本项目任一场次」用（连续几个项目同一批裁判
   // 时不逐场指派，同项目内默认就是同一组人）。
-  const eventSessions = new Set(sessions.map(item => item._id));
-  if (!isAdmin && !myAssignments.some(row => row.status === 'active'
-    && row.judgeId === ctx.actorId && eventSessions.has(row.sessionKey))) {
+  const eventSessions = new Map(sessions.map(item => [item._id, item]));
+  if (!isAdmin && !myAssignments.some(row => row.status === 'active' && row.judgeId === ctx.actorId
+    && isCurrentJudgeAssignment(eventSessions.get(row.sessionKey), row))) {
     return ok({ session: { sessionKey, eventKey: session.eventKey }, items: [], canEnter: false });
   }
   // 预赛分组的场次只列本组的人：把全项目的人都摆到「预赛第 2 组」的录分页上，
@@ -325,17 +334,9 @@ async function getMeetSessionScores(payload = {}, ctx) {
     // 按道次排：裁判按道点名与记录，不按主键（主键顺序对现场毫无意义）
     .sort((a, b) => (a.lane || 99) - (b.lane || 99));
 
-  // 能不能录（D70 代录 + B9c 批量指派）：
-  //   · 管理员可代录任意场次；
-  //   · 裁判本人被指派到本场次；
-  //   · **或**被指派到同一项目的任一场次——连续几个项目同一批裁判时，
-  //     逐场逐个指派不现实，同项目内默认他们就是同一组人。
-  const assignedInEvent = myAssignments.some((doc) => doc.status === 'active'
-    && doc.judgeId === ctx.actorId && eventSessions.has(doc.sessionKey));
   // 本场已选裁判（姓名版）：录分页要能看到这场有谁执裁。
   // 名单已经按本场次下推过，这里只需按人去重后点读姓名。
-  const activeJudges = sessionAssignments.filter(doc => doc.status === 'active');
-  const judgeIds = [...new Set(activeJudges.map(doc => doc.judgeId))];
+  const judgeIds = [...new Set(activeJudgeIdsOf(session, sessionAssignments))];
   const judgeUsers = judgeIds.length ? await ctx.repo.users.listByIds(judgeIds) : [];
   const judgeNameById = new Map(
     judgeUsers.map(user => [user._id, user.realName || user.nickName || user._id]),
@@ -351,7 +352,7 @@ async function getMeetSessionScores(payload = {}, ctx) {
       judges,
     },
     items: own,
-    canEnter: isAdmin || Boolean(assignment && assignment.status === 'active'),
+    canEnter: isAdmin || (isCurrentJudgeAssignment(session, assignment) && assignment.status === 'active'),
   });
 }
 
@@ -390,12 +391,14 @@ async function saveMeetJudgeScore(payload = {}, ctx) {
       meetJudgeKey(ctx.meetId, sessionKey, ctx.actorId),
     );
     const isAdmin = canManageMeet(ctx);
-    if (!isAdmin && !(assignment && assignment.status === 'active')) {
+    if (!isAdmin && (!isCurrentJudgeAssignment(session, assignment) || assignment.status !== 'active')) {
       return refused('你不是该场次的裁判');
     }
     const judgeId = isAdmin && payload.judgeId ? String(payload.judgeId) : ctx.actorId;
     const scoringJudge = await tx.sportsMeetJudgeAssignments.getById(meetJudgeKey(ctx.meetId, sessionKey, judgeId));
-    if (!scoringJudge || !['active', 'revoked'].includes(scoringJudge.status)) return refused('代录必须选择本场已指派的裁判');
+    if (!isCurrentJudgeAssignment(session, scoringJudge) || !['active', 'revoked'].includes(scoringJudge.status)) {
+      return refused('代录必须选择本场已指派的裁判');
+    }
     const publication = await tx.sportsMeetPublications.getById(meetPublicationKey(ctx.meetId, event._id,
       event.rounds === 'final' ? 'all' : sessionKey));
     if (publication && !isAdmin) return refused('成绩已发布，仅管理员可以更正并重新发布');
@@ -446,7 +449,9 @@ async function submitMeetJudgeScore(payload = {}, ctx) {
       || !entry || entry.eventKey !== session.eventKey || entry.status !== 'approved'
       || ((session.entryKeys || []).length && !session.entryKeys.includes(entryKey))) return refused('场次或参赛名单已变化');
     const assignment = await tx.sportsMeetJudgeAssignments.getById(meetJudgeKey(fresh.meetId, sessionKey, judgeId));
-    if (!assignment || (!isAdmin && assignment.status !== 'active')) return refused('你不是该场次的有效裁判');
+    if (!isCurrentJudgeAssignment(session, assignment) || (!isAdmin && assignment.status !== 'active')) {
+      return refused('你不是该场次的有效裁判');
+    }
     const event = await tx.sportsMeetEvents.getById(session.eventKey);
     if (!event || (event.rounds === 'heat_final' && !(session.entryKeys || []).length)) return refused('请先完成分组或晋级');
     const publication = await tx.sportsMeetPublications.getById(meetPublicationKey(fresh.meetId, event._id,
@@ -488,7 +493,7 @@ async function getMeetResultPreview(payload = {}, ctx) {
   if (!event || event.meetId !== ctx.meetId) return refused('项目组别不存在或不属于本届运动会');
 
   const own = sessions
-    .filter((doc) => doc.eventKey === eventKey)
+    .filter((doc) => doc.eventKey === eventKey && !doc.voidedAt)
     .sort((a, b) => Number(a.index) - Number(b.index));
   if (own.length === 0) return refused('该项目组别还没有场次');
 
@@ -517,11 +522,7 @@ async function getMeetResultPreview(payload = {}, ctx) {
     });
   }
   const sessionKey = session ? session._id : 'all';
-  const judgeIds = session
-    ? assignments
-      .filter((doc) => doc.status === 'active' && doc.sessionKey === sessionKey)
-      .map((doc) => doc.judgeId)
-    : [];
+  const judgeIds = activeJudgeIdsOf(session, assignments);
 
   const assigned = session && Array.isArray(session.entryKeys) && session.entryKeys.length > 0
     ? new Set(session.entryKeys) : null;
@@ -558,9 +559,7 @@ async function getMeetResultPreview(payload = {}, ctx) {
     values = new Map();
     missing = [];
     for (const row of own) {
-      const rowJudges = assignments
-        .filter((doc) => doc.status === 'active' && doc.sessionKey === row._id)
-        .map((doc) => doc.judgeId);
+      const rowJudges = activeJudgeIdsOf(row, assignments);
       const scoped = Array.isArray(row.entryKeys) && row.entryKeys.length > 0
         ? approved.filter((doc) => row.entryKeys.includes(doc._id))
         : approved;
@@ -575,8 +574,7 @@ async function getMeetResultPreview(payload = {}, ctx) {
   }
 
   // 多枪项目的裁判数按场次算，取最大值（各枪人数可能不同）
-  const judgeCounts = own.map((row) => assignments
-    .filter((doc) => doc.status === 'active' && doc.sessionKey === row._id).length);
+  const judgeCounts = own.map((row) => activeJudgeIdsOf(row, assignments).length);
   const warning = judgeCountWarning(judgeCounts.length ? Math.max(...judgeCounts) : judgeIds.length);
 
   const previewLabels = await entryLabels(ctx, approved);
@@ -657,7 +655,7 @@ async function publishMeetResults(payload = {}, ctx) {
   if (!event || event.meetId !== ctx.meetId) return refused('项目组别不存在或不属于本届运动会');
 
   const ownSessions = sessions
-    .filter((doc) => doc.eventKey === eventKey)
+    .filter((doc) => doc.eventKey === eventKey && !doc.voidedAt)
     .sort((a, b) => Number(a.index) - Number(b.index));
   if (ownSessions.length === 0) return refused('该项目组别还没有场次');
 
@@ -758,9 +756,7 @@ async function publishMeetResults(payload = {}, ctx) {
       const missing = [];
       const noJudge = [];
       for (const row of ownSessions) {
-        const judgeIds = assignments
-          .filter((doc) => doc.status === 'active' && doc.sessionKey === row._id)
-          .map((doc) => doc.judgeId);
+        const judgeIds = activeJudgeIdsOf(row, assignments);
         if (judgeIds.length === 0) {
           noJudge.push(row.roundLabel || row.round);
           continue;
@@ -785,9 +781,7 @@ async function publishMeetResults(payload = {}, ctx) {
         });
       }
     } else {
-      const judgeIds = assignments
-        .filter((doc) => doc.status === 'active' && doc.sessionKey === sessionKey)
-        .map((doc) => doc.judgeId);
+      const judgeIds = activeJudgeIdsOf(session, assignments);
       if (judgeIds.length === 0) return refused('该场次还没有指派裁判');
 
       const summary = summarizeScores(approved.filter(entry => !voidKeys.has(entry._id)), scores, judgeIds, eventKey, sessionKey);
@@ -903,11 +897,15 @@ async function publishMeetResults(payload = {}, ctx) {
       for (const row of oldRows) bump(row.collegeId, -1, row);
       for (const row of rowDigest) bump(row.collegeId, 1, row);
 
+      const standingEntries = [];
       for (const [collegeId, change] of delta) {
         // 重发同样结果时绝大多数学院净额为 0，跳过可以省掉一半读写
         if (!change.points && !change.gold && !change.silver && !change.bronze) continue;
         const key = meetStandingKey(fresh.meetId, collegeId);
         const doc = await tx.sportsMeetStandings.getById(key);
+        standingEntries.push({ key, collegeId, change, doc });
+      }
+      for (const { key, collegeId, change, doc } of standingEntries) {
         const base = doc || {
           _id: key, schoolId: fresh.schoolId, meetId: fresh.meetId, collegeId,
           total: 0, gold: 0, silver: 0, bronze: 0, createdAt: now, updatedAt: now,
@@ -925,10 +923,8 @@ async function publishMeetResults(payload = {}, ctx) {
 
     // 多枪项目的发布键是 'all'，没有对应指派记录，要回到各场次上取人数
     const publishWarning = judgeCountWarning(aggregateFinal
-      ? Math.max(0, ...ownSessions.map((row) => assignments.filter(
-        (doc) => doc.status === 'active' && doc.sessionKey === row._id,
-      ).length))
-      : assignments.filter((doc) => doc.status === 'active' && doc.sessionKey === sessionKey).length);
+      ? Math.max(0, ...ownSessions.map((row) => activeJudgeIdsOf(row, assignments).length))
+      : activeJudgeIdsOf(session, assignments).length);
 
     return ok({
       warning: publishWarning,
@@ -992,8 +988,12 @@ async function writeDetailBatch(repo, key, entries) {
     const slice = entries.slice(i, i + RESULT_DETAIL_BATCH);
     try {
       await repo.transaction(async tx => {
+        const existing = new Map();
+        for (const [id] of slice) {
+          existing.set(id, await tx[key].getById(id));
+        }
         for (const [id, doc] of slice) {
-          const current = await tx[key].getById(id);
+          const current = existing.get(id);
           if (current && Number(current.version) > Number(doc.version)) continue;
           await tx[key].set(id, doc);
         }
@@ -1069,7 +1069,9 @@ async function getPublishedResults(payload = {}, ctx) {
   // 原先是逐人 `users.getById`：一届成绩明细去重后 1500~2500 个编号，
   // 就是 1500~2500 次**串行** RPC，必然撞超时，表现为「点开成绩单一直转圈」。
   // `users.listByIds` 每 100 个一批，几十次往返即可。
-  const detailUserIds = [...new Set(rows.flatMap((row) => (Array.isArray(row.userIds) ? row.userIds : [])))];
+  const resolvedByDoc = new Map(mine.map((doc) => [doc._id, publishedRowsOf(doc, rows)]));
+  const detailUserIds = [...new Set([...rows, ...[...resolvedByDoc.values()].flat()]
+    .flatMap((row) => (Array.isArray(row.userIds) ? row.userIds : [])))];
   for (const user of (detailUserIds.length ? await ctx.repo.users.listByIds(detailUserIds) : [])) {
     nickOf.set(user._id, user.nickName || '未设置昵称');
   }
@@ -1096,7 +1098,7 @@ async function getPublishedResults(payload = {}, ctx) {
       version: doc.version,
       publishedAt: doc.publishedAt,
       reason: doc.reason || '',
-      items: publishedRowsOf(doc, rows).map(rowLabel),
+      items: (resolvedByDoc.get(doc._id) || []).map(rowLabel),
     }));
 
   const official = rounds.find((row) => row.official) || null;
@@ -1166,8 +1168,17 @@ async function listMeetPublishedResults(payload = {}, ctx) {
   // 行里存了 userIds 快照，不需要再读报名名单；昵称按行里的用户解析一次。
   // 与 getPublishedResults 同一口径：一次 `listByIds`（内部每 100 个一批），
   // 不再按 20 个一组拿点读硬凑（2026-10-23 第三轮审查 X-4）。
+  const resolvedByDoc = new Map();
+  if (!payload.metadataOnly) {
+    for (const event of selectedEvents) {
+      for (const doc of byEvent.get(event._id) || []) {
+        resolvedByDoc.set(doc._id, publishedRowsOf(doc, selectedRows));
+      }
+    }
+  }
   const nickOf = new Map();
-  const userIds = [...new Set(selectedRows.flatMap((row) => (Array.isArray(row.userIds) ? row.userIds : [])))];
+  const userIds = payload.metadataOnly ? [] : [...new Set([...resolvedByDoc.values()].flat()
+    .flatMap((row) => (Array.isArray(row.userIds) ? row.userIds : [])))];
   for (const user of (userIds.length ? await ctx.repo.users.listByIds(userIds) : [])) {
     nickOf.set(user._id, user.nickName || '未设置昵称');
   }
@@ -1188,7 +1199,7 @@ async function listMeetPublishedResults(payload = {}, ctx) {
         version: doc.version,
         publishedAt: doc.publishedAt,
         reason: doc.reason || '',
-        items: publishedRowsOf(doc, selectedRows)
+        items: payload.metadataOnly ? [] : (resolvedByDoc.get(doc._id) || [])
           .sort((a, b) => (Number(a.rank) || 99) - (Number(b.rank) || 99))
           .map((row) => ({
             entryKey: row.entryKey,

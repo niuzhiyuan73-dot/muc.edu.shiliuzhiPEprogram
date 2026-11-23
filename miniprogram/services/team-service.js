@@ -295,12 +295,15 @@ async function listTeams(payload = {}, ctx) {
   const offset = Number.isInteger(payload.offset) && payload.offset >= 0 ? payload.offset : 0;
   const total = rows.length;
   const page = rows.slice(offset, offset + limit);
+  const realCount = page.length;
 
   // 我的球队：本院用户自动含本院院队（无需加入），排在自由球队之前。
   // 组队列表本身仍不列院队——那会把自由组队淹掉；但「我的球队」里少了院队，
   // 院队详情就没有入口，负责人挑人只能靠报名面板兜着（2026-10-20 修复）。
   if (mineOnly) {
-    const myCollegeId = dir.collegeIdOf(ctx.actorId);
+    const managedCollegeId = (ctx.membership && ctx.membership.status === 'active'
+      && ctx.membership.role === 'staff' && ctx.membership.collegeId) || '';
+    const myCollegeId = managedCollegeId || dir.collegeIdOf(ctx.actorId);
     if (myCollegeId) {
       const teamId = collegeTeamKey(myCollegeId, ctx);
       const count = members
@@ -327,8 +330,8 @@ async function listTeams(payload = {}, ctx) {
     ok: true, teams: page, canManage: manage,
     // total 只数真实球队；院队是虚拟行（一个学院一支、没有落库记录），不计入
     total,
-    hasMore: offset + page.length < total,
-    nextOffset: offset + page.length,
+    hasMore: offset + realCount < total,
+    nextOffset: offset + realCount,
     message: '',
   });
 }

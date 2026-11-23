@@ -104,7 +104,11 @@ function eventRow(event, assoc) {
  */
 async function collectAnnouncements(api) {
   const page = await api.listSchoolAnnouncements({ limit: PAGE_LIMIT, status: ANNOUNCEMENT_STATUS.PUBLISHED });
-  if (!page.ok) throw new Error(page.message || '公告读取失败');
+  if (!page.ok) {
+    const err = new Error(page.message || '公告读取失败');
+    err.refused = true;
+    throw err;
+  }
   return { announcements: page.announcements || [], total: page.total, hasMore: Boolean(page.hasMore) };
 }
 
@@ -152,10 +156,12 @@ async function loadSchoolHomeView(options = {}) {
   const primaryAssociation = (allAssociations()[0] || {}).id || '';
   const announcementApi = client.forScope({ schoolId, association: primaryAssociation });
   let announcementPage = { announcements: [], hasMore: false };
+  let announcementFailed = false;
   try {
     announcementPage = await collectAnnouncements(announcementApi);
   } catch (err) {
     // 公告读不到不该拖垮赛事与概况：首页公告退化成「暂无公告」
+    if (!err || !err.refused) announcementFailed = true;
     console.warn(`[home] 读取 ${schoolId} 公告失败`, err);
   }
   // 服务端已按置顶优先 + 时间倒序排好，这里不再重排
@@ -194,6 +200,9 @@ async function loadSchoolHomeView(options = {}) {
   }));
 
   const readable = perAssociation.filter((row) => row.assoc !== null);
+  if ((!viewerId && announcementFailed) || (viewerId && readable.length === 0 && announcementFailed)) {
+    throw new Error('首页数据加载失败，请稍后重试');
+  }
 
   // 第二轮：会员数与赛季（学校级，任何可读协会读到的都是同一份）
   let memberCount = 0;

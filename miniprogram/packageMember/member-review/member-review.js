@@ -28,7 +28,7 @@
  */
 
 const { loadSchoolMemberReviewView } = require('../../services/school-member-review-view.js');
-const { isMock } = require('../../services/runtime-mode.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
@@ -60,7 +60,7 @@ Page({
     /** 视图模型，形状见 services/school-member-review-view.js。初值给空对象，WXML 展开才不会出错 */
     view: {},
     /** 开发期标注模拟数据 */
-    isMock,
+    isMock: false,
     /** 审核面板。mode 取 'approve' / 'reject'，决定面板里是确认还是理由框 */
     action: { open: false, mode: '', applicationId: '', revision: 0, title: '', hint: '', placeholder: '' },
     /** 驳回面板里填的理由 */
@@ -76,6 +76,7 @@ Page({
    * 但测试需要一个句柄等首屏加载完（见 tests/page.test.js）。
    */
   onLoad() {
+    this.setData({ isMock: isMockNow() });
     return this.refresh();
   },
 
