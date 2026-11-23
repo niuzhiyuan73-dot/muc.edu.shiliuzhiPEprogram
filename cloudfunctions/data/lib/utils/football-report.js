@@ -91,7 +91,10 @@ function normalizeSide(raw = {}, roster = [], rules, hasExtra) {
     if (!row.appeared && ['goals', 'assists', 'ownGoals', 'fouls'].some(f => row[f] > 0)) return fail('未出场球员不能记进球、助攻、乌龙或场上犯规');
     if (row.secondYellow === 1 && row.yellowCards !== 2) return fail('第二黄罚下须记录两张黄牌');
     if ((row.secondYellow || 0) + (row.directRed || 0) > 1) return fail('同一球员的罚下不能重复累计');
-    row.dismissals = row.secondYellow === null || row.directRed === null ? null : row.secondYellow + row.directRed;
+    // 只录直红（第二黄为空）时也要算 1 次罚下；两项都未录才是未知 null。
+    row.dismissals = row.secondYellow === null && row.directRed === null
+      ? null
+      : (row.secondYellow || 0) + (row.directRed || 0);
     players.push(row);
   }
   if (players.length) {

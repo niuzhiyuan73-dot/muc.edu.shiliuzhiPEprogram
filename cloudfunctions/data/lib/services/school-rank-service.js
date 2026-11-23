@@ -960,8 +960,11 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
       pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, minElo: bucket.elo,
     });
     rank = total > 0 ? above + 1 : null;
-    // 分母用 total（第 1 名显示「超过 99%」与 percentileFromBoard 同口径）
-    beatPercent = total > 0 ? Number((((total - rank) / total) * 100).toFixed(1)) : 0;
+    // 分母用 total（第 1 名显示「超过 99%」与 percentileFromBoard 同口径）。
+    // 最低分时 above 会计入自己，rank = total + 1；钳到 total，避免出现负的胜率。
+    beatPercent = total > 0
+      ? Number(((Math.max(0, total - Math.min(rank, total)) / total) * 100).toFixed(1))
+      : 0;
     projects.push({
       project, pool, label: RANK_PROJECT_LABEL[project],
       elo: bucket.elo, startElo: bucket.startElo, delta: bucket.elo - bucket.startElo,
@@ -1077,7 +1080,7 @@ async function resetSchoolSeason(payload = {}, ctx) {
     }
     const existing = await tx.seasons.getById(id);
     const base = existing && belongsToSchoolScope(existing, ctx) ? existing : defaultSeason(ctx);
-    const resetTime = requested || ctx.now;
+    const resetTime = new Date(requested || ctx.now).toISOString();
     const next = {
       ...base,
       _id: id,

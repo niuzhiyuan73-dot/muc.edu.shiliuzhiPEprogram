@@ -71,6 +71,10 @@ function fingerprint(view) {
     view.pointsB,
     view.gamesA,
     view.gamesB,
+    // 网球：盘分与抢七记录也要进指纹，否则只变盘分时观众页不刷新。
+    view.setsA,
+    view.setsB,
+    Array.isArray(view.tiebreaks) ? view.tiebreaks.length : '',
     view.gameIndex,
     view.status,
     // 篮球同一入口：换节和结束也要通知，不只比较总分。

@@ -241,3 +241,14 @@ test('大列表每来源最多30行、最终最多30张卡；不批读全校账�
   assert.equal(result.items.length, 30); assert.equal(result.hasMore, true); assert.ok(rows.every(count => count <= 30));
   assert.deepEqual(users.sort(), ['u', 'v']);
 });
+
+test('排序时间用实际字段：actedAt 与 hubEvent.finishedAt', () => {
+  const auth = { schoolId: 'muc', association: 'pkb', userId: 'u' };
+  const query = { asOf: '2026-10-29T00:00:00.000Z' };
+  const confirm = JSON.stringify(queryPlan('confirmScore', auth, query));
+  assert.match(confirm, /\$actedAt/, '确认比分应按 actedAt 排序');
+  assert.doesNotMatch(confirm, /\$recordTime/, '不能再引用不存在的 recordTime');
+  const college = JSON.stringify(queryPlan('collegeExperience', auth, query));
+  assert.match(college, /\$hubEvent\.finishedAt/, '学院赛经历应按 finishedAt 排序');
+  assert.doesNotMatch(college, /\$hubEvent\.finishTime/, '不能再引用不存在的 finishTime');
+});

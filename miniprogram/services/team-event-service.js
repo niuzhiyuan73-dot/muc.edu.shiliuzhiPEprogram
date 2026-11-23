@@ -1566,6 +1566,12 @@ async function recordTeamMatch(payload = {}, ctx) {
     }
 
     const statDocs = [];
+    // 空串是「未填写」，不是 0：Number('') === 0 会把没填的统计写成 0 分。
+    const statNumber = (value) => {
+      if (value === '' || value === null || value === undefined) return null;
+      const n = Number(value);
+      return Number.isInteger(n) ? Math.max(0, n) : null;
+    };
     for (const item of stats) {
       const teamId = item && item.teamId;
       if (teamId !== match.teamA && teamId !== match.teamB) {
@@ -1576,8 +1582,8 @@ async function recordTeamMatch(payload = {}, ctx) {
         .filter(row => row && roster.has(row.userId))
         .map(row => ({
           userId: row.userId,
-          points: Number.isInteger(Number(row.points)) ? Math.max(0, Number(row.points)) : null,
-          fouls: Number.isInteger(Number(row.fouls)) ? Math.max(0, Number(row.fouls)) : null,
+          points: statNumber(row.points),
+          fouls: statNumber(row.fouls),
         }));
       const total = players.reduce((sum, row) => sum + (row.points || 0), 0);
       const teamScore = teamId === match.teamA ? scoreA : scoreB;

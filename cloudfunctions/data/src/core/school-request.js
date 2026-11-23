@@ -51,7 +51,8 @@ const ANON_ACTIONS = new Set(['getSchoolDirectory', 'getSchoolIdentitySession'])
  * 所以按 `schoolId + association` 失效就够。
  *
  * 【新增条目的判据】只允许「纯比赛类」写：不写学籍、不写角色、不写会籍、
- * 不改学校/协会状态。撤权、审批、任免、变更学籍一律走全清（默认分支）。
+ * 不改学校/协会状态。撤权、审批、任免、变更学籍一律进
+ * `IDENTITY_INVALIDATION_ACTIONS`（全清）；两边都不命中的纯业务写不失效上下文。
  * 拿不准就别加——多清一次只多付几次读，漏清是一段撤权不生效的窗口。
  */
 const SCOPE_ONLY_INVALIDATION = new Set([
@@ -62,7 +63,12 @@ const SCOPE_ONLY_INVALIDATION = new Set([
 /**
  * 会改写身份 / 角色 / 学校 / 协会 / 运动会届次上下文文档的写动作。
  * 只有命中此白名单才触发 `contextCache.invalidateAll()`；其余纯业务写动作
- * （普通录分、报名、排程、小组、训练、公告、跨校比赛等）不再打穿全容器缓存。
+ * （报名、排程、小组、训练、公告、跨校比赛等）不再打穿全容器缓存。
+ *
+ * 运动会录分（`saveMeetJudgeScore` / `submitMeetJudgeScore`）仍列在这里：
+ * 它们会推进 `sportsMeets.contentRevision`，而运动会上下文缓存了这份文档；
+ * 读取侧 5 秒内可能拿到旧版本。暂按全清保守处理，若要降读放大需先给运动会
+ * 单独的范围失效粒度（学校 + 届次），不能直接删。
  */
 const IDENTITY_INVALIDATION_ACTIONS = new Set([
   'registerSchoolAccount', 'applySchoolMembership', 'reviewSchoolMembership',
@@ -143,6 +149,7 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
   try {
     if (event.action === 'getMySportsDashboard') {
       // 本人体育中心属于学校；不因某一协会停用而整体失效。每次新建身份，不使用读缓存。
+      if (!event.schoolId) return fail('本人体育中心接口必须指定学校');
       const personalCtx = await buildMeetContext({ repo, openId, now, scope: { schoolId: event.schoolId } });
       return acceptResult(await handlers[event.action](event.payload || {}, personalCtx));
     }

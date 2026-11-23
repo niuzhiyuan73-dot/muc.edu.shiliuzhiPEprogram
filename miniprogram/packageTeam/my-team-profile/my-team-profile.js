@@ -50,6 +50,15 @@ Page({
     return this.refresh();
   },
 
+  /** json 已开启 enablePullDownRefresh：必须给出处理器，否则下拉后动画不会收起 */
+  async onPullDownRefresh() {
+    try {
+      await this.refresh();
+    } finally {
+      if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') wx.stopPullDownRefresh();
+    }
+  },
+
   async refresh() {
     this.setData({ loading: true, error: '' });
     try {

@@ -60,8 +60,12 @@ async function loadColleges(ctx, repoOverride) {
     ? await repo.forScope(ctx).colleges.list()
     : await repo.colleges.listBySchool(schoolId);
   const rows = Array.isArray(docs) ? docs : [];
+  // 先淘汰最旧的一所再写入；原实现先 set 后 clear，容量越界时会把刚读到的这所
+  // 学校也清掉，下一次请求又整表读一遍（第二十三轮审查 P2）。
+  if (!perRepo.has(schoolId) && perRepo.size >= MAX_SCHOOLS) {
+    perRepo.delete(perRepo.keys().next().value);
+  }
   perRepo.set(schoolId, { docs: rows, expiresAt: Date.now() + TTL_MS });
-  if (perRepo.size > MAX_SCHOOLS) perRepo.clear();
   return rows;
 }
 

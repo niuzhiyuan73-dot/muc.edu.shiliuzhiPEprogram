@@ -566,3 +566,44 @@ test('转校审批的学号判重按字段窄查，不再读整校名册（第�
     '转校审批不允许整校读名册：5000 人是 50 页 RPC，与入会审批同一把尺子');
   assert.ok(calls.includes('listByStudentId'), '学号判重应按字段窄查（索引 schoolId + studentId）');
 });
+
+test('转校：目标校已禁用的会籍不能重新申请', async () => {
+  const repo = fixture();
+  await join(repo, 'new1', 'muc', 'MUC001');
+  const key = schoolMemberKey('new1', 'buaa');
+  await repo.schoolMembers.set(key, { _id: key, schoolId: 'buaa', userId: 'new1',
+    collegeId: 'c01', status: 'disabled' });
+  const applied = (await request(repo, 'applySchoolTransfer',
+    { collegeId: 'c01', studentId: 'BUAA001' }, 'new1', 'buaa')).data;
+  assert.equal(applied.ok, false);
+  assert.match(applied.message, /禁用/);
+});
+
+test('授权：目标账号不属于本校时拒绝', async () => {
+  const repo = fixture();
+  await repo.users.set('foreign', { _id: 'foreign', openId: 'foreign', platformStatus: 'active',
+    platformRole: 'member', primarySchoolId: 'buaa' });
+  const key = schoolMemberKey('foreign', 'muc');
+  await repo.schoolMembers.set(key, { _id: key, schoolId: 'muc', userId: 'foreign',
+    collegeId: 'c01', status: 'active' });
+  const res = (await request(repo, 'grantSchoolPermission',
+    { userId: 'foreign', permission: 'associationLeader', make: true },
+    'mock_openid_muc_admin', 'muc')).data;
+  assert.equal(res.ok, false);
+  assert.match(res.message, /不属于本校/);
+});
+
+test('授权：撤销协会负责人不能误撤学院负责人', async () => {
+  const repo = fixture();
+  await join(repo, 'new1', 'muc', 'MUC001');
+  const grant = (permission, make) => request(repo, 'grantSchoolPermission',
+    { userId: 'new1', permission, make, collegeId: 'c01' }, 'mock_openid_muc_admin', 'muc');
+  assert.equal((await grant('collegeLeader', true)).data.ok, true);
+  const revoke = await grant('associationLeader', false);
+  assert.equal(revoke.data.ok, false);
+  assert.match(revoke.data.message, /学院负责人/);
+  const { schoolMembershipKey } = require('../miniprogram/utils/school');
+  const membership = await repo.memberships.get(schoolMembershipKey('new1', { schoolId: 'muc', association: 'pkb' }));
+  assert.equal(membership.role, 'staff');
+  assert.equal(membership.status, 'active');
+});

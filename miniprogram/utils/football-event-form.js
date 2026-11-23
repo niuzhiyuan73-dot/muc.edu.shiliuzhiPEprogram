@@ -172,13 +172,14 @@ function footballEventFormView(form, showErrors = false) {
     field.selectedLabel = field.options[field.selectedIndex].label;
     field.showNumber = field.value !== sentinel;
   });
+  const preset = RULE_PRESETS[form.presetKey] || null;
   return {
     fields, summary: result.summary,
     error: showErrors ? result.message : '',
     customized: hasCustomFootballRules(form),
-    presetOptions: Object.entries(RULE_PRESETS).map(([value, preset]) => ({ value, label: preset.label })),
-    presetIndex: Object.keys(RULE_PRESETS).indexOf(form.presetKey),
-    presetLabel: RULE_PRESETS[form.presetKey].label,
+    presetOptions: Object.entries(RULE_PRESETS).map(([value, item]) => ({ value, label: item.label })),
+    presetIndex: preset ? Object.keys(RULE_PRESETS).indexOf(form.presetKey) : -1,
+    presetLabel: preset ? preset.label : '',
   };
 }
 

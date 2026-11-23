@@ -105,3 +105,22 @@ test('我的球队 —— 取数失败给一句人话，不停在加载态', () 
   assert.equal(page.data.error, '该协会不是团队项目');
   assert.equal(page.data.profile, null);
 }));
+
+test('我的球队 —— 下拉刷新重新取数并收起动画', async () => {
+  const previous = global.wx;
+  let stops = 0;
+  global.wx = { stopPullDownRefresh: () => { stops += 1; } };
+  try {
+    let calls = 0;
+    await withApi({
+      getMyTeamProfile: () => { calls += 1; return profileFixture(); },
+    }, async () => {
+      const page = instantiate(loadPage('my-team-profile/my-team-profile.js'));
+      await page.onLoad();
+      calls = 0;
+      await page.onPullDownRefresh();
+      assert.equal(calls, 1, '下拉应重新取一次档案');
+      assert.equal(stops, 1, '无论成功失败都要收起下拉动画');
+    });
+  } finally { global.wx = previous; }
+});

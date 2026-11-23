@@ -63,7 +63,9 @@ function collectEventPointFacts({ events, resetTime = null }) {
     const endedAt = event.finishedAt || event.endTime || event.startTime;
     if (resetApplies) {
       const endedMs = new Date(endedAt).getTime();
-      if (Number.isFinite(endedMs) && endedMs < resetMs) continue;
+      // 结束时间不可解析时不能当成「本赛季」：宁可跳过，也不要把来路不明的事实
+      // 记进新赛季（第二十三轮审查 P1-18）。
+      if (!Number.isFinite(endedMs) || endedMs < resetMs) continue;
     }
 
     for (const result of event.results || []) {

@@ -216,7 +216,7 @@ async function finishSchoolLiveScore(payload = {}, ctx) {
 
 /** 批量取实时比分，供查看端轮询。只返回比分相关字段，尽量小。 */
 async function getSchoolLiveScores(payload = {}, ctx) {
-  if (!canReadAssociationSpace(ctx)) return ok({ ok: true, scores: [], message: '' });
+  if (!canReadAssociationSpace(ctx)) return ok(refused('没有读取协会空间的权限', { scores: [] }));
   // matchIds 由客户端给（当前页可见的比赛），必须限量：无上限时一次轮询
   // 可以变成上千次顺序 RPC，正好撞上默认 3 秒超时（2026-10-17 审计 C6/C8）。
   const ids = (Array.isArray(payload.matchIds) ? payload.matchIds : [])

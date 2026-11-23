@@ -118,3 +118,19 @@ test('抽签之后不再收新的参赛意向', async () => {
   assert.equal(late.ok, false);
   assert.match(late.message, /已经抽签/);
 });
+
+test('补报窗口只在已发布且未结束的届次开放', async () => {
+  const { repo, meetId, admin } = await makeWorld();
+  const current = await repo.sportsMeets.getById(meetId);
+  await repo.sportsMeets.set(meetId, { ...current, status: 'draft' });
+  const draft = await reg.openMeetLateWindow(
+    { openAt: '2026-10-24T08:00', closeAt: '2026-10-26T20:00' }, admin);
+  assert.equal(draft.ok, false);
+  assert.match(draft.message, /尚未发布/);
+
+  await repo.sportsMeets.set(meetId, { ...current, status: 'finished' });
+  const finished = await reg.openMeetLateWindow(
+    { openAt: '2026-10-24T08:00', closeAt: '2026-10-26T20:00' }, admin);
+  assert.equal(finished.ok, false);
+  assert.match(finished.message, /已结束/);
+});

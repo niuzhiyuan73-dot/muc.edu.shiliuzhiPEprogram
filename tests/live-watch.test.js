@@ -321,3 +321,21 @@ test('没有 live 场次时降频到空闲间隔，出现 live 立刻恢复', as
     assert.equal(calls, afterLive + 1, '出现 live 后回到 2 秒节奏');
   } finally { off(); }
 });
+
+test('网球盘分或抢七记录变化也触发回调', async t => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let data = [view('m1', 0, 0, { setsA: 0, setsB: 0, tiebreaks: [] })];
+  const seen = [];
+  const off = watchLiveScores(['m1'], views => seen.push(views), {
+    fetch: async () => data.map(item => ({ ...item })),
+  });
+  try {
+    await flush();
+    assert.equal(seen.length, 1);
+    data = [view('m1', 0, 0, { setsA: 1, setsB: 0, tiebreaks: [{ setIndex: 0, a: 7, b: 5 }] })];
+    t.mock.timers.tick(POLL_INTERVAL);
+    await flush();
+    assert.equal(seen.length, 2, '盘分变化必须通知观众页');
+    assert.equal(seen[1][0].setsA, 1);
+  } finally { off(); }
+});

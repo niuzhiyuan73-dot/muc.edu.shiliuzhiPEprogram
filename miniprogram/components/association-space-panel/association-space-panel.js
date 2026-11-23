@@ -213,6 +213,8 @@ Component({
 
   lifetimes: {
     attached() {
+      this.destroyed = false;
+      this.loadSeq = 0;
       this.onLoad();
     },
     /**
@@ -223,6 +225,9 @@ Component({
      * 同时把还在等待的那次输入 resolve 掉，避免调用方（含用例）一直挂着。
      */
     detached() {
+      // 卸载后作废在途装载；否则 await 回来的 setData 会打到已销毁的组件上。
+      this.destroyed = true;
+      this.loadSeq = (this.loadSeq || 0) + 1;
       this.cancelSearchTimers();
     },
   },
@@ -273,6 +278,7 @@ Component({
 
     /** 装载首屏：学校名 + 分组列表 + 成员名录（供成员页签与建组选人共用） */
     async refresh() {
+      const seq = this.loadSeq = (this.loadSeq || 0) + 1;
       try {
         const scope = this.scopeKey();
         this.api = space.forScope(scope);
@@ -295,6 +301,7 @@ Component({
           this.api.listAssociationGroups({ limit: 50 }),
           this.api.listAssociationMembers({ limit: PICK_POOL }),
         ]);
+        if (this.destroyed || seq !== this.loadSeq) return undefined;
         this.loaded = true;
         // listAssociationGroups 的 ok:false 只出现在权限判定处（其余失败都抛异常，
         // 走下面的 catch）。因此这里能确定是「没有读取权」，而非加载故障。

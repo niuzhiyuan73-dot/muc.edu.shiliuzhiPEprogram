@@ -46,7 +46,13 @@ Component({
 
   lifetimes: {
     attached() {
+      this.loadRequest = 0;
       this.onLoad();
+    },
+    detached() {
+      // 卸载后作废在途请求：否则 await 回来的 setData 会打到已销毁的组件上。
+      this.loadRequest = (this.loadRequest || 0) + 1;
+      this.loaded = false;
     },
   },
 

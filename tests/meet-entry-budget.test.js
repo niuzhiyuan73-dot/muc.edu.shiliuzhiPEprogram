@@ -269,3 +269,18 @@ test('配置侧与提交侧共用同一个人数上限', async () => {
   assert.equal(tooBig.ok, false, '超上限的人数应在配置阶段就被拒');
   assert.match(tooBig.message, new RegExp(`${MEET_ENTRY_MAX_MEMBERS}`));
 });
+
+test('抽签之后名单不能再撤回', async () => {
+  const { repo, meetId, eventKey } = await makeWorld();
+  const submitted = await reg.submitMeetCollegeEntry(
+    { eventKey, userIds: studentIds }, await ctxOf(repo, 'u_lead', meetId),
+  );
+  assert.equal(submitted.ok, true, submitted.message);
+  const event = await repo.sportsMeetEvents.getById(eventKey);
+  await repo.sportsMeetEvents.set(eventKey, { ...event, bracket: { size: 2, totalRounds: 1 } });
+  const withdrawn = await reg.withdrawMeetCollegeEntry(
+    { entryKey: submitted.data.entry._id }, await ctxOf(repo, 'u_lead', meetId),
+  );
+  assert.equal(withdrawn.ok, false);
+  assert.match(withdrawn.message, /已抽签/);
+});

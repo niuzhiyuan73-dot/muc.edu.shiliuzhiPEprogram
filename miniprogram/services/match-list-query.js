@@ -74,6 +74,9 @@ function matchListWhere(scope, filter, cursor) {
 
 function memoryMatchPage(docs, scope, { filter = {}, limit = 20, offset = 0, cursor = null }) {
   const raw = limit === undefined || limit === null ? 20 : Number(limit);
+  // 内存端夹到 100；云端 listPage 因「多取 1 条判 hasMore」夹到 99。
+  // 生产调用方最大只传 20（首页只传 1），这个边界差异只影响演示/测试；
+  // 若要彻底对齐，需连同演示台账与分页用例一起改，见第二十三轮审查 P1-30。
   const size = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 100)) : 20;
   const base = docs.filter(doc => isListMatch(doc) && doc.schoolId === scope.schoolId &&
     doc.association === scope.association &&

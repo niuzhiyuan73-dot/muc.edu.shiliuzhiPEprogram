@@ -250,6 +250,7 @@ test('赛季：管理员开新赛季，编号 +1、记下分界点，且按范�
   assert.equal(opened.ok, true, opened.message);
   assert.equal(opened.season.seasonNumber, 2);
   assert.ok(opened.season.resetTime, '分界点应被记下');
+  assert.match(opened.season.resetTime, /^\d{4}-\d{2}-\d{2}T/, '分界点应存 ISO 串，双端锚点才一致');
 
   const muc = await call(repo, 'getSchoolSeason', {}, { actor: 'demo_muc_admin' });
   assert.equal(muc.season.seasonNumber, 2);

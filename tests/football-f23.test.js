@@ -332,3 +332,21 @@ test('F2 单队战绩只读本队那几十条，不再整表读全协会历史�
   assert.deepEqual(wholeTable, [],
     `单队战绩不该整表读这些集合：${wholeTable.join('、')}`);
 });
+
+test('只录直红的球员 dismissals 计 1，不因第二黄为空而变成 null', async () => {
+  const f = await fixture(); const m = (await f.matches())[0];
+  const data = await f.report(m, { regulationScore: { A: 1, B: 0 } }, true);
+  const entries = await f.repo.forScope(f.SCOPE).teamEventEntries.list();
+  const rosters = { A: entries.find(e => e.teamId === m.teamA).roster, B: entries.find(e => e.teamId === m.teamB).roster };
+  const copy = structuredClone(data);
+  const row = copy.sides.A.players.find(player => player.appeared);
+  copy.sides.A.players.forEach(player => { player.directRed = 0; });
+  row.secondYellow = null;
+  row.directRed = 1;
+  copy.sides.A.coverage.secondYellow = 'none';
+  copy.sides.A.coverage.directRed = 'full';
+  const result = normalizeFootballReport(copy, { rules, format: 'round_robin', rosters });
+  assert.equal(result.ok, true, result.message);
+  const out = result.value.sides.A.players.find(player => player.userId === row.userId);
+  assert.equal(out.dismissals, 1);
+});

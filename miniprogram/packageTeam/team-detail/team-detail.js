@@ -223,23 +223,23 @@ Page({
     return this.run('removeCollegeTeamMember', { teamId: this.data.teamId, userId: userid }, '已移出学院队');
   },
 
-  /** 统一的写动作包装：防连点 + 失败提示 + 成功后刷新 */
+  /** 统一的写动作包装：防连点 + 失败提示 + 成功后刷新；返回是否真正成功 */
   async run(action, payload, successText) {
-    if (this.data.busy) return undefined;
+    if (this.data.busy) return false;
     this.setData({ busy: true, notice: '', noticeError: false });
     try {
       const result = await space.forScope(this.scope)[action](payload);
       if (!result.ok) {
         this.setData({ busy: false, notice: result.message || '操作失败', noticeError: true });
-        return undefined;
+        return false;
       }
       this.setData({ busy: false, notice: successText, noticeError: false });
       await this.refresh();
-      return undefined;
+      return true;
     } catch (err) {
       console.error(`[team-detail] ${action} 失败`, err);
       this.setData({ busy: false, notice: '操作失败，请稍后重试', noticeError: true });
-      return undefined;
+      return false;
     }
   },
 
@@ -288,7 +288,7 @@ Page({
         success: (res) => {
           if (!res.confirm) { resolve(undefined); return; }
           this.run('archiveTeam', { teamId: this.data.teamId }, '球队已归档')
-            .then(() => { if (typeof wx.navigateBack === 'function') wx.navigateBack(); resolve(undefined); });
+            .then((ok) => { if (ok && typeof wx.navigateBack === 'function') wx.navigateBack(); resolve(undefined); });
         },
         fail: () => resolve(undefined),
       });

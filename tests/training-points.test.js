@@ -18,10 +18,10 @@ const {
   TRAINING_POINT_AMOUNT,
   ATTENDANCE_STATUS,
 } = require('../miniprogram/services/training-points.js');
-const { aggregatePoints } = require('../miniprogram/services/school-points-service.js');
+const { aggregatePoints, collectEventPointFacts } = require('../miniprogram/services/school-points-service.js');
 const { getPoolRating } = require('../miniprogram/utils/rating.js');
 const { DEFAULT_CONFIG } = require('../miniprogram/utils/elo.js');
-const { RATING_POOL, MATCH_TYPE } = require('../miniprogram/utils/constants.js');
+const { EVENT_STATUS, RATING_POOL, MATCH_TYPE } = require('../miniprogram/utils/constants.js');
 
 const MALE_START = DEFAULT_CONFIG.initialRating;
 
@@ -204,4 +204,15 @@ describe('aggregatePoints 叠加训练积分（Elo 逐场结算改造：积分�
     });
     assert.equal(result.get('a'), 1, '只有边界当刻及之后的那次训练计分');
   });
+});
+
+test('赛季重置后，结束时间不可解析的赛事不并入新赛季', () => {
+  const resetTime = at(DAY);
+  const base = { status: EVENT_STATUS.FINISHED, level: 1, matchType: MATCH_TYPE.SINGLES,
+    pool: RATING_POOL.SINGLES, results: [{ userId: 'u', placement: 1 }] };
+  const facts = collectEventPointFacts({ resetTime, events: [
+    { ...base, _id: 'bad', finishedAt: 'not-a-date', startTime: at(2 * DAY) },
+    { ...base, _id: 'good', finishedAt: at(2 * DAY) },
+  ] });
+  assert.deepEqual(facts.map(fact => fact.eventId), ['good']);
 });

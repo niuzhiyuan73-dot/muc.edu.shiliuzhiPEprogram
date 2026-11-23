@@ -316,3 +316,24 @@ test('球队详情 —— 归档球队的战绩照样能看', () => withApi({
   assert.equal(page.data.record.seasons[0].placementText, '冠军', '历史成绩不随归档消失');
   assert.equal(page.data.record.overall.games, 6);
 }));
+
+test('球队详情 —— 归档失败不返回上一页', async () => {
+  const previous = global.wx;
+  let backs = 0;
+  global.wx = {
+    navigateBack: () => { backs += 1; },
+    showModal: (options) => { if (options.success) options.success({ confirm: true }); },
+  };
+  try {
+    await withApi({
+      getTeam: () => ({ ok: true, team: { ...TEAM, isCaptain: true, canManage: true }, members: [], pendingCount: 0 }),
+      archiveTeam: () => ({ ok: false, message: '归档失败，请稍后重试' }),
+    }, async () => {
+      const page = instantiate(loadPage('team-detail/team-detail.js'));
+      page.data.teamId = 'tm_1';
+      await page.onArchive();
+      assert.equal(backs, 0, '归档失败不能把用户带回上一页');
+      assert.match(page.data.notice, /归档失败/);
+    });
+  } finally { global.wx = previous; }
+});

@@ -965,9 +965,9 @@ async function detachUserFromTeams(repo, { schoolId, userId, now, actorId } = {}
               for (const candidate of batch) {
                 const member = await tx.teamMembers.getById(candidate._id);
                 if (!member || member.status !== TEAM_MEMBER_STATUS.ACTIVE || member.teamId !== team._id) continue;
-                const [account, schoolMember] = await Promise.all([
-                  root.users.getById(member.userId), root.schoolMembers.getById(schoolMemberKey(member.userId, schoolId)),
-                ]);
+                // 事务内禁止 Promise.all 并发读：微信云开发事务要求串行 await。
+                const account = await root.users.getById(member.userId);
+                const schoolMember = await root.schoolMembers.getById(schoolMemberKey(member.userId, schoolId));
                 if (account && account.platformStatus === 'active' && account.primarySchoolId === schoolId
                     && schoolMember && schoolMember.userId === member.userId && schoolMember.schoolId === schoolId
                     && schoolMember.status === 'active') { next = member; break; }

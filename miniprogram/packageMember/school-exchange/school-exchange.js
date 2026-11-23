@@ -99,12 +99,14 @@ Page({
       // actorIndex/actorName 取到 0 / ''，配合模板上的 wx:if 整条下拉不渲染。
       const found = actors.findIndex(actor => actor.id === identity.getDemoActor());
       const actorIndex = found >= 0 ? found : 0;
-      const schoolIndex = directory.schools.findIndex(school => school.schoolId === target.schoolId);
+      const schoolIndex = Math.max(0, directory.schools.findIndex(school => school.schoolId === target.schoolId));
+      const currentSchool = directory.schools[schoolIndex];
+      if (!currentSchool) throw new Error('学校目录为空，请稍后重试');
       const previous = new Map((this.data.schoolChoices || []).map(row => [row.schoolId, row]));
       const selected = this.data.selectedSchoolIds.length ? this.data.selectedSchoolIds
         : directory.schools.filter(row => row.schoolId !== target.schoolId).slice(0, 1).map(row => row.schoolId);
       const selectedSchoolIds = [...new Set([target.schoolId, ...selected])].filter(id => directory.schools.some(row => row.schoolId === id));
-      this.update({ schools: directory.schools, schoolIndex, schoolName: directory.schools[schoolIndex].name,
+      this.update({ schools: directory.schools, schoolIndex, schoolName: currentSchool.name,
         selectedSchoolIds,
         schoolChoices: directory.schools.map(row => ({ ...row, selected: selectedSchoolIds.includes(row.schoolId),
           host: row.schoolId === target.schoolId, quota: previous.get(row.schoolId)?.quota || this.data.schoolQuota })),

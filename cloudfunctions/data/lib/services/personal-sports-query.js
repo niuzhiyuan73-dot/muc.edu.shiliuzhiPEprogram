@@ -53,7 +53,7 @@ function queryPlan(source, auth, query = {}) {
     stages.push(...join('collegeEvents', 'collegeEventId', 'hubCollegeEvent', true));
     stages.push(['match', expr(or(eq(fallback('$collegeEventId', ''), ''), and(eq('$hubCollegeEvent.schoolId', auth.schoolId),
       eq('$hubCollegeEvent.association', '$association'), oneOf('$hubCollegeEvent.status', source === 'personalResult' ? [0, 1, 2, 3] : [1, 2]))))]);
-    time = source === 'confirmScore' ? fallback('$recordTime', '$matchTime') : '$matchTime';
+    time = source === 'confirmScore' ? fallback('$actedAt', '$matchTime') : '$matchTime';
     if (source === 'personalSchedule') {
       stages.push(...join('liveScores', '_id', 'hubLive', true, 'matchId'));
       running = and(eq('$hubLive.status', 'live'), eq('$hubLive.schoolId', auth.schoolId), eq('$hubLive.association', '$association'));
@@ -126,7 +126,7 @@ function queryPlan(source, auth, query = {}) {
     stages.push(['match', { ...scope, status: source === 'collegeReturned' ? 2 : 1,
       ...(source === 'collegeReturned' ? { $or: manage.length ? manage : [{ _id: '__no_authorized_college__' }] } : { members: uid }) }]);
     addEvent('collegeEvents', 'eventId', source === 'collegeExperience' ? [3] : source === 'collegeReturned' ? [0] : [0, 1]);
-    time = source === 'collegeWaiting' ? '9999-12-31T23:59:59.999Z' : source === 'collegeExperience' ? fallback('$hubEvent.finishTime', '$hubEvent.startTime') : '$updatedAt';
+    time = source === 'collegeWaiting' ? '9999-12-31T23:59:59.999Z' : source === 'collegeExperience' ? fallback('$hubEvent.finishedAt', '$hubEvent.startTime') : '$updatedAt';
   } else if (source === 'teamReturned') {
     key = 'teams'; stages.push(['match', { ...scope, captainId: uid, status: 'active' }]);
     stages.push(...join('teamMembers', '_id', 'hubMembership', false, 'teamId'));

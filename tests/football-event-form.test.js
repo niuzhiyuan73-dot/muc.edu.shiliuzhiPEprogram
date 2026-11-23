@@ -103,3 +103,10 @@ test('足球表单动态字段说明、摘要与错误只在需要时展示', ()
   assert.equal(direct.extraTimeAdditional, false);
   assert.equal(validate(direct).rules.extraTime, null);
 });
+
+test('非法 presetKey 的预览不抛 TypeError，退回空标签', () => {
+  const form = { ...ready(), presetKey: 'missing-preset' };
+  const preview = view(form);
+  assert.equal(preview.presetLabel, '');
+  assert.equal(preview.presetIndex, -1);
+});

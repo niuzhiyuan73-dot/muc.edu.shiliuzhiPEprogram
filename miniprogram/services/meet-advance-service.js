@@ -28,7 +28,7 @@
  * ============================================================
  */
 
-const { MEET_ENTRY_STATUS, meetSessionKey, listAliveEvents } = require('../utils/meet-scope.js');
+const { MEET_STATUS, MEET_ENTRY_STATUS, meetSessionKey, listAliveEvents } = require('../utils/meet-scope.js');
 const { createSeededRandom, shuffle } = require('../utils/random.js');
 const { drawBracket, bracketSizeOf, standardSeedOrder } = require('../utils/bracket.js');
 const { MEET_SCORE_TYPE, HEAT_MODE, getTemplate } = require('./meet-event-catalog.js');
@@ -877,6 +877,9 @@ async function getMeetBracket(payload = {}, ctx) {
   if (!meetReadable(ctx) || !ctx.meetId) return refused('请先登录');
   const eventKey = String(payload.eventKey || '').trim();
   if (!eventKey) return refused('请指定项目组别');
+  if (ctx.meet && ctx.meet.status === MEET_STATUS.DRAFT && !canManageMeet(ctx)) {
+    return refused('运动会尚未发布');
+  }
   const scope = scopeOf(ctx);
 
   const [event, entries, sessions] = await Promise.all([

@@ -737,6 +737,10 @@ async function withdrawMeetCollegeEntry(payload = {}, ctx) {
     }
     if (!isLiveEntry(entry)) return refused('该名单已撤回或驳回');
 
+    // 抽签之后正式名单已进入赛程，撤回会让签表与名单脱节；与提交侧同一道闸。
+    const event = await tx.sportsMeetEvents.getById(entry.eventKey);
+    if (event && (event.heatDraw || event.bracket)) return refused('该项目已抽签，名单不能再撤回');
+
     const resolved = await resolveCollege(fresh, { collegeId: entry.collegeId });
     if (!resolved.ok) return refused(resolved.message);
     if (resolved.collegeId !== entry.collegeId) return refused('只能撤回本学院的名单');
@@ -874,6 +878,10 @@ async function openMeetLateWindow(payload = {}, ctx) {
     if (!canManageMeet(fresh)) return refused('只有校级管理员及以上可以开放补报');
     const meet = await tx.sportsMeets.getById(fresh.meetId);
     if (!meet || meet.status === MEET_STATUS.DELETED) return refused('运动会不存在或已删除');
+    if (meet.status === MEET_STATUS.DRAFT) return refused('运动会尚未发布报名，不能开放补报');
+    if (meet.status === MEET_STATUS.FINISHED || meet.status === MEET_STATUS.ARCHIVED) {
+      return refused('运动会已结束，不能开放补报');
+    }
 
     const openAt = String(payload.openAt || '').trim();
     const closeAt = String(payload.closeAt || '').trim();

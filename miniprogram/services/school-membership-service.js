@@ -224,6 +224,9 @@ function createSchoolHandlers({ claimKey }) {
       if (!fromSchoolId) return refused('当前没有学校身份，请直接申请加入本校');
       if (fromSchoolId === fresh.schoolId) return refused('你已经是本校成员，无需转校');
       const previous = fresh.schoolMember;
+      if (previous && previous.status === SCHOOL_MEMBER_STATUS.DISABLED) {
+        return refused('你已被目标学校禁用，请联系学校管理员');
+      }
       if (previous && previous.status === SCHOOL_MEMBER_STATUS.ACTIVE) return refused('你已是本校有效会员，无需转校');
       if (previous && previous.status === SCHOOL_MEMBER_STATUS.PENDING && !previous.transferFrom) {
         return refused('你已有本校入会申请待审核');
@@ -725,6 +728,7 @@ function createSchoolHandlers({ claimKey }) {
       if (!canGrantPermission(fresh, payload.permission)) return refused('没有指定该权限的资格');
       const user = await tx.users.getById(payload.userId);
       if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE) return refused('目标账号不可用');
+      if (user.primarySchoolId !== fresh.schoolId) return refused('目标账号不属于本校');
       if (user.platformRole === PLATFORM_ROLE.ADMIN) return refused('不能改变平台管理员的权限');
       const member = await tx.schoolMembers.getById(schoolMemberKey(user._id, fresh.schoolId));
       if (!member || member.status !== SCHOOL_MEMBER_STATUS.ACTIVE) return refused('对方没有本校有效身份');
@@ -739,6 +743,9 @@ function createSchoolHandlers({ claimKey }) {
       } else if (payload.permission === PERMISSION.ASSOCIATION_LEADER) {
         const key = schoolMembershipKey(user._id, fresh);
         const existing = await tx.memberships.get(key);
+        if (!make && existing && existing.status === 'active' && existing.role === 'staff') {
+          return refused('对方当前是学院负责人，请先在学院负责人一档撤销');
+        }
         const base = existing && existing.role === 'leader' ? existing : {};
         await tx.memberships.set(key, {
           ...base, _id: key, userId: user._id, schoolId: fresh.schoolId, association: fresh.association,
