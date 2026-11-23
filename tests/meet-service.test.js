@@ -360,3 +360,18 @@ test('运动会门面将云写守卫失败重新抛给页面，避免假成功',
     assert.equal((await client.getSportsMeet({})).meet.name,'测试');
   } finally {identity.isMockNow=oldMock;cloud.forMeet=oldMeet;}
 });
+
+test('软删除项目后复配，eventCount 补回且项目复活', async () => {
+  const repo = makeRepo();
+  const meetId = await createDraft(repo);
+  const ctx = await ctxOf(repo, 'u_admin', meetId);
+  await meetService.configureMeetEvent({ templateId: 'sprint-100m', group: 'male' }, ctx);
+  const key = meetEventKey(meetId, 'sprint-100m', 'male');
+  const removed = await meetService.removeMeetEvent({ eventKey: key }, ctx);
+  assert.equal(removed.ok, true, removed.message);
+  assert.equal((await repo.sportsMeets.getById(meetId)).eventCount, 0);
+  const again = await meetService.configureMeetEvent({ templateId: 'sprint-100m', group: 'male' }, ctx);
+  assert.equal(again.ok, true, again.message);
+  assert.equal(again.data.eventCount, 1);
+  assert.equal((await repo.sportsMeetEvents.getById(key)).status, 'active');
+});

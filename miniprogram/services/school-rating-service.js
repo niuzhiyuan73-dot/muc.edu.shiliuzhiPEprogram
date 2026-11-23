@@ -41,7 +41,7 @@ const {
   initialRatingFor, calculateMatchRatings, DEFAULT_CONFIG,
 } = require('../utils/elo.js');
 const {
-  memberRatingKey, ratingSeqKey, belongsToSchoolScope, schoolScope, SCHOOL_MEMBER_STATUS,
+  memberRatingKey, ratingSeqKey, belongsToSchoolScope, schoolScope, schoolMemberKey, SCHOOL_MEMBER_STATUS,
 } = require('../utils/school.js');
 const { allAssociations } = require('../utils/associations.js');
 const { isDoublesDiscipline } = require('./college-tie.js');
@@ -431,6 +431,18 @@ function buildExcludedSettlement({ match, exclusionReason, settledAt }) {
 /* ------------------------------------------------------------------ 事务读写 */
 
 /**
+ * 会员在某协会的预设初始分：新结构 `initialEloByAssoc` 优先，旧全局字段兜底。
+ * 与 member-review 的 `resolvedInitialElo` 同一口径，但只保留这 5 行，
+ * 避免把协议 1 的旧服务拉进评级结算路径。
+ */
+function presetInitialElo(member, association) {
+  const map = member && member.initialEloByAssoc;
+  if (map && association && Number.isFinite(map[association])) return map[association];
+  if (member && Number.isFinite(member.initialElo)) return member.initialElo;
+  return null;
+}
+
+/**
  * 在调用方开启的事务里结算一场比赛（交接文档 §6 的核心流程）。
  *
  * 职责边界：只写 **评级表 + 序号计数**，并返回结算快照；比赛文档（ACTIVE +
@@ -483,8 +495,14 @@ async function settleMatchInTransaction(tx, ctx, match, options = {}) {
   for (const userId of userIds) {
     const user = await tx.users.getById(userId);
     const gender = (user && user.gender) || '';
-    const preset = user && typeof user.initialElo === 'number' && Number.isFinite(user.initialElo)
-      ? { startElo: user.initialElo, startSource: 'preset', gender }
+    // 管理员预设初始分按协会存在会员行上；旧账号仍可能只有 user.initialElo。
+    const member = await tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId));
+    const memberElo = presetInitialElo(member, ctx.association);
+    const userElo = user && typeof user.initialElo === 'number' && Number.isFinite(user.initialElo)
+      ? user.initialElo : null;
+    const presetElo = Number.isFinite(memberElo) ? memberElo : userElo;
+    const preset = Number.isFinite(presetElo)
+      ? { startElo: presetElo, startSource: 'preset', gender }
       : { gender, startSource: 'gender' };
     startEloByUser.set(userId, preset);
     profileByUser.set(userId, { gender });

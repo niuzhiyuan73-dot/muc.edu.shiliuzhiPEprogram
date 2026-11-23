@@ -659,6 +659,7 @@ async function configureMeetEvent(payload = {}, ctx) {
 
     const key = meetEventKey(fresh.meetId, template.id, group);
     const existing = await tx.sportsMeetEvents.getById(key);
+    const resurrect = Boolean(existing && existing.status === MEET_EVENT_STATUS.DELETED);
     const now = fresh.now instanceof Date ? fresh.now.toISOString() : String(fresh.now);
     const doc = {
       schoolId: fresh.schoolId,
@@ -681,13 +682,15 @@ async function configureMeetEvent(payload = {}, ctx) {
       groups: procedure.groups,
       advance: procedure.advance,
       scored,
+      status: MEET_EVENT_STATUS.ACTIVE,
       createdAt: existing ? (existing.createdAt || now) : now,
       updatedAt: now,
     };
     await tx.sportsMeetEvents.set(key, doc);
 
-    // 项目数按「事件条数」累加：同一项目组别重复配置是覆盖，不重复计数。
-    const count = Number(meet.eventCount || 0) + (existing ? 0 : 1);
+    // 项目数按「事件条数」累加：同一项目组别重复配置是覆盖，不重复计数；
+    // 软删除后复配要补回一项，否则 eventCount 会永久少一。
+    const count = Number(meet.eventCount || 0) + (existing && !resurrect ? 0 : 1);
     await tx.sportsMeets.set(fresh.meetId, {
       ...meet, eventCount: count, updatedAt: now, version: (meet.version || 1) + 1,
       // 新增/改性项目组别会改变赛程需求，递增届次赛程版本

@@ -18,7 +18,7 @@ const {
   settleMatchInTransaction, participantsOf, resolveEventLevel,
 } = require('../miniprogram/services/school-rating-service');
 const { calculateMatchRatings, initialRatingFor } = require('../miniprogram/utils/elo');
-const { memberRatingKey, ratingSeqKey } = require('../miniprogram/utils/school');
+const { memberRatingKey, ratingSeqKey, schoolMemberKey } = require('../miniprogram/utils/school');
 const { RATING_POOL, SETTLEMENT_STATUS, EXCLUSION_REASON } = require('../miniprogram/utils/constants');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
@@ -431,4 +431,15 @@ describe('事务结算（内存仓储）', () => {
     const stored = await repoRef.matches.getById('m1');
     assert.equal(stored.settlement.settlementSeq, 1, '已结算快照不被补录改写');
   });
+});
+
+test('管理员按协会设置的 initialEloByAssoc 优先于旧的全局 initialElo', async () => {
+  const repoRef = repo({ u01: { initialElo: 1600 } });
+  const key = schoolMemberKey('u01', 'muc');
+  await repoRef.schoolMembers.set(key, { _id: key, schoolId: 'muc', userId: 'u01',
+    initialEloByAssoc: { pkb: 1700 } });
+  await settleWithMatch(repoRef, matchDoc({ id: 'm1', teamA: ['u01'], teamB: ['u03'], winner: 'A' }));
+  const doc = await ratingOf(repoRef, 'u01');
+  assert.equal(doc.startElo, 1700);
+  assert.equal(doc.startSource, 'preset');
 });

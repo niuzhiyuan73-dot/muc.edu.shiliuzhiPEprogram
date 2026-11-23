@@ -1046,7 +1046,7 @@ async function forfeitCollegeTieLeg(payload = {}, ctx) {
       updatedAt: nowIso,
     };
     await tx.matches.set(match._id, next);
-    await tx.audit.append({ _id: collegeTieAuditKey(tie.eventId, 'forfeitCollegeTieLeg', next.revision),
+    await tx.audit.append({ _id: collegeTieAuditKey(tie._id, 'forfeitCollegeTieLeg', next.revision),
       action: 'forfeitCollegeTieLeg', schoolId: ctx.schoolId, association: ctx.association,
       actorId: ctx.actorId, eventId: tie.eventId, tieId: payload.tieId, legNo, at: nowIso });
     return { ok: true, legMatch: next, message: '' };

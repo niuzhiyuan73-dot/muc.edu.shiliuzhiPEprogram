@@ -158,7 +158,13 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
 function audit(match, fresh, action, reason) {
   return [...(match.footballAudit || []), { action, reason: reason || '', by: fresh.actorId,
     at: fresh.now, revision: match.revision + 1,
-    previous: action === 'publish' ? match.footballPublished || null : null }];
+    // 不再嵌套整份旧报告：一份完整报告几十 KB，重发几次就把比赛文档顶到
+    // 300KB 上限并锁死后续更正。审计只需保留「上一版是什么结果」。
+    previous: action === 'publish' && match.footballPublished
+      ? { revision: match.footballPublishedRevision,
+        publishedAt: match.footballPublished.publishedAt,
+        result: match.footballPublished.result || null }
+      : null }];
 }
 
 async function recordTeamMatch(payload, ctx) {

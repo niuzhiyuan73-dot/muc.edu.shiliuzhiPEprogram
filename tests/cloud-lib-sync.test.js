@@ -77,6 +77,8 @@ test('镜像里的结算内核与源文件算出的结果完全一致', () => {
     const ratingOf = (userId) => store.get(`${userId}|singles`) || null;
     const tx = {
       users: { getById: async (id) => ({ _id: id, gender: id === 'u02' ? 'F' : 'M' }) },
+      // 结算内核现在会读会员行上的按协会初始分；假事务给一个空会员行即可。
+      schoolMembers: { getById: async () => null },
       memberRatings: {
         getById: async (id) => ratingOf(id),
         set: async (id, doc) => { store.set(id, doc); },
