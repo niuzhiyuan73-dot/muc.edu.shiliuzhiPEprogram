@@ -181,10 +181,14 @@ async function occupyPairUsage(tx, ctx, record, options) {
 /** 作废一场「自行录入」的比赛时，把名额还回去（与 occupyPairUsage 对称）。 */
 async function releasePairUsage(tx, ctx, record) {
   if (!isCasualMatch(record)) return;
-  const season = await loadSeason(ctx);
+  // 优先用比赛落库时的赛季戳。没有这个字段的是本次改造前的历史记录，
+  // 退回当前赛季（旧行为）。
+  const current = await loadSeason(ctx);
+  const stamp = typeof record.seasonStamp === 'string' && record.seasonStamp
+    ? record.seasonStamp : seasonStampOf(current);
   const nowIso = iso(ctx.now);
   for (const pair of distinctPairs(record)) {
-    const id = pairUsageKeyOf(pair, ctx, season);
+    const id = pairCountKey(pair.a, pair.b, stamp, ctx);
     const doc = await tx.pairCounts.getById(id);
     if (!doc) continue;
     await tx.pairCounts.set(id, {
@@ -570,7 +574,10 @@ async function submitSchoolMatch(payload = {}, ctx) {
     });
     if (!occupied.ok) return refused(occupied.message);
 
-    const doc = matchDocFromRecord(built.record, matchId, fresh, fingerprintOf(built.record));
+    const doc = { ...matchDocFromRecord(built.record, matchId, fresh, fingerprintOf(built.record)),
+      // 名额计数属于「比赛时间所在赛季」。记录下当时的赛季戳，驳回时才能还回
+      // 同一个桶；否则跨过赛季重置后会把新赛季的额度多减一次。
+      seasonStamp: seasonStampOf(freshSeason) };
     await tx.matches.set(matchId, doc);
     await tx.audit.append({ _id: matchAuditKey(matchId, 'submitMatch', 1),
       action: 'submitMatch', schoolId: fresh.schoolId, association: fresh.association,

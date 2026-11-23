@@ -56,6 +56,8 @@ function toTimeText(date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+const { toast } = require('../../utils/page-helpers.js');
+
 Page({
   data: {
     /** 首屏加载中 */
@@ -173,8 +175,15 @@ Page({
 
   async refreshScheduled() {
     try {
-      const result = await this.api.getSchoolMatch({ matchId: this.matchId });
+      // presentation 会带回本场选手与裁判的昵称：首屏只取了一页名录，
+      // 签表里的人可能不在这一页里，靠这份补齐 nameById。
+      const result = await this.api.getSchoolMatch({ matchId: this.matchId, presentation: true });
       if (!result.ok) throw new Error(result.message || '找不到这场比赛');
+      if (Array.isArray(result.members)) {
+        const merged = new Map(Object.entries(this.nameById || {}));
+        result.members.forEach(row => merged.set(row.userId, row.nickName || row.userId));
+        this.nameById = Object.fromEntries(merged);
+      }
       this.applyRecord(result.match);
     } catch (error) {
       this.setData({ blockReason: error.message || '比赛加载失败，请返回重试' });
@@ -199,7 +208,9 @@ Page({
       // 路由编号兼容（见 utils/route-query.js）：开发者工具把 query 原样透传，
       // 未解码的 matchId 直接查会「找不到这场比赛」，这里先探测出真实编号
       if (this.matchId) this.matchId = await this.resolveMatchId(this.matchId);
-      const context = await this.api.getSchoolMatchEntryContext({});
+      // 只取一页（服务端上限 50）供面板首屏使用，不再把全校名录塞进 setData。
+      // 搜索与继续翻页由 loadPickerMembers 按需拉取。
+      const context = await this.api.getSchoolMatchEntryContext({ page: true, limit: 50 });
       if (!context.ok) throw new Error(context.message || '页面加载失败');
       this.context = context;
       const auth = authOf(context);
@@ -520,9 +531,7 @@ Page({
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   onCancel() {

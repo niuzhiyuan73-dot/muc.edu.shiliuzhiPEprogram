@@ -31,7 +31,7 @@
 .privacy-title {
   font-size: var(--font-lg, 36rpx);
   font-weight: 600;
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   text-align: center;
   margin-bottom: var(--space-lg, 32rpx);
 }
@@ -39,7 +39,7 @@
 .privacy-body {
   font-size: var(--font-sm, 26rpx);
   line-height: 1.7;
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-secondary, var(--color-text-secondary));
   margin-bottom: var(--space-xl, 48rpx);
   white-space: pre-line;
 }
@@ -65,8 +65,8 @@
 }
 
 .privacy-btn-ghost {
-  background: var(--color-bg, #f5f6f8);
-  color: var(--color-text-secondary, #6b7280);
+  background: var(--color-bg, var(--color-bg));
+  color: var(--color-text-secondary, var(--color-text-secondary));
 }
 
 .privacy-btn-primary {
@@ -78,5 +78,5 @@
   margin-top: var(--space-lg, 32rpx);
   text-align: center;
   font-size: var(--font-xs, 22rpx);
-  color: var(--color-text-tertiary, #9ca3af);
+  color: var(--color-text-tertiary, var(--color-text-tertiary));
 }

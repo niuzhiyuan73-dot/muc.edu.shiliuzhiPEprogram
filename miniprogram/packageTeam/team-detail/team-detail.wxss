@@ -142,7 +142,7 @@
   height: 56rpx;
   line-height: 56rpx;
   border-radius: 28rpx;
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
 }

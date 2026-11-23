@@ -1,4 +1,5 @@
 const identity = require('../../services/school-identity.js');
+const { fingerprintOf } = require('../../utils/fingerprint.js');
 const exchange = require('../../services/exchange.js');
 const constants = require('../../utils/constants.js');
 const STATE = { signup: '报名中', ready: '名单已锁定', drawn: '已抽签', finished: '名次已确认', canceled: '已取消' };
@@ -246,12 +247,12 @@ Page({
     if (typeof wx !== 'undefined' && wx.showModal) {
       if (this.createConfirming || this.data.busy) return;
       this.createConfirming = true;
-      const fingerprint = JSON.stringify([this.data.schoolId, this.data.selectedSchoolIds, this.data.schoolChoices, this.data.title, this.data.location, this.data.date, this.data.time, this.data.format, this.data.quota, this.data.groupCount, this.data.advancePerGroup, this.data.bronzeMode, this.data.gfReset]);
+      const fingerprint = fingerprintOf([this.data.schoolId, this.data.selectedSchoolIds, this.data.schoolChoices, this.data.title, this.data.location, this.data.date, this.data.time, this.data.format, this.data.quota, this.data.groupCount, this.data.advancePerGroup, this.data.bronzeMode, this.data.gfReset]);
       const summary = this.data.schoolChoices.filter(row => schoolIds.includes(row.schoolId)).map(row => row.name + ' ' + row.quota + ' 人').join('；');
       const confirmed = await new Promise(resolve => wx.showModal({ title: '核对交流赛邀请', content: this.data.title + '\n' + this.data.date + ' ' + this.data.time + ' · ' + this.data.location + '\n' + this.data.formatLabel + ' · 总名额 ' + quota + ' 人\n' + summary,
         success: result => resolve(Boolean(result.confirm)), fail: () => resolve(false) }));
       this.createConfirming = false;
-      if (!confirmed || fingerprint !== JSON.stringify([this.data.schoolId, this.data.selectedSchoolIds, this.data.schoolChoices, this.data.title, this.data.location, this.data.date, this.data.time, this.data.format, this.data.quota, this.data.groupCount, this.data.advancePerGroup, this.data.bronzeMode, this.data.gfReset])) return;
+      if (!confirmed || fingerprint !== fingerprintOf([this.data.schoolId, this.data.selectedSchoolIds, this.data.schoolChoices, this.data.title, this.data.location, this.data.date, this.data.time, this.data.format, this.data.quota, this.data.groupCount, this.data.advancePerGroup, this.data.bronzeMode, this.data.gfReset])) return;
     }
     this.requestId = this.requestId || `create_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     return this.write(api => api.createExchangeEvent({ requestId: this.requestId, title: this.data.title,

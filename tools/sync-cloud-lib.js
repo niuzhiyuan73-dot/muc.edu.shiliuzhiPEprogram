@@ -40,6 +40,8 @@ const DEST_ROOT = path.join(ROOT, 'cloudfunctions', 'data', 'lib');
 const MANIFEST = [
   'services/meet-consistency.js',
   'services/meet-time.js',
+  // 学校维度仓储的集合清单：云端与本地模拟共用一份，避免两端范围集合漂移。
+  'services/school-collections.js',
   // 纯计算与常量
   'utils/constants.js',
   // 排序键的确定性比较（2026-11-07）：编号/时间不得用 localeCompare

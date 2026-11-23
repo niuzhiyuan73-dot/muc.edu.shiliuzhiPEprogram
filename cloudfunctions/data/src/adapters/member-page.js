@@ -30,17 +30,21 @@ function memberQuery(db, command, scope, query = {}) {
     avatarUrl: $.ifNull(['$account.avatarUrl', '']),
     invalid: $.cond({ if: ready, then: 0, else: 1 }),
     searchNick: $.ifNull(['$account.directoryNickName', '']), searchReal: $.ifNull(['$account.directoryRealName', '']),
-    sortNick: $.ifNull(['$account.directoryNickSort', '']), sortReal: $.ifNull(['$account.directoryRealSort', '']) });
+    sortNick: $.ifNull(['$account.directoryNickSort', '']), sortReal: $.ifNull(['$account.directoryRealSort', '']) })
+    // 目录字段未回填的账号不参与排序与检索：它们没有 sortNick/sortReal，
+    // 放进来会永远排在最前，且任意关键词都能命中。这里与计数共用同一段过滤，
+    // 首页「会员数」才等于名录真正能翻到的行数；回填由账号目录迁移脚本负责。
+    .match({ invalid: 0 });
   if (keyword) {
     page = page.addFields({ nickIndex: $.indexOfCP(['$searchNick', $.literal(keyword)]),
       realIndex: $.indexOfCP(['$searchReal', $.literal(keyword)]) })
-      .match({ $or: [{ invalid: 1 }, { nickIndex: { $gte: 0 } }, { realIndex: { $gte: 0 } }] })
+      .match({ $or: [{ nickIndex: { $gte: 0 } }, { realIndex: { $gte: 0 } }] })
       .addFields({ prefixRank: $.cond({ if: $.or([$.eq(['$nickIndex', 0]), $.eq(['$realIndex', 0])]), then: 0, else: 1 }) });
   } else page = page.addFields({ prefixRank: $.literal(0) });
   const fields = ['prefixRank', 'sortNick', 'sortReal', 'userId'];
-  if (after) page = page.match({ $or: [{ invalid: 1 }, ...fields.map((field, index) => Object.fromEntries([
+  if (after) page = page.match({ $or: fields.map((field, index) => Object.fromEntries([
     ...fields.slice(0, index).map((earlier, i) => [earlier, after[i]]), [field, { $gt: after[index] }],
-  ]))] });
+  ])) });
   return { page, keyword };
 }
 
@@ -50,10 +54,10 @@ const rowsOf = result => result.list || result.data || [];
 async function readMemberPage(db, command, scope, query = {}) {
   const limit = Math.max(1, Math.min(Number(query.limit) || 20, 50));
   const { page, keyword } = memberQuery(db, command, scope, query);
-  const rows = rowsOf(await page.sort({ invalid: -1, prefixRank: 1, sortNick: 1, sortReal: 1, userId: 1 })
-    .limit(limit + 1).project({ _id: 0, invalid: 1, userId: 1, nickName: 1, realName: 1, avatarUrl: 1, collegeId: 1 }).end());
-  if (rows.some(row => row.invalid)) throw new Error('会员搜索字段未回填，请先完成账号目录迁移');
-  const members = rows.slice(0, limit).map(({ invalid, ...member }) => member);
+  const rows = rowsOf(await page.sort({ prefixRank: 1, sortNick: 1, sortReal: 1, userId: 1 })
+    .limit(limit + 1).project({ _id: 0, userId: 1, nickName: 1, realName: 1, avatarUrl: 1, collegeId: 1 }).end());
+  // invalid 行已在聚合里过滤，这里不需要再抛错中断整个分页。
+  const members = rows.slice(0, limit);
   const hasMore = rows.length > limit;
   return { members, hasMore, keyword,
     nextCursor: hasMore ? encodeCursor(sortKey(members[members.length - 1], keyword)) : '' };

@@ -49,6 +49,8 @@ const REJECT_TEXT = {
   placeholder: '例如：学号与姓名对不上',
 };
 
+const { pageScope, stopRefresh, toast } = require('../../utils/page-helpers.js');
+
 Page({
   data: {
     /** 首屏加载中 */
@@ -93,24 +95,17 @@ Page({
 
   /** 当前「学校 + 协会」范围。审核写回复用它，避免异步期间全局范围被切走 */
   currentScope() {
-    return {
-      schoolId: schoolSession.getSchoolId() || LEGACY_SCHOOL_ID,
-      association: associationScope.getAssociation(),
-    };
+    return pageScope();
   },
 
   /** stopPullDownRefresh 在测试环境里可能没有，做个保护 */
   stopPullDown() {
-    if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') {
-      wx.stopPullDownRefresh();
-    }
+    return stopRefresh();
   },
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   /**

@@ -1,6 +1,6 @@
 .meet-toolbar { display: flex; gap: 12rpx; align-items: center; margin-bottom: 20rpx; }
-.meet-search { flex: 1; height: 72rpx; padding: 0 20rpx; border-radius: 12rpx; background: var(--color-bg-subtle, #f5f6f8); font-size: var(--font-sm); }
-.meet-filter { padding: 0 18rpx; height: 72rpx; line-height: 72rpx; border-radius: 12rpx; background: var(--color-bg-subtle, #f5f6f8); font-size: var(--font-caption); color: var(--color-text-secondary, #555); white-space: nowrap; }
+.meet-search { flex: 1; height: 72rpx; padding: 0 20rpx; border-radius: 12rpx; background: var(--color-bg-subtle, var(--color-bg)); font-size: var(--font-sm); }
+.meet-filter { padding: 0 18rpx; height: 72rpx; line-height: 72rpx; border-radius: 12rpx; background: var(--color-bg-subtle, var(--color-bg)); font-size: var(--font-caption); color: var(--color-text-secondary, #555); white-space: nowrap; }
 .meet-create { margin-bottom: 20rpx; }
 .meet-card { padding: 24rpx; margin-bottom: 20rpx; }
 .meet-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 16rpx; }

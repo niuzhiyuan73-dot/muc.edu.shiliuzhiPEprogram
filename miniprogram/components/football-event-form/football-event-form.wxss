@@ -1,4 +1,4 @@
-.football-form { padding: 28rpx; background: #fff; border-radius: 20rpx; color: #24352c; }
+.football-form { padding: 28rpx; background: var(--color-card); border-radius: 20rpx; color: #24352c; }
 .form-title { font-size: var(--font-lg); font-weight: 700; line-height: 1.5; }
 .form-note, .field-note { color: #64746b; font-size: var(--font-caption); line-height: 1.65; margin-top: 12rpx; }
 .form-field { padding: 22rpx 0; border-bottom: 1rpx solid #e8eeea; }

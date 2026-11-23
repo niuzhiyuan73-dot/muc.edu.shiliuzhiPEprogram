@@ -15,7 +15,7 @@ const handlers = require('../miniprogram/services/school-event-service');
 const {
   schoolMemberKey, schoolEventKey, schoolEventSignupKey,
 } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, EVENT_STATUS, SIGNUP_STATUS } = require('../miniprogram/utils/constants');
+const { MATCH_TYPE, MATCH_STATUS, EVENT_STATUS, SIGNUP_STATUS } = require('../miniprogram/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -736,4 +736,36 @@ test('列表下推：关键词搜索仍回退内存（包含匹配没有可用�
   };
 
   await assert.rejects(call(repo, 'listSchoolEvents', { keyword: '春' }), /关键词回退必须整表读/);
+});
+
+test('重抽：旧签表里不再存在的场次被物理删除', async () => {
+  const repo = fixture();
+  const add = async (id) => {
+    await repo.users.set(id, { _id: id, openId: `mock_openid_${id}`, nickName: id, gender: 'M',
+      platformStatus: 'active', platformRole: 'member', primarySchoolId: 'muc', simulated: true });
+    const key = schoolMemberKey(id, 'muc');
+    await repo.schoolMembers.set(key, { _id: key, userId: id, schoolId: 'muc', collegeId: 'c01',
+      studentId: id, status: 'active', simulated: true });
+  };
+  await add('draw_extra_1'); await add('draw_extra_2');
+  const event = await publish(repo, 'redraw_shrink');
+  for (const userId of ['demo_muc_member', 'demo_muc_member_2', 'draw_extra_1', 'draw_extra_2']) {
+    const signed = await call(repo, 'signUpSchoolEvent', { eventId: event.eventId }, { actor: userId });
+    assert.equal(signed.ok, true, signed.message);
+  }
+  const first = await call(repo, 'drawSchoolEvent', { eventId: event.eventId, seedValue: 42 });
+  assert.equal(first.ok, true, first.message);
+  const listMatches = async () => (await repo.matches.list()).filter(row => row.eventId === event.eventId);
+  assert.equal((await listMatches()).length, 2);
+
+  // 模拟历史遗留（或旧版本人数变少时留下）的多余场次：同赛事、未确认、未结算。
+  // 重抽必须把它删掉，不能留成两个陌生人也能开赛的幽灵场。
+  const orphanId = 'legacy-draw-orphan';
+  await repo.matches.set(orphanId, { _id: orphanId, schoolId: 'muc', association: 'pkb',
+    eventId: event.eventId, matchType: MATCH_TYPE.SINGLES, teamA: ['draw_extra_1'],
+    teamB: ['draw_extra_2'], status: MATCH_STATUS.PENDING, revision: 1 });
+  const second = await call(repo, 'drawSchoolEvent', { eventId: event.eventId, seedValue: 43 });
+  assert.equal(second.ok, true, second.message);
+  assert.equal(await repo.matches.getById(orphanId), null, '旧签表的多余场次必须被删除');
+  assert.equal((await listMatches()).length, 2);
 });

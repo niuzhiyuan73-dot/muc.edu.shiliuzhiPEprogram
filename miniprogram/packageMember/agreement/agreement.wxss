@@ -10,7 +10,7 @@
   min-height: 100vh;
   box-sizing: border-box;
   padding: var(--space-lg, 32rpx) var(--space-md, 24rpx);
-  background: var(--color-bg, #f5f6f8);
+  background: var(--color-bg, var(--color-bg));
 }
 
 .doc-head {
@@ -20,14 +20,14 @@
 .doc-title {
   font-size: var(--font-lg, 36rpx);
   font-weight: 600;
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   line-height: 1.4;
 }
 
 .doc-meta {
   margin-top: var(--space-xs, 8rpx);
   font-size: var(--font-xs, 22rpx);
-  color: var(--color-text-tertiary, #9ca3af);
+  color: var(--color-text-tertiary, var(--color-text-tertiary));
 }
 
 .doc-card {
@@ -40,14 +40,14 @@
 .doc-h {
   font-size: var(--font-md, 30rpx);
   font-weight: 600;
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   margin-bottom: var(--space-sm, 16rpx);
 }
 
 .doc-p {
   font-size: var(--font-sm, 26rpx);
   line-height: 1.8;
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-secondary, var(--color-text-secondary));
   margin-bottom: var(--space-sm, 16rpx);
 }
 
@@ -64,6 +64,6 @@
   padding: var(--space-lg, 32rpx) var(--space-sm, 16rpx) var(--space-xl, 48rpx);
   font-size: var(--font-xs, 22rpx);
   line-height: 1.7;
-  color: var(--color-text-tertiary, #9ca3af);
+  color: var(--color-text-tertiary, var(--color-text-tertiary));
   text-align: center;
 }

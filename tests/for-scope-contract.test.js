@@ -32,7 +32,7 @@ const RESULT_LEVEL = ['scope', 'transaction'];
 /** 云端独有的受范围集合。目前两端完全一致，这个清单应当保持为空。 */
 const CLOUD_ONLY_KEYS = [];
 /** 受范围仓储里每个集合必须提供的方法。 */
-const REQUIRED_METHODS = ['getById', 'insert', 'list', 'set', 'update'];
+const REQUIRED_METHODS = ['getById', 'insert', 'list', 'set', 'update', 'remove'];
 // 带 eventId 的从属集合额外提供 listByEvent：按赛事取子集走条件查询，
 // 免得整表翻页后内存过滤（2026-10-21 读放大治理）。两端必须同时有、同时无。
 // 团队运动的报名 / 比赛 / 统计三个集合同在 2026-10-21 并入（P1-5）。

@@ -11,7 +11,7 @@
 .meet-event-pressed { background: #f7f7f7; }
 .meet-event-name { font-size: var(--font-body); font-weight: 500; }
 .meet-event-tags { margin-top: 8rpx; display: flex; gap: 8rpx; flex-wrap: wrap; }
-.meet-tag { padding: 2rpx 12rpx; border-radius: 8rpx; font-size: var(--font-2xs); background: var(--color-bg-subtle, #f5f6f8); color: #666; }
+.meet-tag { padding: 2rpx 12rpx; border-radius: 8rpx; font-size: var(--font-2xs); background: var(--color-bg-subtle, var(--color-bg)); color: #666; }
 .meet-event-side { text-align: right; font-size: var(--font-xs); color: #888; }
 .meet-publish { padding: 20rpx 24rpx; }
 .meet-field { display: flex; align-items: center; justify-content: space-between; padding: 12rpx 0; }
@@ -43,7 +43,7 @@
 }
 .meet-sheet {
   width: 100%; display: flex; flex-direction: column;
-  background: #fff; border-radius: 24rpx 24rpx 0 0;
+  background: var(--color-card); border-radius: 24rpx 24rpx 0 0;
   padding-bottom: env(safe-area-inset-bottom);
 }
 .meet-sheet-head { display: flex; align-items: center; justify-content: space-between; padding: 24rpx 24rpx 8rpx; }
@@ -63,6 +63,6 @@
 
 /* 补报窗口的日期/时间选择：两段并排，点哪段开哪个 picker */
 .meet-time { display: flex; align-items: center; gap: 12rpx; }
-.meet-time-part { padding: 8rpx 16rpx; border-radius: 8rpx; background: #f5f6f8; font-size: var(--font-sm); color: #222; }
+.meet-time-part { padding: 8rpx 16rpx; border-radius: 8rpx; background: var(--color-bg); font-size: var(--font-sm); color: #222; }
 /* 「报名已截止」这种结论性提示要比普通 meta 重 */
 .meet-meta-strong { color: var(--color-primary); font-weight: 600; }

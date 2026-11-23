@@ -214,3 +214,17 @@ test('循环赛未打完：拒绝出表', () => {
   assert.equal(result.ok, false);
   assert.match(result.message, /1 场/);
 });
+
+test('heatRank 记组内名次，overallRank 才是所有组混排后的名次', () => {
+  const result = advanceFromHeats({
+    heats: heatsOf([[['a10', 10], ['a11', 11]], [['b12', 12], ['b13', 13]]]),
+    mode: ADVANCE_MODE.PER_HEAT, count: 1, order: 'desc',
+  });
+  assert.equal(result.ok, true, result.message);
+  const a11 = result.advanced.find((row) => row.entryKey === 'a11');
+  const b13 = result.advanced.find((row) => row.entryKey === 'b13');
+  assert.equal(a11.heatRank, 1, 'a11 是第 1 组第一，组内名次应为 1');
+  assert.equal(a11.overallRank, 3, 'a11 的总成绩排在 b13、b12 之后');
+  assert.equal(b13.heatRank, 1);
+  assert.equal(b13.overallRank, 1);
+});

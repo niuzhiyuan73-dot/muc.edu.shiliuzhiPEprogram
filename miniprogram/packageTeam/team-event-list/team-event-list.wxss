@@ -42,7 +42,7 @@
   height: 76rpx;
   padding: 0 var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   font-size: var(--font-body);
   margin-bottom: var(--space-md);
 }
@@ -62,7 +62,7 @@
 .picker {
   padding: 10rpx var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   font-size: var(--font-sm);
   color: var(--color-text-primary);
 }
@@ -84,7 +84,7 @@
 
 
 .btn-ghost {
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   color: var(--color-text-secondary);
 }
 
@@ -150,7 +150,7 @@
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
   font-size: var(--font-2xs);
-  background: #F0F1F3;
+  background: var(--color-divider);
   color: var(--color-text-secondary);
 }
 

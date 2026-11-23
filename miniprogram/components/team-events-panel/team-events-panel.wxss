@@ -84,7 +84,7 @@
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
   font-size: var(--font-2xs);
-  background: #F0F1F3;
+  background: var(--color-divider);
   color: var(--color-text-secondary);
 }
 

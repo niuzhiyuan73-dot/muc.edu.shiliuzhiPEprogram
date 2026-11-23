@@ -264,8 +264,8 @@
 .space-search {
   height: 68rpx;
   margin: var(--space-xs) 0 var(--space-sm);
-  background: var(--color-bg, #f5f6f8);
-  border: 1rpx solid var(--color-border, #e5e7eb);
+  background: var(--color-bg, var(--color-bg));
+  border: 1rpx solid var(--color-border, var(--color-border));
 }
 
 /* 已选成员：搜索换词后仍要看得见、点得掉，所以单独列一行小卡片 */
@@ -308,7 +308,7 @@
 
 .space-picker-note {
   font-size: var(--font-sm);
-  color: var(--color-text-secondary, #6b7280);
+  color: var(--color-text-secondary, var(--color-text-secondary));
 }
 
 .space-pick-row {

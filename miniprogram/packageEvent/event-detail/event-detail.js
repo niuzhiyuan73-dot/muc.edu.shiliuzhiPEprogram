@@ -39,6 +39,8 @@ const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
 
+const { pageScope, stopRefresh, toast } = require('../../utils/page-helpers.js');
+
 Page(withDetailExperience({
   data: {
     /** 首屏加载中 */
@@ -140,10 +142,7 @@ Page(withDetailExperience({
 
   /** 当前「学校 + 协会」范围。读写复用它，避免异步期间全局范围被切走 */
   currentScope() {
-    return {
-      schoolId: schoolSession.getSchoolId() || LEGACY_SCHOOL_ID,
-      association: associationScope.getAssociation(),
-    };
+    return pageScope();
   },
 
   /**
@@ -163,16 +162,12 @@ Page(withDetailExperience({
 
   /** stopPullDownRefresh 在测试环境里可能没有，做个保护 */
   stopPullDown() {
-    if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') {
-      wx.stopPullDownRefresh();
-    }
+    return stopRefresh();
   },
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   /**

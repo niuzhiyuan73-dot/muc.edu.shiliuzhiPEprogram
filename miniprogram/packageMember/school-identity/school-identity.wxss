@@ -2,7 +2,7 @@
 .hint { color: #666; font-size: var(--font-sm); line-height: 1.7; margin-top: 12rpx; }
 .selection { padding: 24rpx 0; font-size: var(--font-md); display: flex; justify-content: space-between; }
 .selection text { color: #777; font-size: var(--font-sm); }
-.identity-input { background: #f5f6f8; padding: 20rpx; margin: 16rpx 0 24rpx; border-radius: 12rpx; }
+.identity-input { background: var(--color-bg); padding: 20rpx; margin: 16rpx 0 24rpx; border-radius: 12rpx; }
 .error-box { color: #a12622; }
 .application { border-top: 1rpx solid #eee; margin-top: 24rpx; padding-top: 24rpx; }
 .applicant-name { font-size: var(--font-md); font-weight: 600; }

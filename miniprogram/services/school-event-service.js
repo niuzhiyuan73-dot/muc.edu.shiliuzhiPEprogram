@@ -835,9 +835,17 @@ async function drawSchoolEvent(payload = {}, ctx) {
     drawCount: (doc.draw && doc.draw.drawCount ? doc.draw.drawCount : 0) + 1,
   });
   const drafts = buildInitialMatches(doc, draw, defaultFormatOf(ctx.association)).map(draft => scopedMatchDoc(draft, ctx, 'draw'));
+  const draftIds = new Set(drafts.map(match => match._id));
   const snapshots = new Map(existing.map(match => [match._id, match]));
+  // 重抽时人数变少（有人取消报名）会留下上一次签表的场次。它们都还没确认、
+  // 没有任何成绩与结算，留着只会变成「两个陌生人也能开赛」的幽灵场，
+  // 因此直接物理删除（确认过的场次已被 canRedraw 拦住）。
+  const staleIds = existing.filter(match => !draftIds.has(match._id)).map(match => match._id);
   const matchIds = [...new Set([...snapshots.keys(), ...drafts.map(match => match._id)])];
-  if (10 + matchIds.length + drafts.length > 100) return ok(refused('抽签场次超过单次处理容量，请缩小报名名单'));
+  // 读：逐个快照；写：新场次 + 旧场次删除 + 赛事 + 审计。删除也要计入预算。
+  if (10 + matchIds.length + drafts.length + staleIds.length > 100) {
+    return ok(refused('抽签场次超过单次处理容量，请缩小报名名单'));
+  }
   // 场号在 buildInitialMatches 内已由 court.js 统一排好，结果落库备查。
 
   const result = await ctx.repo.transaction(async tx => {
@@ -860,6 +868,7 @@ async function drawSchoolEvent(payload = {}, ctx) {
     }
 
     const nowIso = iso(ctx.now);
+    for (const id of staleIds) await tx.matches.remove(id);
     for (const draft of drafts) {
       await tx.matches.set(draft._id, { ...draft, revision: Number(snapshots.get(draft._id)?.revision || 0) + 1 });
     }
@@ -868,9 +877,9 @@ async function drawSchoolEvent(payload = {}, ctx) {
     await tx.events.set(next._id, next);
     await tx.audit.append({ _id: eventAuditKey(fresh._id, 'drawEvent', next.revision),
       action: 'drawEvent', schoolId: ctx.schoolId, association: ctx.association,
-      actorId: ctx.actorId, eventId: fresh._id, at: nowIso });
+      actorId: ctx.actorId, eventId: fresh._id, removedMatchIds: staleIds, at: nowIso });
     return { ok: true, event: eventSummary(next), draw,
-      matchIds: drafts.map(draft => draft._id), message: '' };
+      matchIds: drafts.map(draft => draft._id), removedMatchIds: staleIds, message: '' };
   });
   return ok(result);
 }

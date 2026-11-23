@@ -7,7 +7,7 @@
   min-height: var(--control-min-height);
   padding: 0 18rpx;
   border-radius: 999rpx;
-  background: var(--color-primary-light, #f7e9e7);
+  background: var(--color-primary-light, var(--color-primary-light));
   color: var(--color-primary, #b23a2e);
   font-size: var(--font-sm);
   line-height: 1.4;

@@ -31,6 +31,13 @@
         <view class="picker">{{presetOptions[presetIndex].label}}</view>
       </picker>
     </view>
+    <view wx:if="{{formatOptions[formatIndex].value === 'single_elim'}}" class="field">
+      <view class="field-label">5–8 名排位</view>
+      <switch checked="{{placementTop8}}" bindchange="onTogglePlacement" />
+    </view>
+    <view wx:if="{{formatOptions[formatIndex].value === 'single_elim'}}" class="field-note">
+      8 队及以上时，八强负者加打 5–8 名排位赛，名次按排位赛结果确定；关闭则只排前四名。
+    </view>
     <view class="field-note">规则在创建时固化，开赛后不再变更；要改规则请新建赛事。</view>
     <view class="create-actions">
       <view class="btn btn-ghost" bindtap="onCloseCreate">取消</view>

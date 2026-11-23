@@ -24,7 +24,7 @@
 .meet-error { margin-bottom: 16rpx; padding: 12rpx 20rpx; border-radius: 12rpx; background: var(--color-danger-light); color: var(--color-danger-text); font-size: var(--font-caption); }
 
 /* 校管理员选择代报学院 */
-.meet-search { height: 72rpx; padding: 0 20rpx; border-radius: 12rpx; background: #f5f6f8; font-size: var(--font-sm); margin-bottom: 16rpx; }
+.meet-search { height: 72rpx; padding: 0 20rpx; border-radius: 12rpx; background: var(--color-bg); font-size: var(--font-sm); margin-bottom: 16rpx; }
 .meet-college-item { display: flex; justify-content: space-between; align-items: center; padding: 22rpx 24rpx; margin-bottom: 12rpx; }
 .meet-college-name { font-size: var(--font-body); color: #222; }
 .meet-college-id { font-size: var(--font-xs); color: #999; }

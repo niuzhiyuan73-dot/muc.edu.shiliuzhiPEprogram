@@ -6,7 +6,7 @@
 .head-name {
   font-size: var(--font-xl);
   font-weight: 700;
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .head-meta {
@@ -32,7 +32,7 @@
   padding: 4rpx 14rpx;
   border-radius: 20rpx;
   font-size: var(--font-2xs);
-  background: #F0F1F3;
+  background: var(--color-divider);
   color: var(--color-text-secondary);
 }
 
@@ -133,7 +133,7 @@
 
 .row-name {
   font-size: var(--font-body);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .row-meta {
@@ -154,7 +154,7 @@
   height: 56rpx;
   line-height: 56rpx;
   border-radius: 28rpx;
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   color: var(--color-text-secondary);
   font-size: var(--font-caption);
 }
@@ -201,9 +201,9 @@
   margin-left: var(--space-md);
   padding: 10rpx var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   font-size: var(--font-sm);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   text-align: right;
 }
 
@@ -234,7 +234,7 @@
 }
 
 .side-win {
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   font-weight: 700;
 }
 
@@ -244,7 +244,7 @@
   text-align: center;
   font-size: var(--font-md);
   font-weight: 700;
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .match-meta {
@@ -275,7 +275,7 @@
 }
 
 .table-row {
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .col-name {
@@ -316,7 +316,7 @@
   padding: var(--space-lg);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   background: var(--color-card, #ffffff);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   box-sizing: border-box;
   padding-bottom: calc(var(--space-lg) + env(safe-area-inset-bottom));
   max-height: 90vh;
@@ -344,7 +344,7 @@
   font-size: var(--font-display);
   font-weight: 700;
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
 }
 
 .score-colon {
@@ -399,9 +399,9 @@
 .picker {
   padding: 10rpx var(--space-md);
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   font-size: var(--font-sm);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .forfeit-note {
@@ -456,7 +456,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-sm);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .stats-col {
@@ -474,7 +474,7 @@
   text-align: center;
   font-size: var(--font-xs);
   border-radius: var(--radius-sm, 8rpx);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
 }
 
 .stats-mode {
@@ -527,7 +527,7 @@
   flex: 1;
   min-width: 0;
   font-size: var(--font-sm);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -538,7 +538,7 @@
   flex: none;
   text-align: right;
   font-size: var(--font-sm);
-  color: var(--color-text, #1f2329);
+  color: var(--color-text, var(--color-text));
 }
 
 .pick-no-text {
@@ -559,7 +559,7 @@
   flex: 1;
   padding: 12rpx 0;
   border-radius: var(--radius-md);
-  background: var(--color-bg-subtle, #F5F6F8);
+  background: var(--color-bg-subtle, var(--color-bg));
   font-size: var(--font-caption);
   text-align: center;
   color: var(--color-text-secondary);

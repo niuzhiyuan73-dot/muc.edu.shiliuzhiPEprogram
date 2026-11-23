@@ -172,9 +172,10 @@ function fixtureFor(teamCount, roster) {
 }
 
 /** 建 N 支队、各自报名、审核、锁定，返回赛事与球队编号 */
-async function lockedEvent(repo, { teamCount = 4, roster = 5, format } = {}) {
+async function lockedEvent(repo, { teamCount = 4, roster = 5, format, placementMode } = {}) {
   const event = await call(repo, 'createTeamEvent', {
     name: '秋季联赛', requestId: 'req_e1', ...(format ? { format } : {}),
+    ...(placementMode ? { placementMode } : {}),
   });
   const teamIds = [];
   for (let t = 0; t < teamCount; t += 1) {
@@ -860,4 +861,45 @@ test('文案 —— 赛事与比赛的审核状态是中文，不是英文枚举
   const after = (await call(repo, 'getTeamEvent', { eventId })).matches
     .find(item => item.matchId === matches[0].matchId);
   assert.equal(after.statusLabel, '待审核', '录完等发布，文案要说人话');
+});
+
+test('8 队单败 + 5–8 名排位：排位赛会生成，名次按排位赛结果结算', async () => {
+  const repo = fixtureFor(8, 5);
+  const { eventId } = await lockedEvent(repo, { teamCount: 8, roster: 5, placementMode: 'top8' });
+  assert.equal((await repo.teamEvents.getById(eventId)).placementMode, 'top8');
+  await call(repo, 'drawTeamEvent', { eventId });
+
+  const play = async (rows) => {
+    for (const row of rows) {
+      const recorded = await call(repo, 'recordTeamMatch', { matchId: row.matchId, scoreA: 80, scoreB: 70 });
+      assert.equal(recorded.ok, true, recorded.message);
+      const published = await call(repo, 'publishTeamMatch', { matchId: row.matchId, approve: true });
+      assert.equal(published.ok, true, published.message);
+    }
+  };
+  const list = async () => (await call(repo, 'listTeamMatches', { eventId })).matches;
+
+  const first = await list();
+  assert.equal(first.length, 4, '八强四场');
+  await play(first);
+
+  const second = await call(repo, 'advanceTeamRound', { eventId });
+  assert.equal(second.ok, true, second.message);
+  assert.equal(second.matchCount, 4, '半决赛两场 + 5–8 名排位半决两场');
+  const round2 = (await list()).filter(row => row.round === 2);
+  assert.equal(round2.length, 4);
+  await play(round2);
+
+  const third = await call(repo, 'advanceTeamRound', { eventId });
+  assert.equal(third.ok, true, third.message);
+  assert.equal(third.matchCount, 4, '决赛 + 季军赛 + 5/6 名 + 7/8 名');
+  const round3 = (await list()).filter(row => row.round === 3);
+  assert.equal(round3.length, 4);
+  await play(round3);
+
+  const settled = await call(repo, 'settleTeamEvent', { eventId });
+  assert.equal(settled.ok, true, settled.message);
+  assert.deepEqual(settled.placements.map(row => row.rank), [1, 2, 3, 4, 5, 6, 7, 8]);
+  assert.deepEqual(settled.placements.map(row => row.note),
+    ['冠军', '亚军', '季军', '第四名', '第五名', '第六名', '第七名', '第八名']);
 });

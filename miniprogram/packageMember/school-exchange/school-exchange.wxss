@@ -1,7 +1,7 @@
 .exchange-page .card { margin-bottom: 24rpx; }
 .hint { font-size: var(--font-sm); color: #666; line-height: 1.7; margin: 12rpx 0; }
 .selection { padding: 20rpx 0; font-size: var(--font-body); }
-.field { background: #f5f6f8; padding: 20rpx; margin: 16rpx 0; border-radius: 12rpx; }
+.field { background: var(--color-bg); padding: 20rpx; margin: 16rpx 0; border-radius: 12rpx; }
 .event-row { border-top: 1rpx solid #eee; padding: 20rpx 0; }
 .actions { display: flex; gap: 16rpx; padding: 20rpx 0; align-items: center; }
 .score-input { flex: 1; margin: 0 8rpx; }

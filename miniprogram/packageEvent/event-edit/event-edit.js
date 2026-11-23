@@ -139,6 +139,8 @@ function todayText(now = new Date()) {
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
+const { pageScope, toast } = require('../../utils/page-helpers.js');
+
 Page(withFormExperience({
   data: {
     capacity: drawCapacityOf({ matchType: MATCH_TYPE.SINGLES }),
@@ -255,10 +257,7 @@ Page(withFormExperience({
 
   /** 当前「学校 + 协会」范围。写操作复用它，避免异步期间全局范围被切走 */
   currentScope() {
-    return {
-      schoolId: schoolSession.getSchoolId() || LEGACY_SCHOOL_ID,
-      association: associationScope.getAssociation(),
-    };
+    return pageScope();
   },
 
   /**
@@ -275,9 +274,7 @@ Page(withFormExperience({
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   /* ---------- 表单交互 ---------- */

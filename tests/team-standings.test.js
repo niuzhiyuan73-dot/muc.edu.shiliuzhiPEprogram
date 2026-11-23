@@ -155,3 +155,23 @@ test('computeTeamPlacements —— 决赛没发布就一名都排不出来', () 
   assert.deepEqual(computeTeamPlacements({ draw, matches }), []);
   assert.deepEqual(computeTeamPlacements({ draw: null, matches }), []);
 });
+
+test('5–8 名排位：名次按排位赛结果，而不是按被淘汰轮次倒排', () => {
+  const matches = [
+    played('t1', 't8', 80, 70, { round: 1, slot: 0 }),
+    played('t2', 't7', 80, 70, { round: 1, slot: 1 }),
+    played('t3', 't6', 80, 70, { round: 1, slot: 2 }),
+    played('t4', 't5', 80, 70, { round: 1, slot: 3 }),
+    played('t1', 't4', 80, 70, { round: 2, slot: 0 }),
+    played('t2', 't3', 80, 70, { round: 2, slot: 1 }),
+    played('t8', 't7', 80, 70, { round: 2, stage: BRACKET_STAGE.PLACEMENT, slot: 0 }),
+    played('t6', 't5', 80, 70, { round: 2, stage: BRACKET_STAGE.PLACEMENT, slot: 1 }),
+    played('t1', 't2', 80, 70, { round: 3, slot: 0 }),
+    played('t4', 't3', 80, 70, { round: 3, stage: BRACKET_STAGE.BRONZE, slot: 0 }),
+    played('t6', 't8', 80, 70, { round: 3, stage: BRACKET_STAGE.PLACEMENT, slot: 0 }),
+    played('t5', 't7', 80, 70, { round: 3, stage: BRACKET_STAGE.PLACEMENT, slot: 1 }),
+  ];
+  const rows = computeTeamPlacements({ draw: { size: 8 }, matches, table: [], placementMode: 'top8' });
+  assert.deepEqual(rows.map((row) => `${row.rank}:${row.teamId}`),
+    ['1:t1', '2:t2', '3:t4', '4:t3', '5:t6', '6:t8', '7:t5', '8:t7']);
+});

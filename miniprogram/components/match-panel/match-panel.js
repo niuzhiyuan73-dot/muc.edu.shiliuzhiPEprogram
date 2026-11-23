@@ -59,6 +59,8 @@ const ACTION_TEXT = {
  */
 const RENDER_STEP = 20;
 
+const { stopRefresh, toast } = require('../../utils/page-helpers.js');
+
 Component({
   properties: {
     focusMatchId: { type: String, value: '', observer() {
@@ -209,16 +211,12 @@ Component({
 
     /** stopPullDownRefresh 在测试环境里可能没有，做个保护 */
     stopPullDown() {
-      if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') {
-        wx.stopPullDownRefresh();
-      }
+      return stopRefresh();
     },
 
     /** 轻提示。测试环境里可能没有这个 API */
     showToast(title, icon = 'none') {
-      if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-        wx.showToast({ title, icon });
-      }
+      return toast(title, icon);
     },
 
     /**

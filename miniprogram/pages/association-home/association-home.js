@@ -28,6 +28,7 @@ const {
 const { applyBranding } = require('../../services/branding.js');
 const scope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 
 /**
  * 页签不再写死。球拍运动是「协会空间 / 排行榜 / 比赛 / 赛事」，
@@ -123,7 +124,10 @@ Page({
   resolveMeta(id) {
     const session = require('../../services/school-session.js');
     const schoolId = session.getSchoolId();
-    const demo = require('../../services/school-demo.js').schoolAssociations(schoolId);
+    // 演示数据只在 mock 数据源下读：云端模式没有外校演示协会，
+    // 为一个显示名去 require 整套种子数据不值得（也避免把 demo 当成真数据）。
+    const demo = isMockNow()
+      ? require('../../services/school-demo.js').schoolAssociations(schoolId) : null;
     const found = demo && demo.find((item) => item.id === id);
     const icon = this.iconOf(id);
     if (found) return { name: found.name, glyph: found.glyph, icon };

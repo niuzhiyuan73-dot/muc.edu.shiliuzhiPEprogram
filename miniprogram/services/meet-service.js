@@ -774,13 +774,17 @@ async function listSportsMeets(payload = {}, ctx) {
   items.sort((a, b) => (STATUS_WEIGHT[a.status] ?? 9) - (STATUS_WEIGHT[b.status] ?? 9)
     || compareCode(b.startDate, a.startDate));
 
+  const page = items.slice(offset, offset + limit);
+  const hasMore = offset + page.length < items.length;
   return ok({
     total: items.length,
     offset,
     limit,
+    hasMore,
+    nextOffset: hasMore ? offset + page.length : null,
     // 页面据此决定要不要显示「发起运动会」——权限由服务端算，客户端不自己猜。
     permissions: { canManage },
-    items: items.slice(offset, offset + limit).map((doc) => {
+    items: page.map((doc) => {
       const view = registrationView(doc, ctx.now);
       const base = meetSummary(doc);
       // 报名窗口已关但届次还挂在「报名中」：列表标签如实改成「报名已截止」，

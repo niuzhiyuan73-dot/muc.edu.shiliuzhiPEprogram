@@ -28,7 +28,7 @@ const {
   TEAM_EVENT_STATUS_LABEL, TEAM_ENTRY_STATUS_LABEL, TEAM_MATCH_STATUS_LABEL,
   TEAM_STATUS_LABEL, TEAM_MEMBER_STATUS_LABEL,
   TEAM_TYPE, CUP_MODE, CUP_MODE_LABEL,
-  BRACKET_STAGE, EVENT_BRONZE_MODE, TEAM_STAT_INTEGRITY, TEAM_STAT_STATUS,
+  BRACKET_STAGE, EVENT_BRONZE_MODE, EVENT_PLACEMENT_MODE, TEAM_STAT_INTEGRITY, TEAM_STAT_STATUS,
 } = require('../utils/constants.js');
 const { EVENT_FORMAT } = require('../utils/constants.js');
 // 展示与年份判定统一按东八区（云函数跑在 UTC）
@@ -345,7 +345,14 @@ async function listTeamEvents(payload = {}, ctx) {
         myEntryStatusLabel: mine ? (TEAM_ENTRY_STATUS_LABEL[mine.status] || '') : '',
       };
     });
-  return ok({ ok: true, events: rows, canManage: manage, message: '' });
+  const total = rows.length;
+  const offset = Math.max(0, Number(payload.offset) || 0);
+  const limit = Math.min(100, Math.max(1, Number(payload.limit) || 100));
+  const page = rows.slice(offset, offset + limit);
+  const hasMore = offset + page.length < total;
+  return ok({ ok: true, total, offset, limit, hasMore,
+    nextOffset: hasMore ? offset + page.length : null,
+    events: page, canManage: manage, message: '' });
 }
 
 async function getTeamEvent(payload = {}, ctx) {
@@ -639,6 +646,11 @@ async function createTeamEvent(payload = {}, ctx) {
   const bronzeMode = payload.bronzeMode === EVENT_BRONZE_MODE.TIED
     ? EVENT_BRONZE_MODE.TIED
     : EVENT_BRONZE_MODE.PLAYOFF;
+  // 5–8 名排位：只对 8 队及以上的单败淘汰有意义。其它值一律按「不排位」，
+  // 避免客户端传错字符串时静默生成额外赛程。
+  const placementMode = format === EVENT_FORMAT.SINGLE_ELIM
+    && payload.placementMode === EVENT_PLACEMENT_MODE.TOP8
+    ? EVENT_PLACEMENT_MODE.TOP8 : EVENT_PLACEMENT_MODE.NONE;
   // 统计口径：默认只记总分与个人得分/犯规；有专职记录员的赛事才开按节统计
   const statPolicy = payload.statPolicy === STAT_MODE.DETAILED ? STAT_MODE.DETAILED : STAT_MODE.BASIC;
   // 杯赛归属：只有石榴籽杯学院赛带这个标记。它不改变任何比赛规则，
@@ -661,7 +673,7 @@ async function createTeamEvent(payload = {}, ctx) {
     const at = fresh.now;
     await tx.teamEvents.set(eventId, {
       _id: eventId, schoolId: fresh.schoolId, association: fresh.association,
-      name, format, rules, sportFormat: strategy.sportFormat, bronzeMode, statPolicy, status: TEAM_EVENT_STATUS.REGISTRATION,
+      name, format, rules, sportFormat: strategy.sportFormat, bronzeMode, placementMode, statPolicy, status: TEAM_EVENT_STATUS.REGISTRATION,
       cupMode,
       entryMin: rules.eventRosterMin === undefined ? rules.rosterMin : rules.eventRosterMin,
       entryMax: rules.eventRosterMax === undefined ? rules.rosterMax : rules.eventRosterMax,
@@ -2156,6 +2168,7 @@ async function advanceTeamRound(payload = {}, ctx) {
     draw: event.draw,
     matches,
     bronzeMode: event.bronzeMode || EVENT_BRONZE_MODE.PLAYOFF,
+    placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
     isFinal: match => isFinal(match) && Boolean(match.winner),
   });
   if (!plan.ok || plan.rounds.length === 0) {
@@ -2254,14 +2267,22 @@ async function settleTeamEvent(payload = {}, ctx) {
       note: row.rank === 1 ? '冠军' : (row.rank === 2 ? '亚军' : ''),
     }));
   } else {
-    if (strategy.sportFormat === 'football11') {
-      const remaining = planNextRound({ eventId: event._id, draw: event.draw, matches,
-        bronzeMode: event.bronzeMode || EVENT_BRONZE_MODE.PLAYOFF,
-        isFinal: match => isFinal(match) && Boolean(match.winner) });
-      if (remaining.ok && remaining.rounds.length) return ok(refused('还有未生成的淘汰赛程，请先排下一轮'));
-      if (matches.some(m => m.status === 'canceled' || !m.winner)) return ok(refused('淘汰赛必须有完整有效的晋级结果才能结算'));
+    // 单败淘汰：先确认签表没有「该排还没排」的轮次。足球原先单独有这道检查，
+    // 篮球没有，结果管理员只打了半决赛就会看到「还没有产生可结算的名次」，
+    // 而不是「还有未生成的赛程」。两种运动共用同一把尺子。
+    const remaining = planNextRound({ eventId: event._id, draw: event.draw, matches,
+      bronzeMode: event.bronzeMode || EVENT_BRONZE_MODE.PLAYOFF,
+      placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
+      isFinal: match => isFinal(match) && Boolean(match.winner) });
+    if (remaining.ok && remaining.rounds.length) return ok(refused('还有未生成的淘汰赛程，请先排下一轮'));
+    if (strategy.sportFormat === 'football11'
+      && matches.some(m => m.status === 'canceled' || !m.winner)) {
+      return ok(refused('淘汰赛必须有完整有效的晋级结果才能结算'));
     }
-    placements = computeTeamPlacements({ draw: event.draw, matches, table });
+    placements = computeTeamPlacements({
+      draw: event.draw, matches, table,
+      placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
+    });
     // 足球同轮淘汰球队共享名次，不能用稳定 ID 顺序代替抽签。
     if (strategy.sportFormat === 'football11') {
       const rankByRound = new Map();

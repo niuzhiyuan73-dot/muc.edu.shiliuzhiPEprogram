@@ -666,13 +666,23 @@ async function confirmExchangeRanking(payload = {}, ctx) {
   }));
 }
 
-async function getExchangeEvents(_payload, ctx) {
-  if (!manages(ctx) && !participates(ctx)) return ok({ ...refused('请使用本校有效身份查看邀请赛'), events: [] });
+async function getExchangeEvents(payload = {}, ctx) {
+  if (!manages(ctx) && !participates(ctx)) {
+    return ok({ ...refused('请使用本校有效身份查看邀请赛'), events: [], total: 0,
+      offset: 0, limit: 0, hasMore: false, nextOffset: null });
+  }
   const invitations = await ctx.repo.exchangeInvitations.listByScope(ctx);
   const eventIds = [...new Set(invitations.map(row => row.eventId).filter(Boolean))];
   const eventDocs = await Promise.all(eventIds.map(id => ctx.repo.exchangeEvents.getById(id)));
-  const events = eventDocs.filter(event => canSee(event, ctx)).map(summary);
-  return ok({ ok: true, events: events.sort((a, b) => (a.startTime < b.startTime ? -1 : a.startTime > b.startTime ? 1 : 0)), message: '' });
+  const events = eventDocs.filter(event => canSee(event, ctx)).map(summary)
+    .sort((a, b) => (a.startTime < b.startTime ? -1 : a.startTime > b.startTime ? 1 : 0));
+  const total = events.length;
+  const offset = Math.max(0, Number(payload.offset) || 0);
+  const limit = Math.min(100, Math.max(1, Number(payload.limit) || 100));
+  const page = events.slice(offset, offset + limit);
+  const hasMore = offset + page.length < total;
+  return ok({ ok: true, total, offset, limit, hasMore,
+    nextOffset: hasMore ? offset + page.length : null, events: page, message: '' });
 }
 
 /** 管理员按已接受邀请的学校搜索裁判；每次只返回一页。 */

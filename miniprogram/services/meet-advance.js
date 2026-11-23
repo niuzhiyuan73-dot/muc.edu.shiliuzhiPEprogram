@@ -161,12 +161,19 @@ function advanceFromHeats({ heats = [], mode = ADVANCE_MODE.PER_HEAT, count = 1,
     return { ok: false, message: '晋级口径只能是每组前 N、总成绩前 N 或混合晋级' };
   }
 
+  // 组内名次与总名次是两个口径：`heatRank` 用组内名次（「小组第几」），
+  // `overallRank` 才是所有组混排后的名次（决赛道次按它排）。
+  const heatRankOf = new Map();
+  prepared.forEach((heat) => {
+    heat.ranked.forEach((row) => heatRankOf.set(row.entryKey, row.rank));
+  });
   const advanced = globalRanked
     .filter((row) => picked.has(row.entryKey))
     .map((row) => ({
       entryKey: row.entryKey,
       heatIndex: row.heatIndex,
-      heatRank: row.rank,
+      heatRank: heatRankOf.get(row.entryKey),
+      overallRank: row.rank,
       value: row.value,
     }));
 

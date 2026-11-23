@@ -26,6 +26,7 @@ const { currentThemeClass } = require('../../services/branding.js');
 const { validateAnnouncement } = require('../../services/announcement.js');
 const { ANNOUNCEMENT_CATEGORIES } = require('../../utils/constants.js');
 const { formatDateTime } = require('../../utils/format.js');
+const { isMockNow } = require('../../services/runtime-mode.js');
 
 /** 二级页签定义。顺序即页面上的先后，默认落在「训练」 */
 const SUB_TABS = [
@@ -294,7 +295,9 @@ Component({
         } catch (err) {
           console.error('[space] 学校目录读取失败', err);
         }
-        schoolName = schoolName || require('../../services/school-demo.js').schoolShortName(scope.schoolId);
+        // 演示简称只在 mock 数据源下兜底；云端模式读不到就留空，不拿演示数据冒充。
+        schoolName = schoolName || (isMockNow()
+          ? require('../../services/school-demo.js').schoolShortName(scope.schoolId) : '');
         const associationName = this.resolveAssociationName(scope.association);
 
         const [groupResult, memberResult] = await Promise.all([
@@ -348,7 +351,8 @@ Component({
     /** 协会显示名：演示学校取演示名（带学校前缀），本校取注册表简称 */
     resolveAssociationName(association) {
       const schoolId = this.scope && this.scope.schoolId;
-      const demo = require('../../services/school-demo.js').schoolAssociations(schoolId);
+      const demo = isMockNow()
+        ? require('../../services/school-demo.js').schoolAssociations(schoolId) : null;
       const found = demo && demo.find((item) => item.id === association);
       if (found) return found.name;
       return require('../../utils/associations.js').getAssociation(association).shortName;

@@ -26,7 +26,7 @@
  */
 
 const { canManageAssociationSpace, canParticipateInAssociation, canReadAssociationSpace } = require('./association-space-permission.js');
-const { buildDirectory } = require('./school-actor.js');
+const { buildDirectory, buildCollegeDirectory } = require('./school-actor.js');
 const { buildSchoolContext } = require('./school-context.js');
 const { canSchoolAction } = require('./school-permission.js');
 const { teamKey, teamMemberKey, collegeTeamKey, schoolMemberKey, schoolKey } = require('../utils/school.js');
@@ -345,14 +345,14 @@ async function getTeam(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) return ok(refused('账号或本校在册会员身份已失效，无权访问本协会'));
   if (!assertTeamSport(ctx)) return ok(refused('该协会不是团队项目'));
 
-  const dir = await buildDirectory(ctx);
-  let team = await loadTeam(ctx.repo.forScope(ctx), ctx, payload.teamId);
-  // 院队是惰性预置的：编号能对上学院目录就先补建再读。
-  // 少了这一步，「我的球队」里点进院队会先被 getTeam 报「球队不存在」。
-  if (!team) {
-    const ensured = await resolveCollegeTeam(payload.teamId, ctx, dir);
-    if (ensured.ok) team = ensured.team;
-  }
+  const team = await (async () => {
+    const found = await loadTeam(ctx.repo.forScope(ctx), ctx, payload.teamId);
+    if (found) return found;
+    // 院队是惰性预置的：编号能对上学院目录就先补建再读。
+    // 只有「库里还没有这条队」才需要学院目录；已有球队的正常详情不再读全校名册。
+    const ensured = await resolveCollegeTeam(payload.teamId, ctx, await buildCollegeDirectory(ctx));
+    return ensured.ok ? ensured.team : null;
+  })();
   if (!team) return ok(refused('球队不存在，或不在本协会'));
 
   const manage = canManageTeam(ctx, team, ctx.actorId);
@@ -739,8 +739,10 @@ async function getCollegeTeam(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) return ok(refused('账号或本校在册会员身份已失效，无权访问本协会'));
   if (!assertTeamSport(ctx)) return ok(refused('该协会不是团队项目'));
 
-  const dir = await buildDirectory(ctx);
-  const mine = dir.collegeIdOf(ctx.actorId);
+  // 院队详情只需要「学院目录 + 操作者自己的学籍」，不必把全校名册读进来。
+  // 队长昵称对院队没有意义（系统预置、无队长），队员昵称下面按在队名单单独取。
+  const dir = await buildCollegeDirectory(ctx);
+  const mine = dir.collegeIdOf(ctx.actorId) || (ctx.schoolMember && ctx.schoolMember.collegeId) || '';
   // 三种入口：按学院编号（杯赛页）、按球队编号（球队详情）、不传（本人学院）
   let collegeId = String(payload.collegeId || '');
   if (!collegeId && payload.teamId) {

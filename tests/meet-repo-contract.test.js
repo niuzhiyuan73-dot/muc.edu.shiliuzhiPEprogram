@@ -26,7 +26,7 @@ const SCOPE = { schoolId: 'muc', meetId: 'mt_muc_abc' };
 const OTHER_MEET = { schoolId: 'muc', meetId: 'mt_muc_xyz' };
 const OTHER_SCHOOL = { schoolId: 'pku', meetId: 'mt_muc_abc' };
 const RESULT_LEVEL = ['scope', 'transaction'];
-const REQUIRED_METHODS = ['getById', 'insert', 'list', 'set', 'update'];
+const REQUIRED_METHODS = ['getById', 'insert', 'list', 'set', 'update', 'remove'];
 
 const collectionKeys = (surface) => Object.keys(surface).filter((key) => !RESULT_LEVEL.includes(key)).sort();
 const methodNames = (target) => Object.keys(target).filter((key) => typeof target[key] === 'function').sort();

@@ -28,6 +28,8 @@ const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
 
+const { toast } = require('../../utils/page-helpers.js');
+
 Component({
   options: {
     // app.wxss 的 .card / .tag / .rank-head 等全局类要渗进来
@@ -193,9 +195,7 @@ Component({
 
     /** 轻提示。测试环境里可能没有这个 API */
     showToast(title, icon = 'none') {
-      if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-        wx.showToast({ title, icon });
-      }
+      return toast(title, icon);
     },
 
     /**

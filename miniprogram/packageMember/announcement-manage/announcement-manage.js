@@ -36,6 +36,8 @@ const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
 /** 下架前的二次确认文案 */
 const ARCHIVE_CONFIRM = '下架后这条公告不再对会员显示，但仍会留在台账里，确定下架吗？';
 
+const { pageScope, stopRefresh, toast } = require('../../utils/page-helpers.js');
+
 Page(withNoticeExpansion({
   data: {
     /** 首屏加载中 */
@@ -76,24 +78,17 @@ Page(withNoticeExpansion({
 
   /** 当前「学校 + 协会」范围。写操作复用它，避免异步期间全局范围被切走 */
   currentScope() {
-    return {
-      schoolId: schoolSession.getSchoolId() || LEGACY_SCHOOL_ID,
-      association: associationScope.getAssociation(),
-    };
+    return pageScope();
   },
 
   /** stopPullDownRefresh 在测试环境里可能没有，做个保护 */
   stopPullDown() {
-    if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') {
-      wx.stopPullDownRefresh();
-    }
+    return stopRefresh();
   },
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   /**

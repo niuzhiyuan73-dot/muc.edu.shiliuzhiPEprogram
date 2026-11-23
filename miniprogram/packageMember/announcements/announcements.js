@@ -28,6 +28,8 @@ const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
 
+const { stopRefresh } = require('../../utils/page-helpers.js');
+
 Page(withNoticeExpansion({
   data: {
     /** 首屏加载中 */
@@ -61,9 +63,7 @@ Page(withNoticeExpansion({
 
   /** stopPullDownRefresh 在测试环境里可能没有，做个保护 */
   stopPullDown() {
-    if (typeof wx !== 'undefined' && typeof wx.stopPullDownRefresh === 'function') {
-      wx.stopPullDownRefresh();
-    }
+    return stopRefresh();
   },
 
   /**

@@ -25,8 +25,8 @@
 
 /* 时间选择：日期 + 时分 */
 .meet-time { display: flex; gap: 12rpx; }
-.meet-time-part { padding: 8rpx 20rpx; border-radius: 10rpx; background: #f5f6f8; font-size: var(--font-caption); color: #333; }
-.meet-search { height: 66rpx; padding: 0 20rpx; border-radius: 10rpx; background: #f5f6f8; font-size: var(--font-caption); margin: 10rpx 0; }
+.meet-time-part { padding: 8rpx 20rpx; border-radius: 10rpx; background: var(--color-bg); font-size: var(--font-caption); color: #333; }
+.meet-search { height: 66rpx; padding: 0 20rpx; border-radius: 10rpx; background: var(--color-bg); font-size: var(--font-caption); margin: 10rpx 0; }
 
 /* 赛制与编排按钮 */
 .meet-actions { display: flex; gap: 12rpx; margin-top: 14rpx; }
@@ -37,9 +37,9 @@
 .meet-form-row { display: flex; align-items: center; gap: 12rpx; margin-top: 14rpx; flex-wrap: wrap; }
 .meet-form-label { width: 130rpx; font-size: var(--font-caption); color: #555; }
 .meet-form-unit { font-size: var(--font-xs); color: #888; }
-.meet-num { width: 120rpx; height: 60rpx; padding: 0 14rpx; border-radius: 10rpx; background: #f5f6f8; font-size: var(--font-sm); text-align: center; }
+.meet-num { width: 120rpx; height: 60rpx; padding: 0 14rpx; border-radius: 10rpx; background: var(--color-bg); font-size: var(--font-sm); text-align: center; }
 .meet-seg { display: flex; border-radius: 12rpx; overflow: hidden; border: 1rpx solid #e2e4e8; }
-.meet-seg-item { padding: 10rpx 20rpx; font-size: var(--font-xs); color: #555; background: #fff; }
+.meet-seg-item { padding: 10rpx 20rpx; font-size: var(--font-xs); color: #555; background: var(--color-card); }
 .meet-seg-item + .meet-seg-item { border-left: 1rpx solid #e2e4e8; }
 .meet-seg-item.is-on { background: var(--color-primary); color: #fff; border-color: var(--color-primary); }
 
@@ -55,15 +55,15 @@
 
 /* 批量指派面板 */
 .meet-chips { display: flex; flex-wrap: wrap; gap: 10rpx; margin-bottom: 16rpx; }
-.meet-chip { padding: 8rpx 20rpx; border-radius: 999rpx; border: 1rpx solid #e2e4e8; background: #fff; font-size: var(--font-xs); color: #555; }
+.meet-chip { padding: 8rpx 20rpx; border-radius: 999rpx; border: 1rpx solid #e2e4e8; background: var(--color-card); font-size: var(--font-xs); color: #555; }
 .meet-chip.is-on { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
 
 /* 派裁判面板：项目与人两块都做成滚动区，人数/场次一多也不会把页面拉成几十屏 */
 .meet-assign-scroll { height: 460rpx; padding: 8rpx 12rpx; margin-bottom: 16rpx; border-radius: 12rpx; background: #fafbfc; box-sizing: border-box; }
-.meet-assign-event { padding: 10rpx 4rpx; border-bottom: 1rpx solid #f0f1f3; }
+.meet-assign-event { padding: 10rpx 4rpx; border-bottom: 1rpx solid var(--color-divider); }
 .meet-assign-event:last-child { border-bottom: none; }
 .meet-assign-event-head { display: flex; align-items: flex-start; gap: 12rpx; }
-.meet-assign-check { width: 32rpx; height: 32rpx; margin-top: 6rpx; border: 2rpx solid #cfd3d9; border-radius: 8rpx; background: #fff; flex: none; }
+.meet-assign-check { width: 32rpx; height: 32rpx; margin-top: 6rpx; border: 2rpx solid #cfd3d9; border-radius: 8rpx; background: var(--color-card); flex: none; }
 .meet-assign-check.is-on { background: var(--color-primary); border-color: var(--color-primary); }
 .meet-assign-check.is-half { background: var(--color-primary-light); border-color: var(--color-primary); }
 .meet-assign-event-main { flex: 1; }

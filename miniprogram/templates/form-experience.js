@@ -1,4 +1,5 @@
 /** 客户端表单交互；不进入云端纯模块镜像。 */
+const { fingerprintOf } = require('../utils/fingerprint.js');
 const LABELS = {
   title: '名称', name: '名称', description: '说明', content: '正文', location: '场地', date: '日期', time: '时间',
   startTime: '开始时间', endTime: '结束时间', quota: '报名名额', courtCount: '场地数', groupCount: '小组数',
@@ -12,7 +13,7 @@ const VALUES = { single_elim: '单败淘汰', double_elim: '双败淘汰', round
   group_knockout: '小组循环 + 淘汰', round_robin_knockout: '循环 + 淘汰', group_double_elim: '小组 + 双败',
   top8: '5–8 名排位', none: '不启用', shared: '并列季军', match: '加赛', manual: '手工指定', elo: '等级分',
   points: '赛季积分', all: '不限', male: '男子', female: '女子', mixed: '混合' };
-function signature(data) { return JSON.stringify([data.form, data.audienceIndex, data.selectedGroupIds]); }
+function signature(data) { return fingerprintOf([data.form, data.audienceIndex, data.selectedGroupIds]); }
 function formRows(data, labels = {}) {
   const selectors = { matchType: ['matchTypes', 'matchTypeIndex'], discipline: ['disciplines', 'disciplineIndex'],
     format: ['formats', 'formatIndex'], level: ['levels', 'levelIndex'], bronzeMode: ['bronzeModes', 'bronzeIndex'],

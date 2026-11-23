@@ -64,8 +64,10 @@ test('2000 人目录只返回页大小加一，学校与状态筛选、投影均
   assert.deepEqual(db.traces[0][0], ['match', { schoolId: 'muc', status: 'active' }]);
 });
 
-test('历史搜索字段缺失明确拒绝，不能返回看似成功的缺人名单', async () => {
+test('历史搜索字段缺失：目录与计数都不算未回填账号，不再中断整页', async () => {
   const tables = fixture(['测试']); delete tables.users[0].directoryVersion;
   const db = directoryDatabase(tables);
-  await assert.rejects(readMemberPage(db, db.command, scope, { limit: 20 }), /回填/);
+  const page = await readMemberPage(db, db.command, scope, { limit: 20 });
+  assert.deepEqual(page, { members: [], hasMore: false, keyword: '', nextCursor: '' });
+  // 计数与分页共用 memberQuery 的同一段 match，因此也自动排除未回填账号。
 });

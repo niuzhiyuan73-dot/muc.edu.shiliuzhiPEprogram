@@ -5,51 +5,11 @@ const { attachTeamReads, unique } = require('../lib/services/scoped-team-reads.j
 const { attachOverviewReads } = require('../lib/services/school-overview-reads.js');
 const { pageOfCollection } = require('../lib/services/event-list-page.js');
 
-const SCHOOL_COLLECTIONS = ['schools', 'schoolAssociations', 'colleges', 'schoolMembers', 'schoolRoles', 'studentIdClaims',
-  'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
-  'associationGroups', 'associationGroupMembers',
-  'associationNotices', 'associationTrainings', 'trainingRegistrations', 'pairCounts',
-  // 会员评级表与结算序号计数：均为「学校 + 协会」双维度归属，写入即校验。
-  'memberRatings', 'ratingCounters',
-  // 团队运动（篮球/足球/排球）6 个集合：与个人赛彻底分开，同样按
-  // 「学校 + 协会」双维度归属。比赛与统计**绝不写 matches / memberRatings**。
-  'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-  // 运动会 14 个集合：学校级业务，不属于任何协会。基础读写挂在这里，
-  // 范围校验走 forMeet（{schoolId, meetId}），不能混进下面的 SCOPED_COLLECTIONS
-  // ——那一组会注入 association 字段，把运动会错挂到协会上。
-  ...MEET_COLLECTIONS,
-  // 学院部长授权：**学校级**常设角色，不随届次、也不挂协会，故按 SCHOOL_ONLY 处理。
-  'sportsMeetCollegeLeads'];
-// 学校级集合：只按 schoolId 判归属，写入不注入 association。
-// 公告 2026-10-18 起并入这一档——只有管理员能发、发的是全校信息，
-// 不能因为发布时当前协会不同而只在那家协会可见。
-const SCHOOL_ONLY = ['colleges', 'schoolMembers', 'schoolRoles', 'sportsMeetCollegeLeads', 'announcements'];
-// 带 eventId 的从属集合：按赛事取子集走 listByEvent（条件查询），不再整表读完
-// 再内存过滤。与内存仓储 school-memory-repo.js 的 EVENT_SCOPED 一一对应。
-//
-// 团队运动的报名 / 比赛 / 统计三个集合同样有 eventId、同样是「按赛事取子集」
-// 的读法（team-event-service 里 6 处 `list().filter(eventId)`），2026-10-21
-// 审查 P1-5 把它们并进来：此前一次详情页要把历年全部比赛与统计读回来才滤出
-// 本届那几十条。
-const EVENT_SCOPED = ['matches', 'eventSignups', 'collegeEntries', 'ties', 'lineups',
-  'teamEventEntries', 'teamMatches', 'teamMatchStats'];
-const SCOPED_COLLECTIONS = [
-  'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
-  ...SCHOOL_ONLY, 'schoolAssociations', 'memberships',
-  'matches', 'events', 'eventSignups', 'collegeEvents', 'collegeEntries',
-  'ties', 'lineups', 'liveScores', 'seasons',
-  // 协会空间小组 / 通知 / 训练均按「学校 + 协会」双维度范围，写入即校验归属。
-  'associationGroups', 'associationGroupMembers',
-  'associationNotices', 'associationTrainings', 'trainingRegistrations',
-  // 交手名额计数：每对一条，同属「学校 + 协会 + 赛季」，写入即校验归属。
-  'pairCounts',
-  // 会员评级表：每「学校 + 协会 + 用户 + 池」一条，写入即校验归属。
-  'memberRatings',
-  // 结算序号计数：每「学校 + 协会」一条，写入即校验归属。
-  'ratingCounters',
-  // 团队运动：球队 / 队员 / 赛事 / 报名 / 比赛 / 统计，一律按「学校 + 协会」。
-  'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-];
+// 集合清单与本地模拟仓储共用一份（miniprogram/services/school-collections.js，
+// 由 tools/sync-cloud-lib.js 镜像到 lib）。新增集合只改那一处。
+const {
+  SCHOOL_ONLY, EVENT_SCOPED, SCOPED_COLLECTIONS, SCHOOL_COLLECTIONS,
+} = require('../lib/services/school-collections.js');
 
 /**
  * 通用「受范围仓储」。
@@ -146,6 +106,14 @@ function buildScoped(repo, io, inTx, options) {
       set: (id, doc) => write(id, doc, 'set'),
       insert: (doc) => write(doc._id, doc, 'insert'),
       update: (id, patch) => write(id, patch, 'update'),
+      // 物理删除只服务「还没产生结果、可以直接丢弃」的草稿（个人赛重抽）。
+      // 先读后删：归属校验不能只看调用方传进来的 _id。
+      remove: async (id) => {
+        if (!id || typeof id !== 'string') throw new Error('缺少记录 ID');
+        const current = await io.read(key, id);
+        if (!owns(current)) throw new Error('记录不存在或不属于当前范围');
+        await io.remove(key, id);
+      },
     };
     // 按赛事取子集：条件**一起下推到查询**（范围字段 + eventId），而不是读全表
     // 再在内存里过滤。内存仓储有同名方法（school-memory-repo.js 的 listByEvent），

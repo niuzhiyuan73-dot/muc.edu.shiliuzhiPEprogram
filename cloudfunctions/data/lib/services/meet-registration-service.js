@@ -935,7 +935,15 @@ async function listMeetEntries(payload = {}, ctx) {
       };
     });
 
-  return ok({ items });
+  // 名单可能上百条（一个学院一届的全部项目），按页返回并明确 hasMore，
+  // 页面不必靠数组长度猜「是不是被截断了」。
+  const total = items.length;
+  const offset = Math.max(0, Number(payload.offset) || 0);
+  // 默认 500 保持「一次能看全」的旧行为；超过时靠 hasMore 续读。
+  const limit = Math.min(500, Math.max(1, Number(payload.limit) || 500));
+  const page = items.slice(offset, offset + limit);
+  const hasMore = offset + page.length < total;
+  return ok({ total, offset, limit, hasMore, nextOffset: hasMore ? offset + page.length : null, items: page });
 }
 
 module.exports = {

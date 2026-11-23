@@ -1,4 +1,5 @@
 const space = require('../../services/association-space');
+const { fingerprintOf } = require('../../utils/fingerprint.js');
 const associationScope = require('../../services/association-scope');
 const schoolSession = require('../../services/school-session');
 const { currentThemeClass } = require('../../services/branding');
@@ -41,7 +42,7 @@ Page({
         preview: null, publishedText: info.publishedReport ? scoreText(info.publishedReport.result) : '尚未发布', notice: '' });
       this.updateGoalRows();
       this.updateStage();
-      this.savedForm = JSON.stringify(this.data.form);
+      this.savedForm = fingerprintOf(this.data.form);
       this.updateReportExperience();
     } catch (e) { if (!this.unloaded && version === this.loadVersion) this.setData({ loading: false, info: null, form: null, error: e.message || '加载失败，请重试' }); }
   },
@@ -55,7 +56,7 @@ Page({
     const info = this.data.info;
     const raw = reportPayload(this.data.form);
     const check = normalizeFootballReport(raw, info);
-    const dirty = this.savedForm && JSON.stringify(this.data.form) !== this.savedForm;
+    const dirty = this.savedForm && fingerprintOf(this.data.form) !== this.savedForm;
     const names = Object.fromEntries(this.data.form.sides.flatMap(side => side.players).map(player => [player.userId, player.name]));
     this.setData({ editingState: dirty ? '有未提交改动' : '与已保存内容一致',
       submittedText: info.report ? scoreText(info.report.result) + (info.pending ? ' · 待审核' : ' · 已保存') : '尚未提交',
@@ -173,7 +174,7 @@ Page({
   },
   async act(action, payload) {
     if (this.data.busy) return;
-    const signature = JSON.stringify({ action, payload });
+    const signature = fingerprintOf({ action, payload });
     this.requests = this.requests || {};
     const id = this.requests[signature] || (this.requests[signature] = requestId());
     this.setData({ busy: true, notice: '' });
@@ -196,7 +197,7 @@ Page({
     }
     const check = normalizeFootballReport(report, this.data.info);
     if (!check.ok) { this.setData({ notice: check.message }); return; }
-    const fingerprint = JSON.stringify({ report, reason: this.data.form.reason });
+    const fingerprint = fingerprintOf({ report, reason: this.data.form.reason });
     if (this.data.preview?.fingerprint !== fingerprint) {
       this.setData({ preview: { fingerprint, scoreText: scoreText(check.value.result), warnings: check.warnings },
         notice: '请核对报告预览；确认后再次点击提交审核。' }); return;
@@ -206,7 +207,7 @@ Page({
   onReview(event) {
     if (!this.data.info.canReview) return;
     const current = normalizeFootballReport(reportPayload(this.data.form), this.data.info);
-    if (!current.ok || JSON.stringify(current.value) !== JSON.stringify(this.data.info.report)) {
+    if (!current.ok || fingerprintOf(current.value) !== fingerprintOf(this.data.info.report)) {
       this.setData({ notice: '表单有未保存改动，请先保存报告或刷新后再审核。' }); return;
     }
     return this.act('publishTeamMatch', { approve: event.currentTarget.dataset.approve === 'true' });

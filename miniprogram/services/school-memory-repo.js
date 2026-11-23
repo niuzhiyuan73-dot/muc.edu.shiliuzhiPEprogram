@@ -9,37 +9,11 @@ const { memoryPersonalPage } = require('./personal-sports-query.js');
 const { attachOverviewReads, memoryOverviewIO } = require('./school-overview-reads.js');
 const { pageOfCollection } = require('./event-list-page.js');
 const { compareCode } = require('../utils/text-order.js');
-/**
- * 带 eventId 的「从属集合」：按赛事取子集用 listByEvent（条件查询 + 索引），
- * 不整表读完再内存过滤。顶层与 forScope 两处都要提供，方法面与云端
- * （cloud-repo.js / school-repository.js）逐字一致，由契约测试守住。
- */
-const EVENT_SCOPED = ['matches', 'eventSignups', 'collegeEntries', 'ties', 'lineups',
-  // 团队运动：报名 / 比赛 / 统计同样按赛事取子集（与云端 school-repository.js 一致）
-  'teamEventEntries', 'teamMatches', 'teamMatchStats'];
-const KEYS = ['users', 'schools', 'schoolAssociations', 'colleges', 'schoolMembers', 'schoolRoles', 'memberships', 'studentIdClaims', 'auditLogs',
-  'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
-  'associationGroups', 'associationGroupMembers',
-  'associationNotices', 'associationTrainings', 'trainingRegistrations',
-  'announcements',
-  'events', 'eventSignups', 'matches', 'liveScores',
-  'collegeEvents', 'collegeEntries', 'ties', 'lineups',
-  // M4：赛季文档（每范围一份，_id 由 scopeKey 组成，跨范围读不到也改不掉）
-  'seasons',
-  // 交手名额计数：每对每赛季一条，_id 由 scope + 赛季号 + 两人编号组成
-  'pairCounts',
-  // 会员评级表：每「学校 + 协会 + 用户 + 池」一条，_id 由 memberRatingKey 组成
-  'memberRatings',
-  // 结算序号计数：每「学校 + 协会」一条，_id 由 ratingSeqKey 组成
-  'ratingCounters',
-  // 团队运动（篮球/足球/排球）：球队 / 队员 / 赛事 / 报名 / 比赛 / 统计，
-  // 与个人赛彻底分开，按「学校 + 协会」归属（与云端 SCOPED 同口径）
-  'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-  // 运动会：学校级业务，与协会无关。14 个集合一律以 schoolId + meetId 归属，
-  // 范围校验走 forMeet（与云端 attachSchoolRepository 同口径）。
-  ...MEET_COLLECTIONS,
-  // 学院部长授权：学校级常设角色，一院一条。
-  'sportsMeetCollegeLeads'];
+// 集合清单与云端共用一份（services/school-collections.js），不再各写各的。
+const {
+  EVENT_SCOPED, SCOPED_COLLECTIONS, SCHOOL_ONLY, ALL_COLLECTIONS,
+} = require('./school-collections.js');
+const KEYS = ALL_COLLECTIONS;
 
 function createSchoolMemoryRepo(seed = {}) {
   let state = Object.fromEntries(KEYS.map(key => [key, new Map((seed[key] || []).map(doc => [doc._id, clone(doc)]))]));
@@ -54,6 +28,9 @@ function createSchoolMemoryRepo(seed = {}) {
       repo[key] = {
         getById: async id => clone(getState()[key].get(id) || null),
         set: async (id, doc) => { getState()[key].set(id, clone({ ...doc, _id: id })); },
+        // 物理删除只用于「尚未产生任何结果的草稿」：个人赛重抽时清掉旧签表场次。
+        // 与云端 `doc(id).remove()` 同语义；归属校验由受范围层负责。
+        remove: async id => { getState()[key].delete(id); },
         list: async () => {
           if (inTx) throw new Error('事务内不可查询集合');
           return [...getState()[key].values()].map(clone);
@@ -97,26 +74,9 @@ function createSchoolMemoryRepo(seed = {}) {
       if (!entry._id) throw new Error('审计记录缺少 ID');
       await repo.auditLogs.set(entry._id, entry);
     } };
-    // 受范围限制的集合：与云端 attachSchoolRepository 的 SCOPED_COLLECTIONS 对齐
-    // （由 tests/for-scope-contract.test.js 守护）。两端必须逐字一致——原先云端多一个
-    // `rankings` 并作为例外列在契约测试里；Elo 改为逐场结算后它已无任何读写，已删除。
-    const SCOPED = [
-      'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
-      'colleges', 'schoolMembers', 'schoolRoles', 'schoolAssociations', 'memberships',
-      'matches', 'events', 'eventSignups', 'announcements',
-      'collegeEvents', 'collegeEntries', 'ties', 'lineups', 'liveScores', 'seasons',
-      'associationGroups', 'associationGroupMembers',
-      'associationNotices', 'associationTrainings', 'trainingRegistrations',
-      'pairCounts', 'memberRatings', 'ratingCounters',
-      // 团队运动：按「学校 + 协会」双维度归属
-      'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
-      // 学院部长授权：学校级（只按 schoolId 判归属，见 SCHOOL_SCOPED）
-      'sportsMeetCollegeLeads',
-    ];
-    // 只按学校（不带协会）判归属的集合：学院目录 / 身份 / 校级角色是学校级的。
-    // `announcements` 2026-10-18 起也归到这一档：公告只有管理员能发，且发的是
-    // 全校信息，不该因为发布时正停在哪家协会而只在那家协会可见。
-    const SCHOOL_SCOPED = ['colleges', 'schoolMembers', 'schoolRoles', 'sportsMeetCollegeLeads', 'announcements'];
+    // 受范围限制的集合：与云端 attachSchoolRepository 共用同一份清单。
+    const SCOPED = SCOPED_COLLECTIONS;
+    const SCHOOL_SCOPED = SCHOOL_ONLY;
     // 按赛事取子集用 listByEvent（清单见文件顶部的 EVENT_SCOPED）
     repo.forScope = input => {
       const scope = schoolScope(input);
@@ -155,6 +115,12 @@ function createSchoolMemoryRepo(seed = {}) {
           set: (id, doc) => write(id, doc, 'set'),
           insert: doc => write(doc._id, doc, 'insert'),
           update: (id, patch) => write(id, patch, 'update'),
+          // 归属校验必须在删除前做：否则调用方给一个别校的 _id 就能删掉别人的草稿。
+          remove: async id => {
+            const current = await repo[key].getById(id);
+            if (!owns(current)) throw new Error('记录不存在或不属于当前范围');
+            await repo[key].remove(id);
+          },
         };
         // 按赛事取子集：与云端 listByEvent 同口径（WHERE eventId = ?）。
         // 云端若不用条件查询，就是整表翻页后内存过滤——比赛一多，打开一次详情
@@ -359,6 +325,11 @@ function createSchoolMemoryRepo(seed = {}) {
           set: (id, doc) => write(id, doc, 'set'),
           insert: doc => write(doc._id, doc, 'insert'),
           update: (id, patch) => write(id, patch, 'update'),
+          remove: async id => {
+            const current = await repo[key].getById(id);
+            if (!owns(current)) throw new Error('记录不存在或不属于当前范围');
+            await repo[key].remove(id);
+          },
         };
         // 运动会录分页的两个下推（与云端 forMeet 同口径，2026-10-23 H-9）：
         // 本场次的报名按编号批读、成绩按 sessionKey 取，不再读一届全部。

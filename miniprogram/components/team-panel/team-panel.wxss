@@ -92,7 +92,7 @@
 }
 
 .tag-muted {
-  background: #F0F1F3;
+  background: var(--color-divider);
   color: var(--color-text-secondary);
 }
 

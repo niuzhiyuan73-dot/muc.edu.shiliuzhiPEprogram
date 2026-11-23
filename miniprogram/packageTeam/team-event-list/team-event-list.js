@@ -53,6 +53,8 @@ Page({
     formatIndex: 0,
     presetOptions: PRESET_OPTIONS,
     presetIndex: Math.max(0, PRESET_OPTIONS.findIndex(item => item.value === DEFAULT_PRESET_KEY)),
+    /** 单败淘汰是否加打 5–8 名排位（8 队及以上生效） */
+    placementTop8: false,
     notice: '',
     noticeError: false,
     /**
@@ -111,7 +113,7 @@ Page({
   },
 
   onOpenCreate() {
-    this.setData({ creating: true, newName: '', notice: '', noticeError: false });
+    this.setData({ creating: true, newName: '', placementTop8: false, notice: '', noticeError: false });
   },
 
   onCloseCreate() {
@@ -131,6 +133,10 @@ Page({
     this.setData({ presetIndex: Number(event.detail.value) || 0 });
   },
 
+  onTogglePlacement(event) {
+    this.setData({ placementTop8: event.detail.value === true });
+  },
+
   async onSubmitCreate() {
     if (this.data.isFootball) return undefined;
     if (this.data.submitting) return undefined;
@@ -143,6 +149,7 @@ Page({
         format: format.value,
         presetKey: preset.value,
         requestId: nextRequestId(),
+        ...(format.value === 'single_elim' && this.data.placementTop8 ? { placementMode: 'top8' } : {}),
         // 普通赛事不带这个字段：请求体里没有杯赛标记，才不会被误读成学院赛
         ...(this.data.cupMode ? { cupMode: this.data.cupMode } : {}),
       });

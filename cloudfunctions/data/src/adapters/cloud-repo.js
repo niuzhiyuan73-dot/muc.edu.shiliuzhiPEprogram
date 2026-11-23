@@ -625,6 +625,8 @@ function buildCollections(scope, inTx, cmd) {
     repo[key] = {
       getById: (id) => readDoc(scope, COLLECTIONS[key], id),
       set: (id, doc) => col(key).doc(id).set({ data: withoutId(doc) }),
+      // 顶层删除只满足仓储方法面；业务删除一律走 forScope/forMeet（带归属校验）。
+      remove: (id) => col(key).doc(id).remove(),
       list: () => list(key),
       ...repo[key],
     };
@@ -664,6 +666,9 @@ function buildCollections(scope, inTx, cmd) {
     },
     read: (key, id) => readDoc(scope, COLLECTIONS[key], id),
     set: (key, id, doc) => col(key).doc(id).set({ data: withoutId(doc) }),
+    // 物理删除：只给「可丢弃的草稿」用（个人赛重抽清旧签表）。
+    // 事务内走 instrumentTransaction 的 remove，计入写预算。
+    remove: (key, id) => col(key).doc(id).remove(),
     query: (key, where) => {
       if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
       return readWhere(scope, COLLECTIONS[key], where, cmd);

@@ -123,6 +123,8 @@ async function getMeetStandings(payload = {}, ctx) {
     total: ranked.length,
     offset,
     limit,
+    hasMore: offset + limit < ranked.length,
+    nextOffset: offset + limit < ranked.length ? offset + limit : null,
     items: ranked.slice(offset, offset + limit),
   });
 }
@@ -189,6 +191,8 @@ async function getMyMeetHonors(payload = {}, ctx) {
     total: mine.length,
     offset,
     limit,
+    hasMore: offset + limit < mine.length,
+    nextOffset: offset + limit < mine.length ? offset + limit : null,
     summary,
     items: mine.slice(offset, offset + limit),
   });

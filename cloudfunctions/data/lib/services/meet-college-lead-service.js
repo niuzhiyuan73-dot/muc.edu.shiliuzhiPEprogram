@@ -167,23 +167,29 @@ async function listMeetCollegeLeads(payload = {}, ctx) {
   ]);
   const nameOf = new Map(colleges.map((doc) => [doc.collegeId, doc.name]));
   const active = leads.filter((doc) => doc.schoolId === fresh.schoolId && isActiveMeetLead(doc));
+  // 先分页再补姓名：一页 100 行只读这 100 个人的账号，不随全校部长数增长。
+  const total = active.length;
+  const offset = Math.max(0, Number(payload.offset) || 0);
+  const limit = Math.min(100, Math.max(1, Number(payload.limit) || 100));
+  const pageRows = active.slice(offset, offset + limit);
   // 姓名一并给出：页面上只显示 userId 时，管理员根本看不出这位部长是谁
-  const userIds = [...new Set(active.map((doc) => doc.userId).filter(Boolean))];
+  const userIds = [...new Set(pageRows.map((doc) => doc.userId).filter(Boolean))];
   const users = userIds.length ? await ctx.repo.users.listByIds(userIds) : [];
   const userById = new Map(users.map((u) => [u._id, u]));
   const personName = new Map();
-  for (const doc of active) {
+  for (const doc of pageRows) {
     const user = userById.get(doc.userId);
     personName.set(doc.userId, (user && (user.realName || user.nickName)) || doc.userId);
   }
-  const items = active
+  const items = pageRows
     .map((doc) => ({
       ...summaryOf(doc),
       name: personName.get(doc.userId) || doc.userId,
       collegeName: nameOf.get(doc.collegeId) || doc.collegeId,
     }))
     .sort((a, b) => compareCode(a.collegeId, b.collegeId));
-  return ok({ items, message: '' });
+  const hasMore = offset + pageRows.length < total;
+  return ok({ total, offset, limit, hasMore, nextOffset: hasMore ? offset + pageRows.length : null, items, message: '' });
 }
 
 /**

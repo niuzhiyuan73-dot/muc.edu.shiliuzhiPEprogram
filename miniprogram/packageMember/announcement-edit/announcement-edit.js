@@ -39,6 +39,8 @@ function nextRequestId() {
   return `pub_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+const { pageScope, toast } = require('../../utils/page-helpers.js');
+
 Page(withFormExperience({
   data: {
     /** 提交中，防止连点重复提交 */
@@ -89,10 +91,7 @@ Page(withFormExperience({
 
   /** 当前「学校 + 协会」范围。写操作复用它，避免异步期间全局范围被切走 */
   currentScope() {
-    return {
-      schoolId: schoolSession.getSchoolId() || LEGACY_SCHOOL_ID,
-      association: associationScope.getAssociation(),
-    };
+    return pageScope();
   },
 
   /**
@@ -109,9 +108,7 @@ Page(withFormExperience({
 
   /** 轻提示。测试环境里可能没有这个 API */
   showToast(title, icon = 'none') {
-    if (typeof wx !== 'undefined' && typeof wx.showToast === 'function') {
-      wx.showToast({ title, icon });
-    }
+    return toast(title, icon);
   },
 
   /* ---------- 表单交互 ---------- */

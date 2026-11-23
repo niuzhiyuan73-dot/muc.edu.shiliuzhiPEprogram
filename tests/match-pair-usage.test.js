@@ -261,3 +261,32 @@ test('缩范围不改口径：pairInfo 与「整赛季台账 + 内存筛」逐�
   assert.equal(result.pairInfo.counts.demo_muc_member_2, 1,
     '撤销、挂赛事、上赛季的那三场都不该计入');
 });
+
+test('跨赛季驳回：按比赛落库时的赛季戳还名额，不减新赛季', async () => {
+  const { repo } = fixture();
+  const { scopeKey, pairCountKey } = require('../miniprogram/utils/school');
+  const resetTime = at(-2 * DAY);
+  await repo.seasons.set(scopeKey(SCOPE), {
+    _id: scopeKey(SCOPE), schoolId: SCOPE.schoolId, association: SCOPE.association,
+    anchorTime: at(-30 * DAY), resetTime, seasonNumber: 2, version: 1,
+  });
+  const submitted = await call(repo, 'submitSchoolMatch', casualPayload('stamp-1'));
+  assert.equal(submitted.ok, true, submitted.message);
+  const matchId = submitted.match.matchId;
+
+  // 模拟「上赛季提交、赛季重置后才被驳回」：比赛改记旧戳，
+  // 旧赛季与新赛季各有一条计数文档（各 1 场）。
+  const oldStamp = at(-20 * DAY);
+  const oldKey = pairCountKey('demo_muc_member', 'demo_muc_member_2', oldStamp, SCOPE);
+  const newKey = pairCountKey('demo_muc_member', 'demo_muc_member_2', resetTime, SCOPE);
+  await repo.pairCounts.set(oldKey, { _id: oldKey, schoolId: SCOPE.schoolId, association: SCOPE.association,
+    seasonStamp: oldStamp, users: ['demo_muc_member', 'demo_muc_member_2'], count: 1, revision: 1 });
+  const current = await repo.matches.getById(matchId);
+  await repo.matches.set(matchId, { ...current, seasonStamp: oldStamp });
+
+  const rejected = await call(repo, 'rejectSchoolMatch', { matchId, reason: '上赛季录错' },
+    { actor: 'demo_muc_member_2' });
+  assert.equal(rejected.ok, true, rejected.message);
+  assert.equal((await repo.pairCounts.getById(oldKey)).count, 0, '旧赛季名额应还回去');
+  assert.equal((await repo.pairCounts.getById(newKey)).count, 1, '新赛季名额不能被动到');
+});

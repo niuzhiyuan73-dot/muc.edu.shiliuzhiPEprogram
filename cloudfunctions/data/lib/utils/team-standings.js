@@ -18,7 +18,7 @@
  * ============================================================
  */
 
-const { TEAM_MATCH_STATUS, BRACKET_STAGE } = require('./constants.js');
+const { TEAM_MATCH_STATUS, BRACKET_STAGE, EVENT_PLACEMENT_MODE } = require('./constants.js');
 const { compareCode } = require('./text-order.js');
 
 /**
@@ -171,7 +171,7 @@ function loserOf(match) {
  * @param {Array<Object>} [params.table] computeTeamTable 的结果，做同轮次的次序依据
  * @returns {Array<{rank:number, teamId:string, note:string}>}
  */
-function computeTeamPlacements({ draw, matches, table } = {}) {
+function computeTeamPlacements({ draw, matches, table, placementMode = 'none' } = {}) {
   const size = Number(draw && draw.size) || 0;
   if (size < 2) return [];
 
@@ -228,7 +228,34 @@ function computeTeamPlacements({ draw, matches, table } = {}) {
       && (!bronze || (teamId !== winnerOf(bronze) && teamId !== loserOf(bronze))))
     .sort((a, b) => (lostRound.get(b) - lostRound.get(a)) || byTable(a, b));
 
-  rest.forEach((teamId) => push(teamId, '淘汰'));
+  // 5–8 名排位：附加小签表打出来的名次优先于「按被淘汰轮次猜」。
+  // 没有这两场决赛时退回旧口径——调用方（结算）会先要求把排位赛排完，
+  // 这里只是纯函数自身的兜底。
+  const placementTeams = new Set();
+  if (placementMode === EVENT_PLACEMENT_MODE.TOP8 && size >= 8) {
+    const placementFinal = (slot) => decided.find((match) => Number(match.round) === totalRounds
+      && match.stage === BRACKET_STAGE.PLACEMENT && Number(match.slot) === slot);
+    const fifth = placementFinal(0);
+    const seventh = placementFinal(1);
+    if (fifth && seventh) {
+      // 没有季军赛时，先让两场半决赛的负者占住 3、4 名，
+      // 否则 5–8 名会被 push 的顺序顶到第 3 名。
+      if (!bronze) {
+        rest.filter((teamId) => lostRound.get(teamId) === totalRounds - 1)
+          .slice(0, 2).forEach((teamId) => push(teamId, '淘汰'));
+      }
+      push(winnerOf(fifth), '第五名');
+      push(loserOf(fifth), '第六名');
+      push(winnerOf(seventh), '第七名');
+      push(loserOf(seventh), '第八名');
+      [fifth, seventh].forEach((match) => {
+        placementTeams.add(winnerOf(match));
+        placementTeams.add(loserOf(match));
+      });
+    }
+  }
+
+  rest.filter((teamId) => !placementTeams.has(teamId)).forEach((teamId) => push(teamId, '淘汰'));
   return placements;
 }
 
