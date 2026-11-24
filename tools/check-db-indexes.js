@@ -82,19 +82,47 @@ function validateIndexes(doc) {
 }
 
 function renderIndexDocSection(doc) {
+  // 按物理集合分组：真人对照控制台建索引时，选中一个集合就能看到该集合
+  // 要建的全部索引，不必在平铺大表里逐行找自己的集合。
+  const byPhysical = new Map();
+  for (const idx of doc.indexes) {
+    const physical = COLLECTIONS[idx.collection] || idx.collection;
+    if (!byPhysical.has(physical)) byPhysical.set(physical, []);
+    byPhysical.get(physical).push(idx);
+  }
+  const indexedPhysical = new Set(byPhysical.keys());
+  const noIndex = Object.entries(COLLECTIONS)
+    .filter(([, physical]) => !indexedPhysical.has(physical))
+    .map(([logical, physical]) => `\`${physical}\`（逻辑 \`${logical}\`）`);
+
   const lines = [
     AUTO_START,
     `> 本表由 \`tools/check-db-indexes.js --write-doc\` 从 [config/db-indexes.json](../config/db-indexes.json) 自动生成，禁止手改。集合总数 ${Object.keys(COLLECTIONS).length}，声明索引 ${doc.indexes.length} 条。`,
-    '',
-    '| 逻辑集合 | 物理集合 | 索引名 | 字段与方向 | 唯一 | 用途 |',
-    '|---|---|---|---|---|---|',
+    '>',
+    '> **按集合查阅**：标题是控制台里的物理集合名，每个小节列出该集合需建的全部索引；按字段顺序从左到右添加，↑ 升序 / ↓ 降序，全部非唯一。',
+    '>',
   ];
-  for (const idx of doc.indexes) {
-    const physical = COLLECTIONS[idx.collection] || idx.collection;
-    const fieldsText = idx.fields.map((f) => `\`${f.field}\` ${f.order < 0 ? '↓' : '↑'}`).join(' + ');
-    const uniqueText = idx.unique ? '是' : '否';
-    const purpose = String(idx.purpose || '').replace(/\|/g, '\\|');
-    lines.push(`| \`${idx.collection}\` | \`${physical}\` | \`${idx.name}\` | ${fieldsText} | ${uniqueText} | ${purpose} |`);
+  if (noIndex.length > 0) {
+    lines.push(`> 无需建索引的集合（${noIndex.length} 个，只按 \`_id\` 点读或全量扫描体积极小）：${noIndex.join('、')}。`);
+    lines.push('>');
+  }
+  for (const physical of [...byPhysical.keys()].sort((a, b) => a.localeCompare(b))) {
+    const items = byPhysical.get(physical);
+    const logicals = [...new Set(items.map((idx) => idx.collection))];
+    const logicalNote = logicals.length === 1 && logicals[0] === physical
+      ? ''
+      : `（逻辑集合：${logicals.map((name) => `\`${name}\``).join('、')}）`;
+    lines.push(`### \`${physical}\`${logicalNote} —— ${items.length} 条`);
+    lines.push('');
+    lines.push('| 索引名 | 字段与方向 | 唯一 | 用途 |');
+    lines.push('|---|---|---|---|');
+    for (const idx of items) {
+      const fieldsText = idx.fields.map((f) => `\`${f.field}\` ${f.order < 0 ? '↓' : '↑'}`).join(' + ');
+      const uniqueText = idx.unique ? '是' : '否';
+      const purpose = String(idx.purpose || '').replace(/\|/g, '\\|');
+      lines.push(`| \`${idx.name}\` | ${fieldsText} | ${uniqueText} | ${purpose} |`);
+    }
+    lines.push('');
   }
   lines.push(AUTO_END);
   return lines.join('\n');
