@@ -28,7 +28,7 @@ const SCOPED_COLLECTIONS = [
   'ties', 'lineups', 'liveScores', 'seasons',
   'associationGroups', 'associationGroupMembers',
   'associationNotices', 'associationTrainings', 'trainingRegistrations',
-  'pairCounts', 'memberRatings', 'ratingCounters',
+  'pairCounts', 'memberRatings', 'ratingCounters', 'ratingAdjustments',
   'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
 ];
 
@@ -36,7 +36,7 @@ const SCOPED_COLLECTIONS = [
 const SCHOOL_COLLECTIONS = ['schools', 'schoolAssociations', 'colleges', 'schoolMembers', 'schoolRoles',
   'studentIdClaims', 'exchangeEvents', 'exchangeInvitations', 'exchangeSignups', 'exchangeMatches',
   'associationGroups', 'associationGroupMembers', 'associationNotices', 'associationTrainings',
-  'trainingRegistrations', 'pairCounts', 'memberRatings', 'ratingCounters',
+  'trainingRegistrations', 'pairCounts', 'memberRatings', 'ratingCounters', 'ratingAdjustments',
   'teams', 'teamMembers', 'teamEvents', 'teamEventEntries', 'teamMatches', 'teamMatchStats',
   ...MEET_COLLECTIONS, 'sportsMeetCollegeLeads'];
 

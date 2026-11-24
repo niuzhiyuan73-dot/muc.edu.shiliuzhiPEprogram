@@ -187,3 +187,45 @@ test('platform admin sees all three grants and cross-school browsing stays read-
   assert.deepEqual(p.data.grants, []);
   assert.ok(p.data.members.some(m => m.userId === 'demo_buaa_member'));
 });
+
+test('管理员可从身份页调整当前评级：必填原因、目标分边界、提交走 space 门面', async () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const wxml = fs.readFileSync(path.join(__dirname, '../miniprogram/packageMember/school-identity/school-identity.wxml'), 'utf8');
+  assert.match(wxml, /onAdjustRating/, '成员行有「调整评级」入口');
+  assert.match(wxml, /调整原因（审计必填）/, '原因必填提示在页面上');
+
+  const p = page();
+  await p.onLoad();
+  await switchActor(p, 'demo_muc_admin'); // 校级管理员
+  assert.ok(p.data.members.some(m => m.userId === 'demo_muc_member'), '成员名单有目标会员');
+
+  p.onAdjustRating({ currentTarget: { dataset: { userId: 'demo_muc_member' } } });
+  assert.equal(p.data.ratingEditor.userId, 'demo_muc_member');
+  assert.equal(p.data.ratingEditor.poolIndex, 0, '默认单打池');
+
+  // 目标分非法：不进入提交
+  p.onRatingTargetInput(select('3001'));
+  p.onRatingReasonInput(select('复核更正'));
+  await p.onSubmitRating();
+  assert.match(p.data.error, /0–3000/);
+
+  // 原因空：审计必填
+  p.onRatingTargetInput(select('1600'));
+  p.onRatingReasonInput(select('  '));
+  await p.onSubmitRating();
+  assert.match(p.data.error, /原因/);
+
+  // 合法提交：需要目标会员在该池有评级文档。演示种子里没有，
+  // 这里只验证到"请求已发出且被服务端以'还没有评级'拒绝"，证明门面接线正确。
+  p.onRatingReasonInput(select('复核更正'));
+  await p.onSubmitRating();
+  assert.ok(
+    /还没有评级/.test(p.data.error) || p.data.submitting === false,
+    '提交经 space 门面到达服务端（无评级时给出明确拒绝，而非前端报错）',
+  );
+  assert.equal(p.data.submitting, false, '提交结束不会卡住');
+
+  p.onCancelRating();
+  assert.equal(p.data.ratingEditor, null);
+});

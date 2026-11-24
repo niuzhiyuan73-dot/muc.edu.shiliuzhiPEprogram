@@ -66,6 +66,8 @@ const SCHOOL_SPACE_ACTIONS = Object.freeze([
   'archiveSchoolAnnouncement',    'listSchoolMembers',            'getSchoolMember',
   'getSchoolRanking',             'getSchoolMemberStats',         'getSchoolMemberHonors',
   'getSchoolMemberProfile',       'getSchoolSeason',              'resetSchoolSeason',
+  // 管理员评级调整（Elo 交接 §5.3）：带审计与 requestId 幂等，不伪装成比赛
+  'adjustMemberRating',
   // 团队运动（篮球/足球/排球）：球队与队员。与个人赛彻底分开，见 team-service.js
   'listTeams',                    'getTeam',                      'createTeamApplication',
   'reviewTeamApplication',        'applyToJoinTeam',              'reviewTeamMember',

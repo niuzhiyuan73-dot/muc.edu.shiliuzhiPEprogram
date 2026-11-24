@@ -71,7 +71,10 @@
           <view class="hint member-meta">学籍：{{item.collegeName || '学院待补充'}}<block wx:if="{{!readOnly}}"> · {{item.permissionLabel}}</block></view>
           <view wx:if="{{!readOnly && item.managedCollegeName}}" class="hint">管理：{{item.managedCollegeName}}</view>
         </view>
-        <button wx:if="{{grants.length && item.userId !== user.userId}}" size="mini" data-user-id="{{item.userId}}" disabled="{{submitting}}" bindtap="onGrant">指定权限</button>
+        <view class="member-actions">
+          <button wx:if="{{grants.length && item.userId !== user.userId}}" size="mini" data-user-id="{{item.userId}}" disabled="{{submitting}}" bindtap="onGrant">指定权限</button>
+          <button wx:if="{{grants.length && item.userId !== user.userId}}" size="mini" class="btn btn-outline" data-user-id="{{item.userId}}" disabled="{{submitting}}" bindtap="onAdjustRating">调整评级</button>
+        </view>
       </view>
       <view wx:if="{{!members.length && memberHasMore}}" class="hint">正在跳过失效记录，请继续加载成员。</view>
       <!-- 名册分页：一页 50 人（回包体积有上限，见 getSchoolMembers 的说明） -->
@@ -85,6 +88,18 @@
       <view class="hint">管理学院可以与学籍学院不同。</view>
       <button class="btn btn-primary" disabled="{{submitting}}" bindtap="onConfirmGrant">确认授权</button>
       <button class="btn btn-ghost" disabled="{{submitting}}" bindtap="onCancelGrant">取消</button>
+    </view>
+    <!-- 管理员评级调整：审计必填原因，且不产生比赛记录（Elo 交接 §5.3） -->
+    <view wx:if="{{ratingEditor}}" class="card">
+      <view class="card-title">调整 {{ratingEditor.name}} 的当前评级</view>
+      <picker range="{{ratingPools}}" range-key="label" value="{{ratingEditor.poolIndex}}" disabled="{{submitting}}" bindchange="onRatingPoolChange">
+        <view class="selection">{{ratingPools[ratingEditor.poolIndex].label}} ›</view>
+      </picker>
+      <input class="identity-input" type="number" placeholder="目标分（0–3000 整数）" value="{{ratingEditor.targetElo}}" disabled="{{submitting}}" bindinput="onRatingTargetInput" />
+      <input class="identity-input" placeholder="调整原因（审计必填）" maxlength="200" value="{{ratingEditor.reason}}" disabled="{{submitting}}" bindinput="onRatingReasonInput" />
+      <view class="hint">只改当前分与排名，不产生比赛记录，不改起点分与胜负场数。重复提交按同一请求幂等处理。</view>
+      <button class="btn btn-primary" disabled="{{submitting}}" bindtap="onSubmitRating">确认调整</button>
+      <button class="btn btn-ghost" disabled="{{submitting}}" bindtap="onCancelRating">取消</button>
     </view>
   </block>
 </view>

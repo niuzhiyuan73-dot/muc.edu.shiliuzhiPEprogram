@@ -41,7 +41,8 @@ const {
   initialRatingFor, calculateMatchRatings, DEFAULT_CONFIG,
 } = require('../../shared/utils/elo.js');
 const {
-  memberRatingKey, ratingSeqKey, belongsToSchoolScope, schoolScope, schoolMemberKey, SCHOOL_MEMBER_STATUS,
+  memberRatingKey, ratingSeqKey, belongsToSchoolScope, schoolScope, schoolMemberKey, schoolKey,
+  SCHOOL_MEMBER_STATUS,
 } = require('../../shared/utils/school.js');
 const { allAssociations } = require('../../shared/utils/associations.js');
 const { isDoublesDiscipline } = require('../../shared/services/college-tie.js');
@@ -612,6 +613,143 @@ async function syncRatingProfileInTransaction(tx, {
   return { scanned, updated: changed.length, missing, changed };
 }
 
+/* ------------------------------------- 管理员评级调整（Elo 交接 §5.3） */
+
+/**
+ * 调整记录的稳定键：按 requestId 派生，重复请求点读命中同一文档即幂等返回。
+ * requestId 由客户端生成并随重试原样重发，范围外的人拿不到同一把键。
+ */
+function ratingAdjustmentKey(scope, requestId) {
+  const s = schoolScope(scope);
+  if (typeof requestId !== 'string' || !requestId.trim()) {
+    throw new Error('评级调整缺少有效的 requestId');
+  }
+  return schoolKey('mra', s.schoolId, s.association, requestId);
+}
+
+/**
+ * 校验调整目标分（0–3000 整数）并算出增量。纯函数，便于单测全部边界。
+ * @returns {{ target:number, delta:number }}
+ */
+function validateRatingAdjustment(before, target) {
+  const b = assertNonNegativeInt(before, '调整前评级');
+  if (typeof target !== 'number' || !Number.isInteger(target) || target < 0 || target > 3000) {
+    throw new Error('目标评级需为 0–3000 的整数');
+  }
+  return { target, delta: target - b };
+}
+
+/**
+ * 管理员调整当前评级：与审计记录、范围序号同一事务写入。
+ *
+ * 【为什么不用旧链】协议 1 的 setMemberElo 是「读 S2、写旧栈」的分叉，已删；
+ * 当前分由结算落库，调整必须同构——同一事务改评级 + 写审计，复用结算序号
+ * 解释分数跳变，不改场数与胜负、不伪造比赛、不动既有比赛快照（§5.3）。
+ *
+ * 【幂等】键按 requestId 派生，点读已存在即返回原结果，不重复加分。
+ */
+async function adjustMemberRating(payload = {}, ctx) {
+  const ok = data => ({ ok: true, data });
+  const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
+  if (!ctx.actorId) return ok(refused('请先登录'));
+
+  const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
+  const { buildSchoolContext } = require('./school-context.js');
+  if (!canReadAssociationSpace(ctx)) return ok(refused('没有操作本协会的权限'));
+  if (!canManageAssociationSpace(ctx)) return ok(refused('只有协会负责人及以上可以调整评级'));
+
+  const { userId, pool, targetElo } = payload;
+  const requestId = payload.requestId;
+  if (typeof userId !== 'string' || !userId) return ok(refused('缺少会员编号'));
+  if (!ALL_RATING_POOLS.includes(pool)) return ok(refused('未知的评级池'));
+  const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
+  if (!reason || reason.length > 200) return ok(refused('请填写调整原因（不超过 200 字）'));
+  let adjustKey;
+  try {
+    adjustKey = ratingAdjustmentKey(ctx, requestId);
+  } catch (err) {
+    return ok(refused(err.message));
+  }
+  const ratingKey = memberRatingKey(userId, pool, ctx);
+
+  return ok(await ctx.repo.transaction(async (tx) => {
+    const fresh = await buildSchoolContext({ repo: tx, actorId: ctx.actorId, scope: ctx, now: ctx.now });
+    if (!canReadAssociationSpace(fresh) || !canManageAssociationSpace(fresh)) {
+      return refused('当前已无评级调整权限');
+    }
+
+    // 先点读幂等键：同一请求重放直接返回首次结果
+    const prior = await tx.ratingAdjustments.getById(adjustKey);
+    if (prior && belongsToSchoolScope(prior, ctx)) {
+      return { ok: true, adjustment: summaryOfAdjustment(prior), repeated: true };
+    }
+
+    // 目标会员必须是本校本协会在册：事务内点读，不用事务外快照
+    const member = await tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId));
+    if (!member || member.status !== SCHOOL_MEMBER_STATUS.ACTIVE) {
+      return refused('目标会员不在本校在册名单中');
+    }
+    const doc = await tx.memberRatings.getById(ratingKey);
+    if (!doc || !belongsToSchoolScope(doc, ctx) || doc.userId !== userId || doc.pool !== pool) {
+      return refused('该会员在此项目还没有评级记录，无法调整');
+    }
+    let target;
+    let delta;
+    try {
+      ({ target, delta } = validateRatingAdjustment(doc.elo, targetElo));
+    } catch (err) {
+      return refused(err.message);
+    }
+
+    // 复用范围序号计数：与结算共用同一把冲突点，图表按 seq 解释跳变
+    const counterId = ratingSeqKey(ctx);
+    const counter = await tx.ratingCounters.getById(counterId);
+    const seq = (counter ? assertNonNegativeInt(counter.seq, '结算序号计数') : 0) + 1;
+    const at = new Date(ctx.now).toISOString();
+    await tx.ratingCounters.set(counterId, {
+      ...(counter || {}),
+      _id: counterId,
+      schoolId: ctx.schoolId,
+      association: ctx.association,
+      seq,
+      lastAdjustmentId: adjustKey,
+      updatedAt: at,
+    });
+
+    const nextRating = { ...doc, elo: target, version: Number(doc.version || 0) + 1, adjustedAt: at };
+    const record = {
+      _id: adjustKey,
+      schoolId: ctx.schoolId,
+      association: ctx.association,
+      userId,
+      pool,
+      before: doc.elo,
+      after: target,
+      delta,
+      reason,
+      operatorId: ctx.actorId,
+      requestId,
+      seq,
+      createdAt: at,
+    };
+    await tx.memberRatings.set(ratingKey, nextRating);
+    await tx.ratingAdjustments.set(adjustKey, record);
+    return { ok: true, adjustment: summaryOfAdjustment(record), repeated: false };
+  }));
+}
+
+function summaryOfAdjustment(record) {
+  return {
+    userId: record.userId,
+    pool: record.pool,
+    before: record.before,
+    after: record.after,
+    delta: record.delta,
+    seq: record.seq,
+    createdAt: record.createdAt,
+  };
+}
+
 module.exports = {
   // 纯函数
   assertFiniteNumber,
@@ -625,7 +763,12 @@ module.exports = {
   materializeRatings,
   computeSettlement,
   buildExcludedSettlement,
+  // 纯函数（评级调整）
+  ratingAdjustmentKey,
+  validateRatingAdjustment,
+  summaryOfAdjustment,
   // 事务读写
   settleMatchInTransaction,
   syncRatingProfileInTransaction,
+  adjustMemberRating,
 };

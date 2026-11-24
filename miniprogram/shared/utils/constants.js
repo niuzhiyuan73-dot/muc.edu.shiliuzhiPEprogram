@@ -728,6 +728,9 @@ const COLLECTION = {
   // 结算序号计数：每个「学校 + 协会」一条，settlementSeq 从这里原子递增，
   // 决定 Elo 变化链的顺序（用服务端结算顺序，不靠客户端比赛时间）。
   RATING_COUNTERS: 'rating_counters',
+  // 管理员评级调整审计：每次手工改当前分一条，与结算共用序号计数，
+  // 解释分数跳变且不伪装成比赛（见 Elo 交接 §5.3）。
+  RATING_ADJUSTMENTS: 'rating_adjustments',
   // 运动会（学校级栏目，不属于任何协会）。14 个集合一律带 schoolId + meetId，
   // 范围由 utils/meet-scope.js 的 forMeet 校验；子资源不得越届读写。
   SPORTS_MEETS: 'sports_meets',

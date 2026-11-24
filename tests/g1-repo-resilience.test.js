@@ -353,12 +353,12 @@ describe('5. 可观测追踪与错误分级、声明式索引校验', () => {
     assert.equal(mapErrorToFail(new Error('boom')).message, '服务异常，请稍后再试');
   });
 
-  test('声明式索引清单 config/db-indexes.json 校验 0 错误且覆盖所有 52 集合核心范围', () => {
+  test('声明式索引清单 config/db-indexes.json 校验 0 错误且覆盖所有 53 集合核心范围', () => {
     const doc = JSON.parse(fs.readFileSync(INDEX_FILE, 'utf8'));
     const errors = validateIndexes(doc);
     assert.deepEqual(errors, []);
     assert.ok(doc.indexes.length >= 60);
-    assert.ok(Object.keys(COLLECTIONS).length === 52);
+    assert.ok(Object.keys(COLLECTIONS).length === 53);
   });
 
   test('声明式索引自动生成文档与 config/db-indexes.json 一致，且篡改可检出漂移', () => {

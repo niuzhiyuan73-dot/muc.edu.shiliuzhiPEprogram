@@ -3,6 +3,8 @@ const { activeAssociations } = require('../../shared/utils/associations.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const STATUS_LABEL = { pending: '待审核', active: '已通过', rejected: '已驳回', left: '已离校', disabled: '已停用' };
+// 管理员评级调整的项目池与提示（Elo 交接 §5.3；服务端只认这两个池）
+const RATING_POOL_OPTIONS = [{ pool: 'singles', label: '单打' }, { pool: 'doubles', label: '双打' }];
 
 Page({
   data: {
@@ -12,6 +14,8 @@ Page({
     loading: true, submitting: false, error: '', notice: '',
     user: null, account: null, statusText: '', canApply: false, canReview: false, applications: [],
     members: [], grants: [], readOnly: false, applicationsHasMore: false, grantEditor: null, managedCollegeName: '',
+    /** 管理员评级调整弹层：{ userId, name, poolIndex, targetElo, reason, requestId } */
+    ratingEditor: null, ratingPools: RATING_POOL_OPTIONS,
     // 名册分页（2026-10-26 第四轮审查 P-2）：一页 50 人，总数单独下发。
     memberTotal: 0, memberHasMore: false, memberCursor: '', memberLoadingMore: false,
     /** 能不能在这所学校发起转校申请（浏览外校 + 本人在别校有有效身份） */
@@ -39,7 +43,7 @@ Page({
     const api = service.forSchoolIdentity({ schoolId, association: this.data.association });
     this.update({ loading: true, memberLoadingMore: false, memberCursor: '', memberHasMore: false, error: '', applications: [], canReview: false, canApply: false,
       members: [], grants: [], readOnly: false, canTransfer: false, transferPending: false,
-      user: null, account: null, statusText: '', applicationsHasMore: false, grantEditor: null });
+      user: null, account: null, statusText: '', applicationsHasMore: false, grantEditor: null, ratingEditor: null });
     try {
       const [directory, session] = await Promise.all([api.getSchoolDirectory(), api.getSchoolIdentitySession()]);
       if (!directory.ok || !session.ok) throw new Error(directory.message || session.message || '读取学校信息失败');
@@ -286,6 +290,56 @@ Page({
       return await this.write(api => api.grantSchoolPermission({ userId, permission, make, collegeId }));
     } finally {
       this._granting = false;
+    }
+  },
+
+  /* ---- 管理员评级调整（Elo 交接 §5.3） ---- */
+
+  /** 从成员行打开调分弹层；只有协会负责人及以上（服务端再判一次）看得到按钮。 */
+  onAdjustRating(event) {
+    if (this.data.submitting || this.data.readOnly) return;
+    const userId = event.currentTarget.dataset.userId;
+    const member = this.data.members.find(row => row.userId === userId);
+    if (!member) return;
+    this.update({ ratingEditor: { userId, name: member.nickName || userId,
+      poolIndex: 0, targetElo: '', reason: '', requestId: '' }, error: '', notice: '' });
+  },
+  onRatingPoolChange(event) {
+    if (this.data.submitting || !this.data.ratingEditor) return;
+    this.update({ ratingEditor: { ...this.data.ratingEditor, poolIndex: Number(event.detail.value) } });
+  },
+  onRatingTargetInput(event) {
+    if (this.data.submitting) return;
+    this.update({ ratingEditor: { ...this.data.ratingEditor, targetElo: event.detail.value } });
+  },
+  onRatingReasonInput(event) {
+    if (this.data.submitting) return;
+    this.update({ ratingEditor: { ...this.data.ratingEditor, reason: event.detail.value } });
+  },
+  onCancelRating() { if (!this.data.submitting) this.update({ ratingEditor: null }); },
+  async onSubmitRating() {
+    const editor = this.data.ratingEditor;
+    if (!editor || this.data.submitting) return;
+    const pool = (RATING_POOL_OPTIONS[editor.poolIndex] || {}).pool;
+    const targetElo = Number(editor.targetElo);
+    const reason = String(editor.reason || '').trim();
+    if (!pool || !Number.isInteger(targetElo) || targetElo < 0 || targetElo > 3000) {
+      this.update({ error: '目标分需为 0–3000 的整数' }); return;
+    }
+    if (!reason) { this.update({ error: '请填写调整原因（审计必填）' }); return; }
+    // requestId 在弹层实例里生成一次，重试原样重发以保证幂等
+    const requestId = editor.requestId || `ra_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    this.update({ submitting: true, error: '', notice: '', ratingEditor: { ...editor, requestId } });
+    try {
+      const space = service.forSpace({ schoolId: this.data.schoolId, association: this.data.association });
+      const result = await space.adjustMemberRating({ userId: editor.userId, pool, targetElo, reason, requestId });
+      if (!result.ok) throw new Error(result.message || '调整失败');
+      await this.reload();
+      this.update({ notice: `已将 ${editor.name} 的${(RATING_POOL_OPTIONS[editor.poolIndex] || {}).label}评级调整为 ${targetElo}；不产生比赛记录，排名可能变化。` });
+    } catch (err) {
+      this.update({ error: err.message || '调整失败，请重试' });
+    } finally {
+      if (!this.unloaded) this.update({ submitting: false });
     }
   },
 

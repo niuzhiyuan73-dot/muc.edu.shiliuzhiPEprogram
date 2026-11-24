@@ -11,6 +11,9 @@
 .member-row { display: flex; align-items: center; justify-content: space-between;
   border-top: 1rpx solid #eee; margin-top: 24rpx; padding-top: 24rpx; }
 .member-main { flex: 1; }
+/* 成员行两个管理入口并排，窄屏不挤到姓名列 */
+.member-actions { display: flex; flex-direction: column; gap: 12rpx; margin-left: 12rpx; }
+.member-actions button { margin: 0; font-size: var(--font-xs); }
 .member-meta { margin-top: 6rpx; }
 /* 转校申请标签：审核列表里一眼看出这条不是普通入会，而是从别校转来 */
 .transfer-tag { margin-left: 12rpx; padding: 2rpx 12rpx; border-radius: 8rpx;

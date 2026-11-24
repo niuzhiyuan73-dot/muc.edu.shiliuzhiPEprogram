@@ -134,6 +134,8 @@
     { "collection": "seasons", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "协会赛季" },
     { "collection": "pairCounts", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "交手计数" },
     { "collection": "ratingCounters", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "评级序号" },
+    { "collection": "ratingAdjustments", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "管理员评级调整范围索引" },
+    { "collection": "ratingAdjustments", "name": "by_scope_user", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }, { "field": "userId", "order": 1 }], "unique": false, "purpose": "按会员查评级调整审计" },
     { "collection": "exchangeEvents", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "跨校邀请赛" },
     { "collection": "exchangeInvitations", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "跨校邀请" },
     { "collection": "exchangeSignups", "name": "by_scope", "fields": [{ "field": "schoolId", "order": 1 }, { "field": "association", "order": 1 }], "unique": false, "purpose": "跨校报名范围索引" },

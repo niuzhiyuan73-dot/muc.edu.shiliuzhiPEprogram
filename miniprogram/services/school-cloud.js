@@ -163,6 +163,8 @@ function forAssociationSpace(input) {
     getSchoolMemberProfile: payload => request('getSchoolMemberProfile', payload),
     getSchoolSeason: payload => request('getSchoolSeason', payload),
     resetSchoolSeason: payload => request('resetSchoolSeason', payload),
+    // 管理员评级调整（带审计与幂等键，不伪装成比赛）
+    adjustMemberRating: payload => request('adjustMemberRating', payload),
     // 团队运动（篮球/足球/排球）：球队与队员。与个人赛录分完全分开。
     listTeams: payload => request('listTeams', payload),
     getTeam: payload => request('getTeam', payload),

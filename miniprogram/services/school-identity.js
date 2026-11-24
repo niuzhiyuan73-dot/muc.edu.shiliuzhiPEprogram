@@ -9,6 +9,11 @@ const cloud = require('./school-cloud.js');
 const { loadSchoolMock } = require('./school-mock-loader.js');
 module.exports = {
   forSchoolIdentity: scope => (isMockNow() ? loadSchoolMock() : cloud).forSchoolIdentity(scope),
+  /**
+   * 协会空间门面：管理员评级调整（adjustMemberRating）属协会空间 action 组，
+   * 身份门面不含它。身份页在保留原身份客户端的同时按需取这一个写接口。
+   */
+  forSpace: scope => (isMockNow() ? loadSchoolMock() : cloud).forAssociationSpace(scope),
   isMockNow,
   getDemoActors: () => isMockNow() ? loadSchoolMock().DEMO_ACTORS.map(actor => ({ ...actor })) : [],
   getDemoActor: () => isMockNow() ? loadSchoolMock().getDemoActor() : '',

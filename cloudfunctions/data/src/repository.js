@@ -121,6 +121,7 @@ const COLLECTIONS = {
   pairCounts: COLLECTION.PAIR_COUNTS,
   memberRatings: COLLECTION.MEMBER_RATINGS,
   ratingCounters: COLLECTION.RATING_COUNTERS,
+  ratingAdjustments: COLLECTION.RATING_ADJUSTMENTS,
   seasons: COLLECTION.SEASONS,
   auditLogs: COLLECTION.AUDIT_LOGS,
   // 团队运动（篮球/足球/排球）：与个人赛彻底分开，见 utils/constants.js 的 TEAMS 一段。

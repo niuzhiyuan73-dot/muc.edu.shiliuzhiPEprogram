@@ -92,6 +92,8 @@ const SCHOOL_WRITE_ACTIONS = [
   'publishSchoolAnnouncement',
   'archiveSchoolAnnouncement',
   'resetSchoolSeason',
+  // 管理员评级调整（改评级 + 写审计，带幂等键）
+  'adjustMemberRating',
   // 团队运动（篮球/足球/排球）：建队 / 审核 / 入队申请与审批 / 退队 / 交接 / 归档
   'createTeamApplication',
   'reviewTeamApplication',

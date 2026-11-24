@@ -28,7 +28,7 @@ const { canReadAssociationSpace } = require('./association-space-permission.js')
 const { loadColleges } = require('./college-directory.js');
 const { legacyActorOf, legacyRoleOf, buildDirectory, actorDirectory } = require('./school-actor.js');
 const { permissionOf, permissionLabelOf, canSchoolAction } = require('./school-permission.js');
-const { displayRating } = require('./school-rating-service.js');
+const { displayRating, adjustMemberRating } = require('./school-rating-service.js');
 const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = require('./school-points-service.js');
 const { settledPointsOf, isSettled } = require('./season-points.js');
 const { buildProjectLeaderboard } = require('../../shared/utils/leaderboard.js');
@@ -1157,4 +1157,7 @@ module.exports = {
   getSchoolMemberProfile,
   getSchoolSeason,
   resetSchoolSeason,
+  // 管理员评级调整：实现在 school-rating-service，这里转发使其进入
+  // SCHOOL_SPACE_ACTIONS 的注册面（两端 handler 门面读同一份 rankService）。
+  adjustMemberRating,
 };
