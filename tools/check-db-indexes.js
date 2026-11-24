@@ -156,7 +156,7 @@ function main() {
     console.error(`声明式索引文档同步失败：\n  - ${docErr}`);
     process.exit(1);
   }
-  console.log(`声明式索引校验通过：共 ${doc.indexes.length} 条索引，覆盖全部范围与业务查询，且与文档一致。`);
+  console.log(`声明式索引校验通过：共 ${doc.indexes.length} 条索引，覆盖全部受范围集合的范围前缀索引，且与文档一致。`);
 }
 
 if (require.main === module) {

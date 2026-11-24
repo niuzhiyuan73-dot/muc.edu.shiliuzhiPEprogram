@@ -36,15 +36,6 @@ const { applyLiveRows } = require('../../services/live-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const matchActions = require('./match-actions.js');
-/** 驳回面板文案（撤销已随 Elo 逐场结算改造取消，只剩驳回一种作废动作） */
-const ACTION_TEXT = {
-  reject: {
-    title: '驳回这场比分',
-    hint: '驳回后这场成绩作废，不会计入等级分。请说明哪里不对。',
-    placeholder: '例如：第二局比分录反了',
-  },
-};
-
 /**
  * 首屏渲染多少场比赛，点一次「加载更多」再放这么多。
  *

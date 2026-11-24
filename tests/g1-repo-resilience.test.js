@@ -369,3 +369,45 @@ describe('5. 可观测追踪与错误分级、声明式索引校验', () => {
     assert.match(checkIndexDocSync(doc, tampered), /不一致/);
   });
 });
+
+test('冲突重试按 requestId 幂等：同一请求编号只落一条审计', async () => {
+  let attempts = 0;
+  const repo = createSchoolMemoryRepo({}, {
+    conflictInjector: ({ attempt }) => {
+      if (attempt === 0) {
+        attempts += 1;
+        const err = new Error('WriteConflict');
+        err.code = 'WRITE_CONFLICT';
+        throw err;
+      }
+    },
+  });
+  await repo.transaction(async tx => {
+    // 业务回调用 requestId 派生稳定主键；重试重放时仍是同一条。
+    await tx.audit.append({ _id: 'audit_req_1', action: 'probe', requestId: 'req_1' });
+  });
+  const rows = await repo.auditLogs.list();
+  assert.equal(attempts, 1);
+  assert.equal(rows.length, 1, '重试不得把同一 requestId 的审计写两遍');
+  assert.equal(rows[0]._id, 'audit_req_1');
+});
+
+test('runTransactionWithRetry 的幂等契约：重复执行时回调按 requestId 自我去重', async () => {
+  const applied = new Set();
+  let calls = 0;
+  const { retries } = await runTransactionWithRetry(async (attempt) => {
+    calls += 1;
+    // 这是所有事务回调应遵守的写法；测试把契约固定下来，避免以后有人
+    // 在回调里直接改外部计数或写非确定性主键。
+    if (!applied.has('req_2')) applied.add('req_2');
+    if (attempt === 0) {
+      const err = new Error('WriteConflict');
+      err.code = 'WRITE_CONFLICT';
+      throw err;
+    }
+    return 'ok';
+  }, { maxRetries: 1, delay: async () => {} });
+  assert.equal(calls, 2);
+  assert.equal(retries, 1);
+  assert.equal(applied.size, 1);
+});

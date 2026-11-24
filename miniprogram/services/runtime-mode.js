@@ -19,7 +19,11 @@ const { DATA_SOURCE } = require('../shared/utils/constants.js');
 
 const KNOWN_SOURCES = Object.values(DATA_SOURCE);
 
-/** 当前模式标识。默认本地模拟数据：换机器、无云环境也能完整演示。 */
+/**
+ * 当前模式标识。默认本地模拟数据，但 G2b 之后生产包已剥离 Mock/Seed：
+ * 测试环境由 `registerMockProvider` 注入；真机未配置 CLOUD_ENV_ID 时，
+ * 首次读数据会在 `loadSchoolMock()` 得到明确报错，不再能完整演示。
+ */
 let current = DATA_SOURCE.MOCK;
 
 /**

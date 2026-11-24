@@ -89,13 +89,36 @@ async function runVersionedBatchJob(options = {}) {
     const end = Math.min(total, cursor + batchSize);
     const slice = items.slice(cursor, end);
     const isLast = end >= total;
-    const res = await runBatch({
-      slice,
-      batchIndex: batches,
-      startIndex: cursor,
-      endIndex: end,
-      isLast,
-    });
+    let res;
+    try {
+      res = await runBatch({
+        slice,
+        batchIndex: batches,
+        startIndex: cursor,
+        endIndex: end,
+        isLast,
+      });
+    } catch (err) {
+      // 回调抛错与显式 `{ok:false}` 同口径：返回确定的失败进度与下一批游标，
+      // 不让异常冒成「服务异常」而丢掉「已提交哪几批、从哪继续」。
+      batches += 1;
+      failed += slice.length;
+      return {
+        ok: false,
+        done: false,
+        stale: Boolean(err && (err.code === 'TX_CONFLICT' || err.code === 'WRITE_CONFLICT' || err.stale)),
+        processed,
+        written,
+        skipped,
+        failed,
+        batches,
+        batchSize,
+        nextCursor: cursor,
+        total,
+        message: (err && (err.message || err.errMsg)) || '批处理中止',
+        extra: err && err.code ? { code: err.code } : undefined,
+      };
+    }
     batches += 1;
     if (!res || res.ok === false) {
       failed += slice.length;

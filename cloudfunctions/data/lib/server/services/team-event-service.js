@@ -45,6 +45,7 @@ const { computeTeamPlacements, isFinal } = require('../../shared/utils/team-stan
 const { getSportAdapterFor } = require('../../shared/sports/registry.js');
 const { getServerSportPluginFor } = require('../sports/registry.js');
 const { compareCode } = require('../../shared/utils/text-order.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -176,6 +177,9 @@ function eventView(event, ctx, { manage, entryCount }) {
     statPolicy: event.statPolicy || STAT_MODE.BASIC,
     entryCount: Number(entryCount) || 0,
     canManage: manage,
+    // 大签表分批写入中断时置位：读端据此提示「签表未完成，请重试抽签」，
+    // 避免把半套签表当成完整赛程展示；重试成功后该字段会被清掉。
+    batchDrawPending: Boolean(event.batchDrawPending),
     createdAt: event.createdAt || null,
     revision: Number(event.revision) || 0,
   };
@@ -711,6 +715,8 @@ async function createTeamEvent(payload = {}, ctx) {
 
   const name = String(payload.name || '').trim();
   if (name.length < 2 || name.length > NAME_MAX) return ok(refused(`赛事名称需 2–${NAME_MAX} 个字`));
+  const ugc = await checkUgcContent({ name }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   // 不支持的形式要明确说出来，不能静默降级成单败淘汰——那会让人以为
   // 「选了小组赛」的赛事真的会分组打循环。
   if (payload.format && !FORMATS.includes(payload.format)) {

@@ -51,6 +51,8 @@ const { ATTENDANCE_STATUS } = require('./training-points.js');
 // 单人事实（确认 / 撤销 / 移除）走增量：一条事实固定 ±1，直接在第 1 格上加减，
 // 不重算——签到确认是高频动作，整份重算会把读放大搬到写路径。
 const { applyTrainingFactDelta, bumpSeasonVersion, refreshAfterWrite } = require('./season-points.js');
+const { checkUgcContent } = require('./ugc-safety.js');
+const { maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -384,8 +386,14 @@ async function listTrainingRegistrations(payload = {}, ctx) {
     const members = [];
     for (const row of registeredRows) {
       const user = userById.get(row.userId);
-      members.push({ userId: row.userId, nickName: (user && user.nickName) || '会员',
-        avatarUrl: (user && user.avatarUrl) || '', attendanceStatus: row.attendanceStatus || ATTENDANCE_STATUS.NOT_SUBMITTED });
+      members.push({
+        userId: row.userId,
+        nickName: maskPublicNickName((user && user.nickName) || '会员', user && user.realName, {
+          canSeeFull: row.userId === ctx.actorId,
+        }),
+        avatarUrl: (user && user.avatarUrl) || '',
+        attendanceStatus: row.attendanceStatus || ATTENDANCE_STATUS.NOT_SUBMITTED,
+      });
     }
     return ok({ ok: true, canManage: false, hasMore: false, nextCursor: '', members,
       registrations: [], message: '' });
@@ -441,7 +449,10 @@ async function listTrainingRegistrations(payload = {}, ctx) {
     const member = memberById.get(schoolKey('sm', ctx.schoolId, row.userId));
     registrations.push({
       userId: row.userId,
-      nickName: (user && user.nickName) || '会员',
+      // 管理者可看完整值；这里仍走同一把尺子，避免以后把权限放宽时忘记补。
+      nickName: maskPublicNickName((user && user.nickName) || '会员', user && user.realName, {
+        canSeeFull: true,
+      }),
       avatarUrl: (user && user.avatarUrl) || '',
       collegeName: collegeName(member && member.collegeId),
       signupStatus: row.signupStatus,
@@ -524,6 +535,12 @@ async function publishTraining(payload = {}, ctx) {
   if (!ctx.actorId) return ok(refused('请先登录'));
   const built = buildTrainingFields(payload, ctx.now.getTime(), true);
   if (!built.ok) return ok(refused(built.message));
+  const ugc = await checkUgcContent({
+    title: built.fields.title,
+    description: built.fields.description,
+    location: built.fields.location,
+  }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   const token = payload.requestId;
   if (typeof token !== 'string' || !REQUEST_ID_PATTERN.test(token)) return ok(refused('发布请求编号无效'));
 
@@ -554,6 +571,12 @@ async function updateTraining(payload = {}, ctx) {
   }
   const built = buildTrainingFields(payload, ctx.now.getTime(), false);
   if (!built.ok) return ok(refused(built.message));
+  const ugc = await checkUgcContent({
+    title: built.fields.title,
+    description: built.fields.description,
+    location: built.fields.location,
+  }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
 
   const result = await ctx.repo.transaction(async tx => {
     const fresh = await freshContext(tx, ctx);

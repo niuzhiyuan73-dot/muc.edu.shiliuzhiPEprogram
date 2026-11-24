@@ -936,16 +936,24 @@ async function finishSportsMeet(payload = {}, ctx) {
     if (current.status === MEET_STATUS.FINISHED) {
       return ok({ meet: meetSummary(current), finished: false });
     }
+    // 【G3 并发收尾】contentRevision 只覆盖正式发布与赛程编辑；报名提交 / 审批 /
+    // 撤回走的是低频 entriesRevision（见 meet-consistency.touchEvent 的 bumpEntries）。
+    // 不校验它的话，7+ 项目在「读快照之后、事务提交之前」被审批一条报名时，
+    // 下面按旧快照算出的 missing 里不会出现这个项目，运动会会被错误收尾成
+    // 「有已通过报名、无正式成绩」。
     if (Number(current.contentRevision || 0) !== Number(meet.contentRevision || 0)
+      || Number(current.entriesRevision || 0) !== Number(meet.entriesRevision || 0)
       || scheduleRevisionOf(current) !== scheduleRevisionOf(meet)
       || Number(current.version || 0) !== Number(meet.version || 0)) {
-      return refused('成绩或赛程数据已变化，请刷新后重试');
+      return refused('成绩、报名或赛程数据已变化，请刷新后重试');
     }
-    // 小届次（<= 6 项）在事务内顺手核对单项目版本戳，兼容不写 contentRevision 的高频变更感知
+    // 小届次（<= 6 项）额外逐项核对项目版本：这是 defense-in-depth，不是唯一防线；
+    // 大届次由上面的 entriesRevision（报名面）+ contentRevision（发布面）覆盖，
+    // 事务操作数与项目数保持常数。
     if (events.length <= 6) {
       for (const ev of events) {
         if (!await unchangedEvent(tx, ev)) {
-          return refused('成绩或赛程数据已变化，请刷新后重试');
+          return refused('成绩、报名或赛程数据已变化，请刷新后重试');
         }
       }
     }

@@ -45,7 +45,11 @@ const {
   ANNOUNCEMENT_STATUS, ASSOCIATION_NOTICE_STATUS, GROUP_STATUS, TEAM_EVENT_STATUS,
   TRAINING_STATUS, COLLEGE_EVENT_STATUS, COLLEGE_ENTRY_STATUS, TIE_STATUS,
 } = require('../src/shared/utils/constants.js');
-const { scopeKey, schoolEventSignupKey, schoolMemberKey } = require('../src/shared/utils/school.js');
+const {
+  scopeKey, schoolEventSignupKey, schoolMemberKey, schoolRoleKey, teamKey, teamMemberKey,
+} = require('../src/shared/utils/school.js');
+const { meetCollegeLeadKey } = require('../src/shared/utils/meet-scope.js');
+const { accountDirectoryFields } = require('../src/server/services/account-directory.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const ROOT = path.join(__dirname, '..');
@@ -446,6 +450,7 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
       platformStatus: 'active',
       platformRole: 'member',
       primarySchoolId: 'muc',
+      ...accountDirectoryFields({ nickName: '小张', realName: '张小飞' }),
     });
     seed.schoolMembers.push({
       _id: schoolMemberKey('u_bye', 'muc'),
@@ -481,6 +486,31 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
       scoreA: [11],
       scoreB: [8],
       matchTime: '2026-10-01T10:00:00.000Z',
+    });
+    // 注销还要退队、撤销学院部长与总裁判；这三类授权不在 schoolRoles/memberships 里。
+    // 球队只存在于团队项目；匹克球协会（pkb）没有球队，这里用篮球（bk）建队夹具。
+    const TEAM_SCOPE = { schoolId: 'muc', association: 'bk' };
+    const teamId = teamKey('deact-team', TEAM_SCOPE);
+    seed.teams = seed.teams || [];
+    seed.teamMembers = seed.teamMembers || [];
+    seed.sportsMeetCollegeLeads = seed.sportsMeetCollegeLeads || [];
+    seed.sportsMeets = seed.sportsMeets || [];
+    seed.teams.push({
+      _id: teamId, ...TEAM_SCOPE, name: '注销测试队', captainId: 'u_bye',
+      memberCount: 1, status: 'active', revision: 1, createdAt: '2026-09-01T00:00:00.000Z',
+    });
+    seed.teamMembers.push({
+      _id: teamMemberKey(teamId, 'u_bye'), teamId, userId: 'u_bye',
+      ...TEAM_SCOPE, status: 'active', role: 'captain', joinedAt: '2026-09-01T00:00:00.000Z',
+    });
+    seed.sportsMeetCollegeLeads.push({
+      _id: meetCollegeLeadKey('muc', 'c01'), schoolId: 'muc', collegeId: 'c01',
+      userId: 'u_bye', status: 'active', grantedAt: '2026-09-01T00:00:00.000Z',
+    });
+    seed.sportsMeets.push({
+      _id: 'meet_deact', schoolId: 'muc', meetId: 'meet_deact', name: '注销测试运动会',
+      status: 'running', version: 1,
+      chiefJudge: { userId: 'u_bye', schoolId: 'muc', meetId: 'meet_deact', status: 'active' },
     });
 
     const repo = createSchoolMemoryRepo(seed);
@@ -522,6 +552,10 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
     assert.equal(userAfter.nickName, '已注销用户');
     assert.equal(userAfter.platformStatus, 'disabled');
     assert.equal(userAfter.deleted, true);
+    // 目录派生字段是 accountDirectoryFields 写进去的实名/昵称副本，必须一起清。
+    assert.equal(userAfter.directoryRealName, '');
+    assert.equal(userAfter.directoryRealSort, '');
+    assert.equal(userAfter.directoryNickName, '已注销用户');
 
     const memberAfter = await repo.schoolMembers.getById(schoolMemberKey('u_bye', 'muc'));
     assert.equal(memberAfter.status, 'left');
@@ -529,6 +563,17 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
 
     const mbAfter = await repo.memberships.getById('mb:muc:pkb:u_bye');
     assert.equal(mbAfter.status, 'revoked');
+
+    const teamAfter = await repo.teams.getById(teamKey('deact-team', TEAM_SCOPE));
+    assert.equal(teamAfter.status, 'archived', '队长注销且无继任者时球队应归档');
+    assert.equal(teamAfter.captainId, '');
+    const teamMemberAfter = await repo.teamMembers.getById(teamMemberKey(teamAfter._id, 'u_bye'));
+    assert.equal(teamMemberAfter.status, 'left');
+
+    const leadAfter = await repo.sportsMeetCollegeLeads.getById(meetCollegeLeadKey('muc', 'c01'));
+    assert.equal(leadAfter.status, 'revoked', '注销必须撤销在任学院部长');
+    const meetAfter = await repo.sportsMeets.getById('meet_deact');
+    assert.equal(meetAfter.chiefJudge.status, 'revoked', '注销必须撤销在任总裁判');
 
     const histMatch = await repo.matches.getById('m_hist_1');
     assert.ok(histMatch, '历史比赛账本必须保留');
@@ -543,6 +588,32 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
       payload: { patch: { nickName: '新名字' } },
     }, { repo, openId: 'op_bye' })).data;
     assert.equal(afterWrite.ok, false);
+  });
+
+  test('校级管理员不可自助注销，避免并发下学校失去最后审批人', async () => {
+    const seed = createSchoolDemoSeed();
+    seed.users.push({
+      _id: 'u_school_admin', openId: 'op_sa', nickName: '校管',
+      realName: '校管甲', gender: 'M', platformStatus: 'active',
+      platformRole: 'member', primarySchoolId: 'muc',
+    });
+    seed.schoolMembers.push({
+      _id: schoolMemberKey('u_school_admin', 'muc'), userId: 'u_school_admin',
+      schoolId: 'muc', collegeId: 'c01', studentId: '20248888', status: 'active',
+    });
+    seed.schoolRoles = seed.schoolRoles || [];
+    seed.schoolRoles.push({
+      _id: schoolRoleKey('u_school_admin', 'muc'), userId: 'u_school_admin',
+      schoolId: 'muc', role: 'admin', status: 'active',
+    });
+    const repo = createSchoolMemoryRepo(seed);
+    const res = (await handleSchoolRequest({
+      protocolVersion: 2, schoolId: 'muc', association: 'pkb',
+      action: 'deactivateMySchoolAccount', payload: { confirm: true },
+    }, { repo, openId: 'op_sa' })).data;
+    assert.equal(res.ok, false);
+    assert.match(res.message, /校级管理员/);
+    assert.equal((await repo.users.getById('u_school_admin')).platformStatus, 'active');
   });
 });
 
@@ -623,4 +694,92 @@ describe('7. 榜单 DTO 实名脱敏接线', () => {
     const profile = (await rank.getSchoolMemberProfile({ userId: 'other' }, ctx)).data;
     assert.equal(profile.user.realName, '王小明', '管理员看他人档案保留完整实名');
   });
+
+  test('昵称回退实名时，公开昵称也脱敏（不能只脱敏 realName）', async () => {
+    const repo = rankFixture();
+    await repo.users.set('other', {
+      ...(await repo.users.getById('other')),
+      nickName: '王小明',
+      realName: '王小明',
+    });
+    await repo.users.set('viewer', {
+      ...(await repo.users.getById('viewer')),
+      nickName: '赵明宇',
+      realName: '赵明宇',
+    });
+    const ctx = await buildSchoolContext({ repo, actorId: 'viewer', scope: SCOPE });
+    const board = (await rank.getSchoolRanking({}, ctx)).data;
+    const other = board.rows.find(row => row.userId === 'other');
+    assert.equal(other.realName, '王*明');
+    assert.equal(other.nickName, '王*明', '昵称就是实名时不能原样下发');
+    const profile = (await rank.getSchoolMemberProfile({ userId: 'other' }, ctx)).data;
+    assert.equal(profile.user.nickName, '王*明');
+    // 本人仍可看到自己的完整昵称/实名
+    const mine = (await rank.getSchoolMemberProfile({ userId: 'viewer' }, ctx)).data;
+    assert.equal(mine.user.nickName, '赵明宇');
+  });
+});
+
+test('UGC_FAIL_CLOSED=on 时，检测器返回非 0 errCode 必须拦截', async () => {
+  const prev = process.env.UGC_FAIL_CLOSED;
+  process.env.UGC_FAIL_CLOSED = 'on';
+  try {
+    setUgcChecker(async () => ({ errCode: 40001, errMsg: 'invalid credential' }));
+    const res = await checkUgcContent('正常内容');
+    assert.equal(res.ok, false);
+    assert.equal(res.code, 'UGC_UNAVAILABLE');
+  } finally {
+    if (prev === undefined) delete process.env.UGC_FAIL_CLOSED;
+    else process.env.UGC_FAIL_CLOSED = prev;
+    resetUgcChecker();
+  }
+});
+
+test('注册昵称接入 UGC：违禁昵称不落账号', async () => {
+  // 用内置违禁词而不是自定义 checker：handleSchoolRequest 走云端镜像模块，
+  // 与测试里 setUgcChecker 的 src 模块不是同一个实例；内置词两边都有。
+  const repo = createSchoolMemoryRepo(createSchoolDemoSeed());
+  const res = (await handleSchoolRequest({
+    protocolVersion: 2, schoolId: 'muc', association: 'pkb',
+    action: 'registerSchoolAccount',
+    payload: { profile: { realName: '测试同学', gender: 'M', nickName: '赌博网站推广' } },
+  }, { repo, openId: 'op_ugc_register' })).data;
+  assert.equal(res.ok, false);
+  assert.match(res.firstError || res.message || '', /内容|敏感/);
+});
+
+test('首页 BFF 兼容 announcementLimit，首屏只取展示所需条数', async () => {
+  const seed = createSchoolDemoSeed();
+  seed.announcements = Array.from({ length: 5 }, (_, i) => ({
+    _id: `a${i}`, schoolId: 'muc', title: `公告${i}`, content: '正文'.repeat(100),
+    status: ANNOUNCEMENT_STATUS.PUBLISHED, publishTime: `2026-11-0${i + 1}T00:00:00.000Z`,
+    pinned: false,
+  }));
+  const repo = createSchoolMemoryRepo(seed);
+  const ctx = await buildMeetContext({ repo, actorId: 'demo_muc_member', scope: { schoolId: 'muc' } });
+  const res = await getSchoolHomeSummary({ announcementLimit: 2 }, ctx);
+  assert.equal(res.data.ok, true);
+  assert.equal(res.data.announcements.announcements.length, 2);
+  assert.equal(res.data.announcements.total, 5);
+});
+
+test('训练标题接入 UGC：违禁标题不落库', async () => {
+  schoolMock.setDemoActor('demo_muc_admin');
+  const api = schoolMock.forAssociationSpace(SCOPE);
+  const res = await api.publishTraining({
+    title: '赌博网站训练', description: '正常说明', location: '体育馆',
+    startAt: '2026-12-01T10:00', endAt: '2026-12-01T12:00', requestId: 'req_ugc_train',
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.message || '', /敏感|内容/);
+});
+
+test('团队赛事名称接入 UGC：违禁名称不落库', async () => {
+  schoolMock.setDemoActor('demo_muc_admin');
+  const api = schoolMock.forAssociationSpace({ schoolId: 'muc', association: 'bk' });
+  const res = await api.createTeamEvent({
+    name: '赌博网站杯', requestId: 'req_ugc_team', format: 'single_elim',
+  });
+  assert.equal(res.ok, false);
+  assert.match(res.message || '', /敏感|内容/);
 });

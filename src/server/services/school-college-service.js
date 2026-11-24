@@ -72,6 +72,7 @@ const { REVIEW_ACTION } = require('../../shared/services/member-review.js');
 const { advanceCollegeAfterLeg } = require('./school-college-advance.js');
 // 小场弃权同样是终态：要落一份「不计分」结算决定（见 settleMatchInTransaction）
 const { settleMatchInTransaction } = require('./school-rating-service.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
@@ -457,6 +458,12 @@ async function publishCollegeEvent(payload = {}, ctx) {
   if (!audience.ok) return ok(refused(audience.message));
   built.record.audienceMode = audience.audienceMode;
   built.record.audienceGroupIds = audience.audienceGroupIds;
+  const ugc = await checkUgcContent({
+    title: built.record.title,
+    description: built.record.description,
+    location: built.record.location,
+  }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
 
   const result = await inTransaction(ctx, dir, async (tx, actor) => {
     const fresh = await freshContext(tx, ctx);

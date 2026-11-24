@@ -43,6 +43,7 @@ const {
   schoolKey, schoolMemberKey, belongsToSchoolScope, schoolMatchKey, schoolLiveKey,
   pairCountKey, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS,
 } = require('../../shared/utils/school.js');
+const { maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 const {
   MATCH_TYPE, MATCH_TYPE_LABEL,
   MATCH_STATUS, MATCH_STATUS_LABEL, MATCH_COMPETITION, MATCH_OUTCOME,
@@ -422,7 +423,10 @@ async function getSchoolMatchEntryContext(payload = {}, ctx) {
     // 昵称加首字足够；真名留给管理侧的名录/审核接口（按角色发放）。
     hasMore: Boolean(dir.page && dir.page.hasMore), nextCursor: dir.page ? dir.page.nextCursor : '',
     members: dir.members.filter(user => user.platformStatus === PLATFORM_STATUS.ACTIVE).map(user => ({
-      userId: user._id, nickName: user.nickName || '',
+      userId: user._id,
+      nickName: maskPublicNickName(user.nickName, user.realName, {
+        canSeeFull: user._id === ctx.actorId || canManageAssociationSpace(ctx),
+      }),
     })), seasonStart: season.resetTime || season.anchorTime || null,
     pairInfo: { counts: seasonPairCounts(ctx.actorId, ledger, { seasonStart: season.resetTime }), limit: RATED_PAIR_LIMIT }, message: '' });
 }
@@ -443,7 +447,12 @@ async function getSchoolMatch(payload = {}, ctx) {
     const ids = [...new Set([...(doc.teamA || []).slice(0, 2), ...(doc.teamB || []).slice(0, 2), doc.referee].filter(Boolean))];
     const users = ids.length ? await ctx.repo.users.listByIds(ids) : [];
     return ok({ ok: true, match, viewer: { userId: ctx.actorId, nickName: ctx.actor.nickName || '' },
-      members: users.map(user => ({ userId: user._id, nickName: user.nickName || '会员' })), message: '' });
+      members: users.map(user => ({
+        userId: user._id,
+        nickName: maskPublicNickName(user.nickName || '会员', user.realName, {
+          canSeeFull: user._id === ctx.actorId || canManageAssociationSpace(ctx),
+        }),
+      })), message: '' });
   }
   return ok({ ok: true, match, message: '' });
 }

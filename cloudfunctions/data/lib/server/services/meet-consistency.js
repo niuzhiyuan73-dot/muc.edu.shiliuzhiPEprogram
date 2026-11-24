@@ -43,16 +43,27 @@ async function unchangedEvent(tx, snapshot) {
  * 推进项目版本戳（G3 热点解耦）。
  * 默认仅写 `sportsMeetEvents[eventKey].revision`，不再每次录分/报名都写 `sportsMeets[meetId].contentRevision`
  * 这把全局热点锁；仅在显式传 `{ bumpMeet: true }`（如正式发布成绩）时才同步推进届次内容版本。
+ *
+ * `{ bumpEntries: true }` 用于报名条目的低频变更（提交 / 审批 / 撤回）。它写的是
+ * `sportsMeets.entriesRevision`，不是高频的 contentRevision：录分路径不碰它，
+ * 因此不会把 20 路并发录分重新拉回同一份届次文档上；而结束运动会要在事务内
+ * 用这枚版本戳判断「读快照之后有没有人新增/改过报名」，避免 7+ 项目时因
+ * 跳过逐项核对而把「有报名、无成绩」的项目一起收尾。
  */
 async function touchEvent(tx, eventKey, options = {}) {
   const doc = await tx.sportsMeetEvents.getById(eventKey);
   if (doc) {
     await tx.sportsMeetEvents.set(eventKey, { ...doc, revision: Number(doc.revision || 0) + 1 });
-    if (options && options.bumpMeet) {
+    const bumpMeet = Boolean(options && options.bumpMeet);
+    const bumpEntries = Boolean(options && options.bumpEntries);
+    if (bumpMeet || bumpEntries) {
       const meet = await tx.sportsMeets.getById(doc.meetId);
-      if (meet) await tx.sportsMeets.set(doc.meetId, {
-        ...meet, contentRevision: Number(meet.contentRevision || 0) + 1,
-      });
+      if (meet) {
+        const next = { ...meet };
+        if (bumpMeet) next.contentRevision = Number(meet.contentRevision || 0) + 1;
+        if (bumpEntries) next.entriesRevision = Number(meet.entriesRevision || 0) + 1;
+        await tx.sportsMeets.set(doc.meetId, next);
+      }
     }
   }
 }

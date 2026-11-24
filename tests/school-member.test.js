@@ -104,7 +104,8 @@ test('名录：每行带 gender / collegeName，且不下发隐私字段', async
 
   const c02Row = view.members.find(item => item.userId === 'demo_muc_member_2');
   assert.equal(c02Row.gender, 'F');
-  assert.equal(c02Row.realName, '真名-demo_muc_member_2');
+  // 他人按 D2 脱敏（首尾字符 + 星号）；本人视角由榜单/档案用例另行覆盖。
+  assert.match(c02Row.realName, /^真\*+2$/, '他人实名不得原样下发');
   assert.equal(c02Row.collegeName, NAME_C02);
 });
 

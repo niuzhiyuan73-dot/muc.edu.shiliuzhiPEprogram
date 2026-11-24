@@ -25,20 +25,22 @@
  * ============================================================
  */
 
-const { canReadAssociationSpace } = require('./association-space-permission.js');
+const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
 const { loadColleges } = require('./college-directory.js');
 const { schoolMemberKey, SCHOOL_MEMBER_STATUS, PLATFORM_STATUS } = require('../../shared/utils/school.js');
+const { maskRealName, maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 
 const ok = data => ({ ok: true, data });
 const refused = (message, extra = {}) => ({ ok: false, message, ...extra });
 
 /** 会员档案一行的对外形状：隐私字段（学号 / 手机号 / OpenID / 平台角色）一律不下发。 */
-function memberRow(user, member, collegeName) {
+function memberRow(user, member, collegeName, options = {}) {
+  const canSeeFull = options.canSeeFull === true;
   return {
     userId: user._id,
-    // 逐层兜底，绝不渲染出 undefined
-    nickName: user.nickName || user.realName || user._id,
-    realName: user.realName || '',
+    // 逐层兜底，绝不渲染出 undefined；昵称若实际就是实名，公开视图一并脱敏。
+    nickName: maskPublicNickName(user.nickName || user.realName || user._id, user.realName, { canSeeFull }),
+    realName: canSeeFull ? (user.realName || '') : maskRealName(user.realName || ''),
     avatarUrl: user.avatarUrl || '',
     gender: user.gender || '',
     collegeId: member.collegeId || '',
@@ -67,6 +69,8 @@ async function listSchoolMembers(payload = {}, ctx) {
   }
   const scoped = ctx.repo.forScope(ctx);
   const filterCollegeId = typeof payload.collegeId === 'string' && payload.collegeId ? payload.collegeId : '';
+  const canSeeAllNames = canManageAssociationSpace(ctx);
+  const canSeeFullFor = userId => canSeeAllNames || userId === ctx.actorId;
   // 【只数不取】（2026-10-29 第十一轮审计 P2-3/P2-9）
   // 首页概况只要一个「本校会员数」，原先也走平铺分支：读完全部学籍 + 批读全部账号
   // 再返回 N 行 JSON，只为 `members.length`。这里换成同一套过滤的聚合计数，
@@ -98,7 +102,9 @@ async function listSchoolMembers(payload = {}, ctx) {
       if (filterCollegeId && row.collegeId !== filterCollegeId) continue;
       const user = userById.get(row.userId);
       if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) continue;
-      members.push(memberRow(user, row, id => nameByCollegeId.get(id) || ''));
+      members.push(memberRow(user, row, id => nameByCollegeId.get(id) || '', {
+        canSeeFull: canSeeFullFor(user._id),
+      }));
     }
     members.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
     return ok({ ok: true, members, total: members.length, message: '' });
@@ -108,7 +114,18 @@ async function listSchoolMembers(payload = {}, ctx) {
     const page = await scoped.schoolMembers.listDirectoryPage({ collegeId: filterCollegeId,
       keyword: payload.keyword, cursor: payload.cursor,
       limit: Number.isInteger(payload.limit) && payload.limit > 0 ? Math.min(payload.limit, 50) : 20 });
-    return ok({ ok: true, ...page, message: '' });
+    // 目录行同样带 nickName / realName；分页出口不能成为绕过脱敏的旁路。
+    // 注意 listDirectoryPage 的返回键是 members（不是 rows），不能把两者混用。
+    const sourceRows = Array.isArray(page.members) ? page.members
+      : (Array.isArray(page.rows) ? page.rows : []);
+    const rows = sourceRows.map(row => ({
+      ...row,
+      nickName: maskPublicNickName(row.nickName, row.realName, {
+        canSeeFull: canSeeFullFor(row.userId),
+      }),
+      realName: canSeeFullFor(row.userId) ? (row.realName || '') : maskRealName(row.realName || ''),
+    }));
+    return ok({ ok: true, ...page, members: rows, message: '' });
   }
   const rows = [];
   let afterId = '';
@@ -137,7 +154,7 @@ async function listSchoolMembers(payload = {}, ctx) {
     const user = userById.get(row.userId);
     // 平台停用账号、或已归属别校的用户不进本校本册。
     if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId) continue;
-    members.push(memberRow(user, row, collegeName));
+    members.push(memberRow(user, row, collegeName, { canSeeFull: canSeeFullFor(user._id) }));
   }
   // 按编号稳定排序；调用方要按学院/姓名排再自排即可。
   members.sort((a, b) => (a.userId < b.userId ? -1 : a.userId > b.userId ? 1 : 0));
@@ -168,7 +185,9 @@ async function getSchoolMember(payload = {}, ctx) {
   }
   const colleges = await loadColleges(ctx);
   const nameByCollegeId = new Map(colleges.map(item => [item.collegeId, item.name]));
-  return ok({ ok: true, member: memberRow(user, member, id => nameByCollegeId.get(id) || ''), message: '' });
+  return ok({ ok: true, member: memberRow(user, member, id => nameByCollegeId.get(id) || '', {
+    canSeeFull: userId === ctx.actorId || canManageAssociationSpace(ctx),
+  }), message: '' });
 }
 
 module.exports = { listSchoolMembers, getSchoolMember };

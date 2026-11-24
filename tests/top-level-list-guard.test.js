@@ -44,6 +44,29 @@ function codeLines(source) {
 }
 
 const TOP_LEVEL_LIST = /ctx\.repo\.([A-Za-z0-9_]+)\.list\(\s*\)/g;
+const TOP_LEVEL_BRACKET_LIST = /ctx\.repo\[['"]([A-Za-z0-9_]+)['"]\]\.list\(\s*\)/g;
+const TOP_LEVEL_ALIAS = /(?:const|let|var)\s+([A-Za-z0-9_$]+)\s*=\s*ctx\.repo\s*;/;
+
+function aliasListOffenders(source) {
+  const aliases = new Set();
+  for (const { line } of codeLines(source)) {
+    const hit = TOP_LEVEL_ALIAS.exec(line);
+    if (hit) aliases.add(hit[1]);
+  }
+  if (aliases.size === 0) return [];
+  const out = [];
+  for (const { line, number } of codeLines(source)) {
+    for (const alias of aliases) {
+      const re = new RegExp(`\\b${alias}\\.([A-Za-z0-9_]+)\\.list\\(\\s*\\)`, 'g');
+      let hit;
+      while ((hit = re.exec(line)) !== null) {
+        if (ALLOWED.has(hit[1])) continue;
+        out.push(`${number} → ${alias}.${hit[1]}.list()`);
+      }
+    }
+  }
+  return out;
+}
 
 test('业务服务不得用顶层 list() 做跨范围整表读', () => {
   const offenders = [];
@@ -59,7 +82,13 @@ test('业务服务不得用顶层 list() 做跨范围整表读', () => {
         if (ALLOWED.has(hit[1])) continue;
         offenders.push(`${name}:${number} → ctx.repo.${hit[1]}.list()`);
       }
+      TOP_LEVEL_BRACKET_LIST.lastIndex = 0;
+      while ((hit = TOP_LEVEL_BRACKET_LIST.exec(line)) !== null) {
+        if (ALLOWED.has(hit[1])) continue;
+        offenders.push(`${name}:${number} → ctx.repo['${hit[1]}'].list()`);
+      }
     }
+    for (const rel of aliasListOffenders(source)) offenders.push(`${name}:${rel}`);
   }
   assert.deepEqual(offenders, [],
     '顶层 list() 的条件是空对象，云端会把全平台该集合读回来。\n'
@@ -72,6 +101,17 @@ test('forScope 上的 list() 不受影响（带范围的整表读是允许的）
   const sample = 'const rows = await ctx.repo.forScope(ctx).schoolMembers.list();';
   TOP_LEVEL_LIST.lastIndex = 0;
   assert.equal(TOP_LEVEL_LIST.exec(sample), null);
+  assert.deepEqual(aliasListOffenders(sample), []);
+});
+
+test('别名与方括号写法同样会被点名（反向验证守卫本身有效）', () => {
+  assert.deepEqual(
+    aliasListOffenders('const repo = ctx.repo;\nconst rows = await repo.schoolMembers.list();'),
+    ['2 → repo.schoolMembers.list()'],
+  );
+  const sample = "const rows = await ctx.repo['schoolMembers'].list();";
+  TOP_LEVEL_BRACKET_LIST.lastIndex = 0;
+  assert.equal(TOP_LEVEL_BRACKET_LIST.exec(sample)[1], 'schoolMembers');
 });
 
 /* ------------------------------------------------------------------ 跨校赛事 */

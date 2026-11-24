@@ -12,13 +12,16 @@ const { allAssociations } = require('../../shared/utils/associations.js');
 const { detachUserFromTeams } = require('./team-service.js');
 const { syncRatingProfileInTransaction } = require('./school-rating-service.js');
 const {
-  isPrivacyMaskEnabled, maskRealName, maskDisplayName,
+  isPrivacyMaskEnabled, maskRealName, maskDisplayName, maskPublicNickName,
 } = require('../../shared/utils/privacy-mask.js');
 const { checkUgcContent } = require('./ugc-safety.js');
 const {
   schoolMemberKey, schoolRoleKey, schoolMembershipKey, collegeKey,
   PLATFORM_ROLE, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS, SCHOOL_ROLE,
 } = require('../../shared/utils/school.js');
+const {
+  meetCollegeLeadKey, MEET_COLLEGE_LEAD_STATUS,
+} = require('../../shared/utils/meet-scope.js');
 
 /** 可授予的三档权限，顺序从高到低；界面选项与校验共用这一份。 */
 const GRANT_PERMISSIONS = Object.freeze([PERMISSION.SCHOOL_ADMIN, PERMISSION.ASSOCIATION_LEADER, PERMISSION.COLLEGE_LEADER]);
@@ -76,6 +79,15 @@ function createSchoolHandlers({ claimKey }) {
     const built = buildSchoolAccount({ openId: ctx.openId, profile: payload.profile, now: ctx.now });
     if (!built.ok) {
       return ok({ ok: false, account: null, errors: built.errors, firstError: built.firstError });
+    }
+    // 昵称会公开显示；注册是唯一一个「不经过 updateSchoolProfile」的昵称入口，
+    // 漏接这里就等于给违禁昵称留了一条绕过路径。
+    const ugc = await checkUgcContent({ nickName: built.account.nickName }, ctx);
+    if (!ugc.ok) {
+      return ok({
+        ok: false, account: null,
+        errors: { nickName: ugc.message }, firstError: ugc.message,
+      });
     }
     const account = await ctx.repo.transaction(async tx => {
       // 事务内复核：并发注册同一 OpenID 只落一条
@@ -674,13 +686,19 @@ function createSchoolHandlers({ claimKey }) {
     );
     const roleById = new Map(roles.map(row => [row._id, row]));
     const membershipById = new Map(memberships.map(row => [row._id, row]));
+    const canReviewAll = canSchoolAction(ctx, 'reviewMembers', ctx);
     const members = rows.map(row => {
       const membership = membershipById.get(schoolMembershipKey(row.userId, ctx));
       const isCollegeStaff = membership?.status === 'active' && membership?.role === 'staff';
-      const rawNick = (userById.get(row.userId) || {}).nickName || '会员';
+      const user = userById.get(row.userId) || {};
+      const rawNick = user.nickName || '会员';
+      const canSeeFullName = row.userId === ctx.actorId || canReviewAll;
+      const publicNick = readOnly && isPrivacyMaskEnabled('PRIVACY_MASK_PUBLIC')
+        ? maskDisplayName(rawNick)
+        : maskPublicNickName(rawNick, user.realName, { canSeeFull: canSeeFullName });
       const item = {
         userId: row.userId,
-        nickName: readOnly && isPrivacyMaskEnabled('PRIVACY_MASK_PUBLIC') ? maskDisplayName(rawNick) : rawNick,
+        nickName: publicNick,
         collegeId: row.collegeId || '',
         collegeName: collegeName(row.collegeId),
       };
@@ -833,6 +851,78 @@ function createSchoolHandlers({ claimKey }) {
       return ok({ ok: false, deactivated: false, message: '请确认注销账号后再提交' });
     }
 
+    /**
+     * 【为什么校级管理员一律不自助注销】
+     * 「只拦最后一名管理员」需要原子计数：事务内不能查集合，事务外统计在两人
+     * 并发注销时会同时看到「还有别人」而双双放行，结果学校剩 0 名可审批的人。
+     * 本批不引入全校管理员计数文档（改动面覆盖授权/撤权/转校/注销四处，且要
+     * 迁移存量），先采用保守且并发安全的规则：校级管理员必须把权限交接给
+     * 另一位成员，或由平台管理员处理，不允许自助注销。将来若产品要求放开，
+     * 触发条件是「上线后出现校级管理员交接流程」，届时再补计数文档。
+     */
+    const snapshot = await ctx.repo.users.getById(ctx.actorId);
+    if (!snapshot || snapshot.platformStatus !== PLATFORM_STATUS.ACTIVE) {
+      return ok({ ok: false, deactivated: false, message: '账号已注销或不可用' });
+    }
+    if (snapshot.platformRole === PLATFORM_ROLE.ADMIN) {
+      return ok({ ok: false, deactivated: false, message: '平台管理员账号不可自助注销，请先交接权限' });
+    }
+    const targetSchoolId = snapshot.primarySchoolId || ctx.schoolId || '';
+    const initialRole = targetSchoolId
+      ? await ctx.repo.schoolRoles.getById(schoolRoleKey(ctx.actorId, targetSchoolId))
+      : null;
+    if (initialRole && initialRole.status === 'active' && initialRole.role === SCHOOL_ROLE.ADMIN) {
+      return ok({
+        ok: false, deactivated: false,
+        message: '校级管理员账号不可自助注销，请先完成权限交接或联系平台管理员',
+      });
+    }
+
+    // 先把「要撤销的运动会授权」读出来；事务内不能查询集合，只能按主键点读。
+    const [leadRows, meetRows] = await Promise.all([
+      targetSchoolId ? ctx.repo.sportsMeetCollegeLeads.listBySchool(targetSchoolId) : [],
+      targetSchoolId ? ctx.repo.sportsMeets.listBySchool(targetSchoolId) : [],
+    ]);
+    const activeLeads = (leadRows || []).filter(doc => doc
+      && doc.schoolId === targetSchoolId
+      && doc.userId === ctx.actorId
+      && doc.status === MEET_COLLEGE_LEAD_STATUS.ACTIVE);
+    const activeChiefMeets = (meetRows || []).filter(doc => doc
+      && doc.schoolId === targetSchoolId
+      && doc.chiefJudge
+      && doc.chiefJudge.userId === ctx.actorId
+      && doc.chiefJudge.status === 'active');
+    // 每撤销一条授权是「读 + 写」2 次操作；与 6 个协会会籍、账号/学籍/角色
+    // 同处一个事务，必须留出预算。超过 25 条在任授权的账号先要求人工交接，
+    // 不要让注销在云端撞 100 次事务上限、变成一句“服务异常”。
+    const MAX_MEET_ROLE_CLEANUP = 25;
+    if (activeLeads.length + activeChiefMeets.length > MAX_MEET_ROLE_CLEANUP) {
+      return ok({
+        ok: false, deactivated: false,
+        message: '在任运动会授权过多，请先联系管理员完成交接后再注销',
+      });
+    }
+
+    // 【退队放在注销事务之前】账号一旦停用，再退队失败就没有「本人可重试」的
+    // 入口；先退队、失败即中止，账号仍可用，用户可稍后重试。退队成功后再注销，
+    // 极端情况下注销事务因并发状态变化失败，用户只是退出球队，仍可重新加入。
+    let teamCleanup = { detached: 0, captainMoved: 0, archived: 0 };
+    if (targetSchoolId) {
+      try {
+        teamCleanup = await detachUserFromTeams(ctx.repo, {
+          schoolId: targetSchoolId,
+          userId: ctx.actorId,
+          now: new Date(ctx.now || Date.now()).toISOString(),
+          actorId: ctx.actorId,
+        });
+      } catch (err) {
+        return ok({
+          ok: false, deactivated: false,
+          message: '账号未注销；球队名单正在变化（可能已退出部分球队），请刷新后重试',
+        });
+      }
+    }
+
     const result = await ctx.repo.transaction(async tx => {
       const current = await tx.users.getById(ctx.actorId);
       if (!current || current.platformStatus !== PLATFORM_STATUS.ACTIVE) {
@@ -842,27 +932,35 @@ function createSchoolHandlers({ claimKey }) {
         return { ok: false, deactivated: false, message: '平台管理员账号不可自助注销，请先交接权限' };
       }
 
-      const targetSchoolId = current.primarySchoolId || ctx.schoolId || '';
-      const memberKey = targetSchoolId ? schoolMemberKey(ctx.actorId, targetSchoolId) : '';
-      const roleKey = targetSchoolId ? schoolRoleKey(ctx.actorId, targetSchoolId) : '';
+      const schoolId = current.primarySchoolId || ctx.schoolId || '';
+      const memberKey = schoolId ? schoolMemberKey(ctx.actorId, schoolId) : '';
+      const roleKey = schoolId ? schoolRoleKey(ctx.actorId, schoolId) : '';
 
       const member = memberKey ? await tx.schoolMembers.getById(memberKey) : null;
       const roleDoc = roleKey ? await tx.schoolRoles.getById(roleKey) : null;
-      const claimId = (member && member.studentId && targetSchoolId && claimKey)
-        ? claimKey(targetSchoolId, member.studentId)
+      // 事务内再判一次：预检之后若有人把本人提为校级管理员，仍不允许注销。
+      if (roleDoc && roleDoc.status === 'active' && roleDoc.role === SCHOOL_ROLE.ADMIN) {
+        return {
+          ok: false, deactivated: false,
+          message: '校级管理员账号不可自助注销，请先完成权限交接或联系平台管理员',
+        };
+      }
+      const claimId = (member && member.studentId && schoolId && claimKey)
+        ? claimKey(schoolId, member.studentId)
         : '';
       const claimDoc = claimId ? await tx.studentIdClaims.getById(claimId) : null;
 
       const memberships = [];
-      if (targetSchoolId) {
+      if (schoolId) {
         for (const assoc of allAssociations()) {
-          const mbKey = schoolMembershipKey(ctx.actorId, { schoolId: targetSchoolId, association: assoc.id });
+          const mbKey = schoolMembershipKey(ctx.actorId, { schoolId, association: assoc.id });
           const mb = await tx.memberships.getById(mbKey);
           if (mb && mb.status === 'active') memberships.push(mb);
         }
       }
 
       const nowIso = new Date(ctx.now || Date.now()).toISOString();
+      const directoryFields = accountDirectoryFields({ nickName: '已注销用户', realName: '' });
       await tx.users.set(ctx.actorId, {
         ...current,
         openId: '',
@@ -872,6 +970,10 @@ function createSchoolHandlers({ claimKey }) {
         avatarUrl: '',
         primarySchoolId: '',
         searchName: '',
+        // 【必须重建目录派生字段】accountDirectoryFields 会把真实姓名/昵称写进
+        // directoryRealName / directoryNickName 与对应的排序键；只清 realName
+        // 会留下可检索的实名副本，注销响应就不能再说「个人资料已脱敏清除」。
+        ...directoryFields,
         platformStatus: PLATFORM_STATUS.DISABLED,
         deleted: true,
         deactivatedAt: nowIso,
@@ -911,16 +1013,58 @@ function createSchoolHandlers({ claimKey }) {
         });
       }
 
+      // 撤销运动会专用授权：学院部长是「一院一名」的常设角色，不撤销会挡住
+      // 新任命；总裁判随届，注销后也不该继续挂在在任名单上。
+      for (const lead of activeLeads) {
+        const key = meetCollegeLeadKey(schoolId, lead.collegeId);
+        const freshLead = await tx.sportsMeetCollegeLeads.getById(key);
+        if (freshLead && freshLead.schoolId === schoolId
+          && freshLead.userId === ctx.actorId
+          && freshLead.status === MEET_COLLEGE_LEAD_STATUS.ACTIVE) {
+          await tx.sportsMeetCollegeLeads.set(key, {
+            ...freshLead,
+            status: MEET_COLLEGE_LEAD_STATUS.REVOKED,
+            revokedBy: ctx.actorId,
+            revokedAt: nowIso,
+            updatedAt: nowIso,
+          });
+        }
+      }
+      for (const meet of activeChiefMeets) {
+        const freshMeet = await tx.sportsMeets.getById(meet._id);
+        if (freshMeet && freshMeet.schoolId === schoolId
+          && freshMeet.chiefJudge
+          && freshMeet.chiefJudge.userId === ctx.actorId
+          && freshMeet.chiefJudge.status === 'active') {
+          await tx.sportsMeets.set(meet._id, {
+            ...freshMeet,
+            chiefJudge: {
+              ...freshMeet.chiefJudge,
+              status: 'revoked',
+              revokedBy: ctx.actorId,
+              revokedAt: nowIso,
+            },
+            version: Number(freshMeet.version || 1) + 1,
+            updatedAt: nowIso,
+          });
+        }
+      }
+
       await tx.audit.append({
         _id: `deactivate_${ctx.actorId}_${Date.parse(nowIso) || Date.now()}`,
         action: 'deactivateMySchoolAccount',
-        schoolId: targetSchoolId || ctx.schoolId,
+        schoolId: schoolId || ctx.schoolId,
         actorId: ctx.actorId,
         userId: ctx.actorId,
+        teams: teamCleanup,
         at: nowIso,
       });
 
-      return { ok: true, deactivated: true, userId: ctx.actorId, message: '账号已注销，个人资料已脱敏清除' };
+      return {
+        ok: true, deactivated: true, userId: ctx.actorId,
+        teams: teamCleanup,
+        message: '账号已注销，个人资料已脱敏清除',
+      };
     });
     return ok(result);
   }

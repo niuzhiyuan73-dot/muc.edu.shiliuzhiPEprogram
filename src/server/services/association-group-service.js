@@ -29,6 +29,7 @@ const { loadColleges } = require('./college-directory.js');
 const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
 const { runVersionedBatchJob } = require('./versioned-batch-job.js');
 const { permissionLabelOf } = require('./school-permission.js');
+const { maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 const {
   schoolKey, schoolMemberKey, schoolRoleKey, schoolMembershipKey, belongsToSchoolScope,
   associationGroupKey, associationGroupMemberKey, associationGroupNameKey,
@@ -174,13 +175,17 @@ async function describeMembers(repo, ctx, userIds) {
   const membershipById = new Map(memberships.map(row => [row._id, row]));
   const seen = new Set();
   const out = [];
+  const canSeeFullName = canManageAssociationSpace(ctx);
   for (const userId of userIds) {
     if (seen.has(userId)) continue;
     seen.add(userId);
     const member = memberById.get(schoolMemberKey(userId, ctx.schoolId));
+    const user = userById.get(userId) || {};
     out.push({
       userId,
-      nickName: (userById.get(userId) || {}).nickName || '会员',
+      nickName: maskPublicNickName(user.nickName || '会员', user.realName, {
+        canSeeFull: userId === ctx.actorId || canSeeFullName,
+      }),
       collegeId: (member && member.collegeId) || '',
       collegeName: collegeName(member && member.collegeId),
       permissionLabel: permissionLabelOf(

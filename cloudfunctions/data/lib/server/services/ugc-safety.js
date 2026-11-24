@@ -72,13 +72,17 @@ async function checkUgcContent(fields, ctx = {}) {
   }
 
   if (customChecker) {
+    const failClosed = typeof process !== 'undefined' && process && process.env && process.env.UGC_FAIL_CLOSED === 'on';
     try {
       const verdict = await customChecker({
         content: texts.join('\n'),
         openId: (ctx && ctx.openId) || '',
         scene: 2,
       });
-      if (verdict && (verdict.ok === false || verdict.errCode === 87014
+      const errCode = verdict && verdict.errCode !== undefined && verdict.errCode !== null
+        ? Number(verdict.errCode)
+        : 0;
+      if (verdict && (verdict.ok === false || errCode === 87014
         || (verdict.result && verdict.result.suggest === 'risky'))) {
         return {
           ok: false,
@@ -86,8 +90,24 @@ async function checkUgcContent(fields, ctx = {}) {
           message: (verdict && verdict.message) || '内容未通过安全检测，请修改后重试',
         };
       }
+      // 【非 0 errCode 不是「通过」】微信 msgSecCheck 的鉴权失败、频率限制等
+      // 都以 errCode 返回，不会抛异常；旧实现只在 catch 里看 UGC_FAIL_CLOSED，
+      // 结果打开失败关闭也照样放行。这里把「调用失败」与「内容违规」分开：
+      // 违规必拦；调用失败按开关决定拒绝或告警放行。
+      if (errCode !== 0) {
+        console.warn('[ugc-safety] 外部内容安全检测返回错误码', errCode, (verdict && verdict.errMsg) || '');
+        if (failClosed) {
+          return { ok: false, code: 'UGC_UNAVAILABLE', message: '内容安全服务暂时不可用，请稍后重试' };
+        }
+      }
+      // review（疑似）不是确定违规；默认放行并留痕，失败关闭模式下转人工前先拦。
+      if (verdict && verdict.result && verdict.result.suggest === 'review') {
+        console.warn('[ugc-safety] 内容安全检测结果为 review，按当前策略放行');
+        if (failClosed) {
+          return { ok: false, code: 'UGC_UNAVAILABLE', message: '内容需要人工复核，请稍后重试' };
+        }
+      }
     } catch (err) {
-      const failClosed = typeof process !== 'undefined' && process && process.env && process.env.UGC_FAIL_CLOSED === 'on';
       console.warn('[ugc-safety] 外部内容安全检测调用异常', err && err.message);
       if (failClosed) {
         return { ok: false, code: 'UGC_UNAVAILABLE', message: '内容安全服务暂时不可用，请稍后重试' };

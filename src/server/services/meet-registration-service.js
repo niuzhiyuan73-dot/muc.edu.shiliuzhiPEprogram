@@ -676,7 +676,7 @@ async function submitMeetCollegeEntry(payload = {}, ctx) {
         counters.set(userId, await counterOf(tx, fresh.meetId, userId));
       }
     }
-    await touchEvent(tx, event.doc._id);
+    await touchEvent(tx, event.doc._id, { bumpEntries: true });
     await tx.sportsMeetEntries.set(key, entry);
     await tx.sportsMeetQuotaUsage.set(meetQuotaKey(fresh.meetId, event.doc._id, collegeId), {
       schoolId: fresh.schoolId, meetId: fresh.meetId, eventKey: event.doc._id, collegeId,
@@ -791,7 +791,7 @@ async function releaseEntry(tx, ctx, entry, nextStatus) {
     for (const userId of userIds) counters.set(userId, await counterOf(tx, ctx.meetId, userId));
   }
 
-  await touchEvent(tx, entry.eventKey);
+  await touchEvent(tx, entry.eventKey, { bumpEntries: true });
   const now = toIso(ctx.now);
   await tx.sportsMeetEntries.set(entry._id, {
     ...entry, status: nextStatus, updatedAt: now,
@@ -855,7 +855,7 @@ async function reviewMeetEntry(payload = {}, ctx) {
       return ok({ entryKey: key, status: MEET_ENTRY_STATUS.REJECTED });
     }
 
-    await touchEvent(tx, entry.eventKey);
+    await touchEvent(tx, entry.eventKey, { bumpEntries: true });
     const quota = await quotaOf(tx, fresh.meetId, entry.eventKey, entry.collegeId);
     await tx.sportsMeetQuotaUsage.set(meetQuotaKey(fresh.meetId, entry.eventKey, entry.collegeId), {
       schoolId: fresh.schoolId, meetId: fresh.meetId, eventKey: entry.eventKey, collegeId: entry.collegeId,

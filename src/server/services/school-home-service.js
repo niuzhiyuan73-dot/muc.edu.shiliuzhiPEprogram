@@ -82,7 +82,13 @@ function emptyResponse() {
 async function getSchoolHomeSummary(payload = {}, ctx) {
   if (!ctx || !ctx.repo || !ctx.schoolId) return ok(emptyResponse());
 
-  const announcementPageLimit = clampInt(payload.announcementFetchLimit, ANNOUNCEMENT_PAGE_LIMIT, 1, 50);
+  // 客户端历史上传的是 announcementLimit（展示条数），服务端只认
+  // announcementFetchLimit 会把首屏放大到 50 条完整正文再前端截断。
+  // 两个名字都兼容，默认只取首屏需要的 2 条；显式 fetchLimit 仍可放大。
+  const announcementPageLimit = clampInt(
+    payload.announcementFetchLimit !== undefined ? payload.announcementFetchLimit : payload.announcementLimit,
+    DEFAULT_ANNOUNCEMENT_LIMIT, 1, ANNOUNCEMENT_PAGE_LIMIT,
+  );
   const eventLimit = clampInt(payload.eventLimit, DEFAULT_EVENT_LIMIT, 1, 100);
   const eventFetchLimit = clampInt(payload.eventFetchLimit, Math.max(DEFAULT_EVENT_FETCH, Math.min(eventLimit, 20)), 1, 20);
   const isGuest = payload.guest === true || !ctx.actorId;

@@ -49,6 +49,32 @@ function maskDisplayName(name, options = {}) {
   return maskTextChars(raw);
 }
 
+/**
+ * 公开昵称脱敏：只处理「昵称实际就是实名」的情况。
+ *
+ * 注册时未填昵称会把 `nickName` 回退为 `realName`（产品或历史约定），
+ * 若 DTO 只对 `realName` 调 `maskRealName`，前端展示的 `nickName` 仍是完整实名，
+ * 脱敏等于没做。这里不改变存储、不改变用户自选昵称，只在公开视图把
+ * 「昵称 === 实名（或其实名前 N 位截断）」的值按实名规则脱敏。
+ *
+ * @param {string} nickName 展示昵称
+ * @param {string} realName 实名
+ * @param {{canSeeFull?:boolean, enabled?:boolean}} [options] 本人/管理员可看完整值
+ * @returns {string}
+ */
+function maskPublicNickName(nickName, realName, options = {}) {
+  const rawNick = String(nickName || '').trim();
+  if (!rawNick) return '';
+  if (options.canSeeFull === true) return rawNick;
+  if (options.enabled === false || !isPrivacyMaskEnabled()) return rawNick;
+  const rawReal = String(realName || '').trim();
+  if (!rawReal) return rawNick;
+  // 注册默认昵称可能按 NICKNAME_MAX 截断，不能只比较全等。
+  const same = rawNick === rawReal
+    || (rawNick.length >= 2 && rawNick.length < rawReal.length && rawReal.startsWith(rawNick));
+  return same ? maskRealName(rawNick, options) : rawNick;
+}
+
 function maskStudentId(studentId, options = {}) {
   const raw = String(studentId || '').trim();
   if (!raw) return '';
@@ -77,6 +103,7 @@ module.exports = {
   isPrivacyMaskEnabled,
   maskRealName,
   maskDisplayName,
+  maskPublicNickName,
   maskStudentId,
   sanitizePublicMember,
 };

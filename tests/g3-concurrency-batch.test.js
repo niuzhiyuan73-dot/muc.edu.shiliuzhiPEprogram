@@ -18,6 +18,7 @@ const regService = require('../src/server/services/meet-registration-service.js'
 const scheduleService = require('../src/server/services/meet-schedule-service.js');
 const scoreService = require('../src/server/services/meet-score-service.js');
 const { meetEventKey } = require('../src/shared/utils/meet-scope.js');
+const { touchEvent } = require('../src/server/services/meet-consistency.js');
 const { TEMPLATES } = require('../src/shared/services/meet-event-catalog.js');
 const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 const contextCache = require('../cloudfunctions/data/lib/server/services/context-cache.js');
@@ -397,6 +398,9 @@ describe('5. G3 静态守卫（单栅栏全覆盖 + 无热点写回）', () => {
       const nextFn = teamSrc.indexOf('\nasync function ', start + 20);
       const body = teamSrc.slice(start, nextFn > 0 ? nextFn : start + 4000);
       assert.match(body, /tx\.teamEvents\.set\(/, `${fnName} 必须同步推进 teamEvents.revision 守住单栅栏`);
+      // 只断言「出现 set」不够：写一份不带 revision 的旧对象也能过。
+      // 静态要求同一个函数里出现 revision 字段；运行时契约仍由单栅栏用例兜底。
+      assert.match(body, /revision\s*:/, `${fnName} 写 teamEvents 时必须显式带 revision`);
     }
     const fbSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'services', 'football-match-service.js'), 'utf8');
     assert.match(fbSrc, /tx\.teamEvents\.set\(/, 'football-match-service 必须同步推进 teamEvents.revision');
@@ -404,11 +408,79 @@ describe('5. G3 静态守卫（单栅栏全覆盖 + 无热点写回）', () => {
 
   test('meet-consistency touchEvent 默认不写 sportsMeets，assignMeetJudges 不写 contentRevision', () => {
     const mcSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'services', 'meet-consistency.js'), 'utf8');
-    assert.match(mcSrc, /if\s*\(\s*options\s*&&\s*options\.bumpMeet\s*\)/, 'touchEvent 必须门控 bumpMeet 才能写 sportsMeets');
+    assert.match(mcSrc, /const bumpMeet = Boolean\(options && options\.bumpMeet\)/,
+      'touchEvent 必须门控 bumpMeet 才能写 contentRevision');
+    assert.match(mcSrc, /const bumpEntries = Boolean\(options && options\.bumpEntries\)/,
+      'touchEvent 必须门控 bumpEntries 才能写 entriesRevision');
     const msSrc = fs.readFileSync(path.join(__dirname, '..', 'src', 'server', 'services', 'meet-schedule-service.js'), 'utf8');
     const fnStart = msSrc.indexOf('async function assignMeetJudges(');
     const fnEnd = msSrc.indexOf('\nfunction ', fnStart + 20);
     const fnBody = msSrc.slice(fnStart, fnEnd > 0 ? fnEnd : msSrc.length);
     assert.equal(fnBody.includes('contentRevision'), false, 'assignMeetJudges 不得写入 sportsMeets.contentRevision');
+  });
+});
+
+describe('6. G3 补强：批任务异常与 7+ 项目收尾并发', () => {
+  test('runBatch 抛错时返回确定失败进度，而不是把异常冒成服务异常', async () => {
+    const job = await runVersionedBatchJob({
+      items: [1, 2, 3],
+      opsPerItem: 2,
+      fixedOps: 2,
+      runBatch: async () => { throw new Error('事务回调炸了'); },
+    });
+    assert.equal(job.ok, false);
+    assert.equal(job.done, false);
+    assert.equal(job.batches, 1);
+    assert.equal(job.failed, 3);
+    assert.equal(job.nextCursor, 0);
+    assert.match(job.message, /事务回调炸了/);
+  });
+
+  test('7 项目运动会：读快照后并发审批报名，收尾必须拒绝而不是留下无成绩项目', async () => {
+    const meetScope = { schoolId: 'muc', meetId: 'm' };
+    const events = Array.from({ length: 7 }, (_, i) => ({
+      _id: `e${i}`, ...meetScope, name: `项目${i}`, status: 'active', revision: 1,
+    }));
+    const seed = {
+      schools: [{ _id: 'muc', schoolId: 'muc', status: 'active' }],
+      users: [{ _id: 'admin', platformStatus: 'active', platformRole: 'admin' }],
+      sportsMeets: [{
+        _id: 'm', ...meetScope, name: '运动会', status: 'running',
+        version: 1, contentRevision: 0, scheduleRevision: 0, entriesRevision: 0,
+      }],
+      sportsMeetEvents: events,
+      // e0..e5 已发布；e6 还没有报名，也没有成绩
+      sportsMeetPublications: events.slice(0, 6).map((event, index) => ({
+        _id: `p${index}`, ...meetScope, eventKey: event._id, official: true, status: 'published', version: 1,
+      })),
+      sportsMeetEntries: [],
+    };
+    const repo = createSchoolMemoryRepo(seed);
+    const ctx = await buildMeetContext({
+      repo, actorId: 'admin', scope: meetScope, now: new Date('2026-11-14T00:00:00Z'),
+    });
+
+    const originalTransaction = repo.transaction.bind(repo);
+    let injected = false;
+    repo.transaction = async (fn, options) => {
+      if (!injected) {
+        injected = true;
+        // 模拟管理员在 finishSportsMeet 读完 entries 快照之后，审批通过 e6 的一条报名。
+        await originalTransaction(async (tx) => {
+          await tx.sportsMeetEntries.set('entry6', {
+            _id: 'entry6', ...meetScope, eventKey: 'e6', status: 'approved', userIds: ['admin'],
+          });
+          await touchEvent(tx, 'e6', { bumpEntries: true });
+        });
+      }
+      return originalTransaction(fn, options);
+    };
+
+    const result = await meetService.finishSportsMeet({}, ctx);
+    assert.equal(result.ok, false, '并发审批报名后不得结束运动会');
+    assert.match(result.message, /变化/);
+    assert.equal((await repo.sportsMeets.getById('m')).status, 'running');
+    assert.equal((await repo.sportsMeetEntries.list()).filter(row => row.eventKey === 'e6').length, 1);
+    assert.equal((await repo.sportsMeetPublications.list()).filter(row => row.eventKey === 'e6').length, 0);
   });
 });

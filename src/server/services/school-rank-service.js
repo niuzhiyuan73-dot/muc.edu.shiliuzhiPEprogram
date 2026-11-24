@@ -33,7 +33,7 @@ const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = requi
 const { settledPointsOf, isSettled } = require('./season-points.js');
 const { buildProjectLeaderboard } = require('../../shared/utils/leaderboard.js');
 const { getPoolRating } = require('../../shared/utils/rating.js');
-const { maskRealName } = require('../../shared/utils/privacy-mask.js');
+const { maskRealName, maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 const {
   buildEventRecord, summarizeEvents, buildRatingHistory, buildHeadToHead,
   buildPartnerRecord, buildMatchHistory, summarizeForm,
@@ -427,7 +427,11 @@ function buildRows(users, project, myId, options = {}) {
     rank: row.rank,
     medal: medalOf(row.rank),
     isMe: Boolean(myId) && row._id === myId,
-    nickName: row.nickName,
+    // 昵称是公开展示字段；若它实际就是实名（注册未填昵称时的回退），
+    // 只脱敏 realName 仍会把完整姓名从昵称漏出去。
+    nickName: maskPublicNickName(row.nickName, realNameById.get(row._id), {
+      canSeeFull: (Boolean(myId) && row._id === myId) || options.keepAllRealNames === true,
+    }),
     // 只参与搜索，不渲染；页面上显示的一律是昵称
     // 下发但**不渲染**：只用于按真实姓名搜索。榜单里只有出场过的参赛者，
     // 与赛事公示名单同口径，不含未参赛会员（2026-10-21 评估后保留）。
@@ -769,7 +773,7 @@ async function fillRatings(ctx, members) {
 function memberStatsRow(member, keepRealName = false) {
   return {
     userId: member._id,
-    nickName: member.nickName || '',
+    nickName: maskPublicNickName(member.nickName, member.realName, { canSeeFull: keepRealName }),
     realName: keepRealName ? (member.realName || '') : maskRealName(member.realName || ''),
     avatarUrl: member.avatarUrl || '',
     points: Number(member.points || 0),
@@ -960,8 +964,15 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
     }
   }
   const opponents = opponentIds.size > 0 ? await ctx.repo.users.listByIds([...opponentIds]) : [];
-  const nameById = new Map(opponents.map(user => [user._id, user.nickName || user._id]));
-  const nameOf = id => nameById.get(id) || id;
+  const opponentById = new Map(opponents.map(user => [user._id, user]));
+  const canSeeAnyName = canSchoolAction(ctx, 'reviewMembers', ctx);
+  const nameOf = (id) => {
+    const user = opponentById.get(id);
+    if (!user) return id;
+    return maskPublicNickName(user.nickName || id, user.realName, {
+      canSeeFull: id === ctx.actorId || canSeeAnyName,
+    });
+  };
 
   // 项目（与旧栈 getMyProjects 同口径）：出场过的、按性别过滤的单打 + 双打
   const projects = [];
@@ -1010,7 +1021,7 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
     // 本人账号 / 档案展示字段；权限档只作展示，服务端写路径另行判权。
     user: {
       userId,
-      nickName: member.nickName || '',
+      nickName: maskPublicNickName(member.nickName, member.realName, { canSeeFull: canSeeFullIdentity }),
       realName: canSeeFullIdentity ? (member.realName || '') : maskRealName(member.realName || ''),
       avatarUrl: member.avatarUrl || '',
       gender: member.gender || '',

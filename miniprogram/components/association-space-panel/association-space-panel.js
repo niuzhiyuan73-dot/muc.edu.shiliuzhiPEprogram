@@ -38,23 +38,7 @@ const SUB_TABS = [
 ];
 const DEFAULT_SUB = 'training';
 const isKnownSub = (key) => SUB_TABS.some((def) => def.key === key);
-/** 一格的名录一次取多少——既是成员页签一页，也是建组选人的候选池 */
-const MEMBER_PAGE = 20;
-
-/**
- * 搜索输入防抖窗口（2026-10-26 第四轮审查 P-1）。
- *
- * 【为什么必须有】名录搜索走的是服务端聚合（`schoolMembers` 关联 `users`
- * 再按计算字段排序），一次请求的成本与全校在册人数成正比。`bindinput` 每按
- * 一个键就发一次：输入「张宇轩」在中文输入法下是 3~6 次触发，等于 3~6 次全量
- * 聚合，而只有最后一次的结果会被看到。300ms 是「停下再取」的经验值，低于
- * 人对卡顿的感知阈值。
- */
-const SEARCH_DEBOUNCE_MS = 300;
 const PICK_POOL = 50;
-/** 通知 / 训练列表一页条数 */
-const NOTICE_PAGE = 20;
-const TRAINING_PAGE = 20;
 
 const pad2 = (value) => String(value).padStart(2, '0');
 Component({

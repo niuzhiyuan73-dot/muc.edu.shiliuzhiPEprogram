@@ -42,6 +42,7 @@ const { buildSchoolContext } = require('./school-context.js');
 const { loadColleges } = require('./college-directory.js');
 const { bumpSeasonVersion, applyEventFactDelta, refreshAfterWrite } = require('./season-points.js');
 const { checkUgcContent } = require('./ugc-safety.js');
+const { maskRealName, maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 const {
   canReadAssociationSpace, canManageAssociationSpace, canParticipateInAssociation,
 } = require('./association-space-permission.js');
@@ -570,10 +571,11 @@ async function listSchoolEventSignups(payload = {}, ctx) {
   const signups = rows.map(row => {
     const member = memberById.get(row.userId) || {};
     const college = collegeOf(row.userId);
+    const canSeeFullName = row.userId === ctx.actorId || canManageAssociationSpace(ctx);
     return {
       userId: row.userId,
-      nickName: member.nickName || row.userId,
-      realName: member.realName || '',
+      nickName: maskPublicNickName(member.nickName || row.userId, member.realName, { canSeeFull: canSeeFullName }),
+      realName: canSeeFullName ? (member.realName || '') : maskRealName(member.realName || ''),
       avatarUrl: member.avatarUrl || '',
       gender: member.gender || '',
       college,

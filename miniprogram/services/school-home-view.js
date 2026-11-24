@@ -170,6 +170,9 @@ async function loadSchoolHomeView(options = {}) {
       if (identityClient && typeof identityClient.getSchoolHomeSummary === 'function') {
         const bff = await identityClient.getSchoolHomeSummary({
           announcementLimit,
+          // 显式把「取几条」传下去：只传展示条数时，服务端历史上会按默认 50 条
+          // 把整页正文都取回来再前端截断。
+          announcementFetchLimit: announcementLimit,
           eventLimit,
           guest: !viewerId,
         });
