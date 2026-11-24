@@ -23,7 +23,7 @@
  * ============================================================
  */
 
-const { collegeKey, schoolMemberKey, SCHOOL_MEMBER_STATUS } = require('../../shared/utils/school.js');
+const { collegeKey, schoolMemberKey, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS } = require('../../shared/utils/school.js');
 const {
   meetCollegeLeadKey, MEET_COLLEGE_LEAD_STATUS,
 } = require('../../shared/utils/meet-scope.js');
@@ -96,6 +96,9 @@ async function grantMeetCollegeLead(payload = {}, ctx) {
       return refused('该成员不是本学院在册会员，请先完善其学院归属');
     }
 
+    const account = await tx.users.getById(user.value);
+    if (!account || account.platformStatus !== PLATFORM_STATUS.ACTIVE) return refused('该账号不可用');
+
     const key = meetCollegeLeadKey(fresh.schoolId, college.value);
     const current = await tx.sportsMeetCollegeLeads.getById(key);
     if (isActiveMeetLead(current)) {
@@ -120,6 +123,8 @@ async function grantMeetCollegeLead(payload = {}, ctx) {
       // 授权口径版本：将来若权限含义变化，可据此判断旧记录是否仍然适用。
       ruleVersion: 'meet-lead-v1',
     };
+    // 与注销共用目标账号的版本戳，覆盖事务外枚举授权之后新增的任命。
+    await tx.users.set(user.value, { ...account, meetRoleRevision: Number(account.meetRoleRevision || 0) + 1 });
     await tx.sportsMeetCollegeLeads.set(key, doc);
     return ok({ lead: summaryOf(doc), created: true, message: '' });
   });

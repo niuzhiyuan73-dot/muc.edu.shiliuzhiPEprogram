@@ -173,6 +173,13 @@ describe('2. 团队大签表与单栅栏（11–16 队循环赛抽签 + 16 队�
     const draw = await f.call('drawTeamEvent', { eventId: 'event' });
     assert.equal(draw.ok, false);
     assert.match(draw.message, /刷新后重试/);
+    assert.equal(draw.batchDrawPending, true);
+    const saved = (await f.matches()).length;
+    assert.ok(saved > 0 && saved < 55);
+    assert.equal(draw.batchProgress.nextCursor, saved);
+    assert.equal(draw.batchProgress.written, saved);
+    assert.equal(draw.batchProgress.total, 55);
+    assert.equal(draw.batchProgress.stale, true);
   });
 });
 
@@ -436,7 +443,7 @@ describe('6. G3 补强：批任务异常与 7+ 项目收尾并发', () => {
     assert.match(job.message, /事务回调炸了/);
   });
 
-  test('7 项目运动会：读快照后并发审批报名，收尾必须拒绝而不是留下无成绩项目', async () => {
+  test('7 项目运动会：报名读完时发生并发变更，收尾不得混用旧报名和新版本', async () => {
     const meetScope = { schoolId: 'muc', meetId: 'm' };
     const events = Array.from({ length: 7 }, (_, i) => ({
       _id: `e${i}`, ...meetScope, name: `项目${i}`, status: 'active', revision: 1,
@@ -460,20 +467,36 @@ describe('6. G3 补强：批任务异常与 7+ 项目收尾并发', () => {
       repo, actorId: 'admin', scope: meetScope, now: new Date('2026-11-14T00:00:00Z'),
     });
 
-    const originalTransaction = repo.transaction.bind(repo);
+    // 模拟届次点读慢于报名列表。并行发起读请求时，旧实现会将旧列表与新版本混用。
+    const readMeet = repo.sportsMeets.getById.bind(repo.sportsMeets);
+    repo.sportsMeets.getById = async (id) => {
+      await new Promise(resolve => setImmediate(resolve));
+      return readMeet(id);
+    };
+    const forMeet = repo.forMeet.bind(repo);
     let injected = false;
-    repo.transaction = async (fn, options) => {
-      if (!injected) {
-        injected = true;
-        // 模拟管理员在 finishSportsMeet 读完 entries 快照之后，审批通过 e6 的一条报名。
-        await originalTransaction(async (tx) => {
-          await tx.sportsMeetEntries.set('entry6', {
-            _id: 'entry6', ...meetScope, eventKey: 'e6', status: 'approved', userIds: ['admin'],
-          });
-          await touchEvent(tx, 'e6', { bumpEntries: true });
-        });
-      }
-      return originalTransaction(fn, options);
+    repo.forMeet = (scope) => {
+      const scoped = forMeet(scope);
+      const entriesOf = scoped.sportsMeetEntries;
+      return {
+        ...scoped,
+        sportsMeetEntries: {
+          ...entriesOf,
+          async list() {
+            const entries = await entriesOf.list();
+            if (!injected) {
+              injected = true;
+              await repo.transaction(async (tx) => {
+                await touchEvent(tx, 'e6', { bumpEntries: true });
+                await tx.sportsMeetEntries.set('entry6', {
+                  _id: 'entry6', ...meetScope, eventKey: 'e6', status: 'approved', userIds: ['admin'],
+                });
+              });
+            }
+            return entries;
+          },
+        },
+      };
     };
 
     const result = await meetService.finishSportsMeet({}, ctx);

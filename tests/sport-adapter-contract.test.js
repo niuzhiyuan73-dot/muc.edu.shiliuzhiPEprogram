@@ -78,7 +78,9 @@ describe('P-02 共享 SportAdapter 公共契约与隔离守卫', () => {
     assert.equal(bk.permissions.canEditSchedule({ manage: true, eventActive: true, match: { status: 'reviewing' } }), true);
 
     // 场次初始扩展与结算拦截
-    assert.deepEqual(bk.matchLifecycle.initMatchExtra({ startTime: '2026-10-20T10:00:00Z' }), { matchTime: '2026-10-20T10:00:00Z' });
+    assert.deepEqual(bk.matchLifecycle.initMatchExtra({ startTime: '2026-10-20T10:00:00Z' }), {
+      matchTime: '2026-10-20T10:00:00Z', durationMinutes: 90,
+    });
     const fbExtra = fb.matchLifecycle.initMatchExtra({ rules: footballDefaultRules(), format: 'round_robin' });
     assert.equal(fbExtra.matchTime, null);
     assert.ok(fbExtra.durationMinutes >= 90);
@@ -122,6 +124,41 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
     }
   });
 
+  test('统计列契约拒绝缺项与重复键', () => {
+    const adapter = getSportAdapter('basketball5');
+    const column = { key: 'points', label: '得分' };
+    for (const name of ['statColumns', 'profileStatColumns', 'playerStatColumns']) {
+      for (const columns of [[null], [{ key: '', label: '得分' }], [column, column]]) {
+        const result = validateSportAdapter({
+          ...adapter, view: { ...adapter.view, [name]: columns },
+        });
+        assert.equal(result.ok, false);
+        assert.ok(result.message.includes(name));
+      }
+    }
+  });
+
+  test('契约拒绝 defaultPresetKey 不在 presetOptions 中', () => {
+    const adapter = getSportAdapter('basketball5');
+    const withPresets = {
+      ...adapter,
+      rules: {
+        ...adapter.rules,
+        presetOptions: [{ key: 'a', label: 'A' }, { key: 'b', label: 'B' }],
+        defaultPresetKey: 'missing',
+      },
+    };
+    const result = validateSportAdapter(withPresets);
+    assert.equal(result.ok, false);
+    assert.ok(result.message.includes('defaultPresetKey'));
+
+    // 默认预设就在选项中时通过
+    assert.equal(validateSportAdapter({
+      ...withPresets,
+      rules: { ...withPresets.rules, defaultPresetKey: 'b' },
+    }).ok, true);
+  });
+
   test('动态注册与注销 SportAdapter + ServerSportPlugin 闭环', () => {
     assert.throws(() => unregisterSportAdapter('basketball5'), /不可注销/);
     assert.throws(() => unregisterServerSportPlugin('football11'), /不可注销/);
@@ -147,7 +184,10 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
       rules: Object.freeze({
         defaultPresetKey: 'fivb-bo5',
         defaultRules: () => ({ presetKey: 'fivb-bo5', sets: 5 }),
-        normalizeRules: input => input,
+        normalizeRules: (input) => {
+          if (input.presetKey !== 'fivb-bo5') throw new Error('未知排球预设');
+          return input;
+        },
         formatRules: () => '五局三胜制',
       }),
       permissions: Object.freeze({
@@ -188,7 +228,8 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
       theme: { primary: '#1E88E5', primaryDark: '#1565C0', primaryLight: '#E3F2FD', accent: '#FDD835' },
       sportType: SPORT_TYPE.TEAM,
       teamSportFormat: 'volleyball6_test',
-      volleyballRules: { presetKey: 'fivb-bo5', sets: 5 },
+      rulesKey: 'volleyballRules',
+      volleyballRules: { sportFormat: 'volleyball6_test', presetKey: 'fivb-bo5', sets: 5 },
       capabilities: [CAPABILITY.SPACE, CAPABILITY.TEAMS, CAPABILITY.MY_TEAMS, CAPABILITY.EVENTS],
       status: ASSOCIATION_STATUS.ACTIVE,
     });
@@ -203,6 +244,12 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
       const hitServer = getServerSportPluginFor('vb_p02_test');
       assert.equal(hitAdapter.meta.sportFormat, 'volleyball6_test');
       assert.equal(typeof hitServer.actions.getTeamRecord, 'function');
+      assert.equal(getSportAdapterFor('vb_p02_test', {
+        sportFormat: 'volleyball6_test', rules: { presetKey: 'fivb-bo5' },
+      }), vbAdapter);
+      assert.equal(getSportAdapterFor('vb_p02_test', {
+        sportFormat: 'volleyball6_test', rules: { presetKey: 'unknown' },
+      }), null);
     } finally {
       unregisterServerSportPlugin('volleyball6_test');
       unregisterSportAdapter('volleyball6_test');
@@ -240,6 +287,46 @@ describe('P-03 内核去硬编码与全库 sport* 字段统一守卫', () => {
     assert.equal(minimal.matchLifecycle.validateBeforeSettle([]).ok, true);
     assert.deepEqual(minimal.matchLifecycle.decorateMatchView({}, {}), {});
     assert.deepEqual(minimal.standings.adjustEliminationPlacements([{ rank: 1 }], []), [{ rank: 1 }]);
+  });
+
+  test('默认 initMatchExtra 遵守 defaultMatchTimeFromEvent 与 defaultDurationMinutes', () => {
+    const base = {
+      meta: {
+        sportFormat: 'duration_test',
+        sportKey: 'duration_test',
+        supportsLiveScore: false,
+        supportsMatchData: true,
+        supportsRedraw: true,
+        allowsDraw: false,
+      },
+      rules: {
+        defaultPresetKey: 'default',
+        defaultRules: () => ({}),
+        normalizeRules: input => input,
+        formatRules: () => '默认规则',
+      },
+      standings: { computeTable: () => [] },
+      view: { eventFormMode: 'duration' },
+    };
+    const noInherit = createSportAdapter({
+      ...base,
+      meta: {
+        ...base.meta,
+        defaultMatchTimeFromEvent: false,
+        defaultDurationMinutes: () => 45,
+      },
+    });
+    assert.deepEqual(noInherit.matchLifecycle.initMatchExtra({
+      startTime: '2026-10-20T10:00:00Z', rules: {}, format: 'round_robin',
+    }), { matchTime: null, durationMinutes: 45 });
+
+    const inherit = createSportAdapter({
+      ...base,
+      meta: { ...base.meta, defaultMatchTimeFromEvent: true, defaultDurationMinutes: () => 60 },
+    });
+    assert.deepEqual(inherit.matchLifecycle.initMatchExtra({
+      startTime: '2026-10-20T10:00:00Z', rules: {}, format: 'round_robin',
+    }), { matchTime: '2026-10-20T10:00:00Z', durationMinutes: 60 });
   });
 
   test('team-event-service.js 已彻底消除运动硬编码与旧足球模块直连', () => {

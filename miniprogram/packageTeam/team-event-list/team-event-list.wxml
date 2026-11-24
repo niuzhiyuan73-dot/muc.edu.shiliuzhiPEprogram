@@ -10,7 +10,11 @@
   <!-- 建赛表单：赛制与规则一旦建库就不再变，所以放在创建时选 -->
   <football-event-form wx:if="{{creating && isFootball}}" submitting="{{submitting}}"
     server-error="{{noticeError ? notice : ''}}" bindsubmit="onFootballSubmit" bindcancel="onCloseCreate" />
-  <view wx:if="{{creating && !isFootball}}" class="card">
+  <view wx:if="{{creating && eventFormMode === 'unsupported'}}" class="card">
+    <view class="card-title">暂不支持建赛</view>
+    <view class="field-note">当前协会尚未声明可用建赛表单，请联系协会负责人或平台管理员。</view>
+  </view>
+  <view wx:if="{{creating && !isFootball && eventFormMode !== 'unsupported'}}" class="card">
     <view class="card-title">{{isCollegeCup ? '发起学院赛' : '新建赛事'}}</view>
     <view wx:if="{{isCollegeCup}}" class="field-note">本赛事为石榴籽杯学院赛：一院一队，由学院负责人以本院代表队报名，比赛规则与普通赛事相同。</view>
     <input
@@ -25,12 +29,13 @@
         <view class="picker">{{formatOptions[formatIndex].label}}</view>
       </picker>
     </view>
-    <view class="field">
+    <view wx:if="{{presetOptions.length > 0}}" class="field">
       <view class="field-label">规则</view>
       <picker mode="selector" range="{{presetOptions}}" range-key="label" value="{{presetIndex}}" bindchange="onPickPreset">
         <view class="picker">{{presetOptions[presetIndex].label}}</view>
       </picker>
     </view>
+    <view wx:else class="field-note">该运动尚未声明规则预设，暂不能从本页建赛。</view>
     <view wx:if="{{formatOptions[formatIndex].value === 'single_elim'}}" class="field">
       <view class="field-label">5–8 名排位</view>
       <switch checked="{{placementTop8}}" bindchange="onTogglePlacement" />
@@ -41,7 +46,7 @@
     <view class="field-note">规则在创建时固化，开赛后不再变更；要改规则请新建赛事。</view>
     <view class="create-actions">
       <view class="btn btn-ghost" bindtap="onCloseCreate">取消</view>
-      <view class="btn btn-primary {{submitting ? 'is-disabled' : ''}}" bindtap="onSubmitCreate">
+      <view class="btn btn-primary {{submitting || presetOptions.length === 0 ? 'is-disabled' : ''}}" bindtap="onSubmitCreate">
         {{submitting ? '提交中…' : '创建'}}
       </view>
     </view>

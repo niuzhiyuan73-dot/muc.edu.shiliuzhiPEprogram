@@ -1,0 +1,65 @@
+/*
+ * 协会主题变量（自动生成，请勿手改）
+ * 源：src/shared/associations/ 的协会插件 theme
+ * 生成：node tools/gen-assoc-theme.js
+ */
+
+.assoc-pkb {
+  --color-primary: #1565C0;
+  --color-primary-dark: #0D47A1;
+  --color-primary-light: #E3F0FB;
+  --color-accent: #FF7A45;
+  --brand-color: #1565C0;
+  --brand-dark: #0D47A1;
+  --brand-soft: #E3F0FB;
+}
+
+.assoc-tt {
+  --color-primary: #004D40;
+  --color-primary-dark: #00332B;
+  --color-primary-light: #E0F0EC;
+  --color-accent: #C9A227;
+  --brand-color: #004D40;
+  --brand-dark: #00332B;
+  --brand-soft: #E0F0EC;
+}
+
+.assoc-bd {
+  --color-primary: #6A1B9A;
+  --color-primary-dark: #4A148C;
+  --color-primary-light: #F3E8F7;
+  --color-accent: #F2994A;
+  --brand-color: #6A1B9A;
+  --brand-dark: #4A148C;
+  --brand-soft: #F3E8F7;
+}
+
+.assoc-tn {
+  --color-primary: #2E7D32;
+  --color-primary-dark: #1B5E20;
+  --color-primary-light: #E8F5E9;
+  --color-accent: #C6D93B;
+  --brand-color: #2E7D32;
+  --brand-dark: #1B5E20;
+  --brand-soft: #E8F5E9;
+}
+
+.assoc-bk {
+  --color-primary: #E65100;
+  --color-primary-dark: #BF360C;
+  --color-primary-light: #FFF3E0;
+  --color-accent: #F9A825;
+  --brand-color: #E65100;
+  --brand-dark: #BF360C;
+  --brand-soft: #FFF3E0;
+}
+
+.assoc-fb {
+  --color-primary: #0D6B45;
+  --color-primary-dark: #08492F;
+  --color-primary-light: #E7F3EC;
+  --color-accent: #D4AF37;
+  --brand-color: #0D6B45;
+  --brand-dark: #08492F;
+  --brand-soft: #E7F3EC;
+}

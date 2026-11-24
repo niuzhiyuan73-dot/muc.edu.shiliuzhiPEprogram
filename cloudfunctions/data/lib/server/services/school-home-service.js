@@ -85,8 +85,10 @@ async function getSchoolHomeSummary(payload = {}, ctx) {
   // 客户端历史上传的是 announcementLimit（展示条数），服务端只认
   // announcementFetchLimit 会把首屏放大到 50 条完整正文再前端截断。
   // 两个名字都兼容，默认只取首屏需要的 2 条；显式 fetchLimit 仍可放大。
+  // ?? 的语义：只有 announcementFetchLimit 为 null/缺省时才回退到
+  // announcementLimit；显式传 0/负数仍交给 clampInt 夹到下限 1。
   const announcementPageLimit = clampInt(
-    payload.announcementFetchLimit !== undefined ? payload.announcementFetchLimit : payload.announcementLimit,
+    payload.announcementFetchLimit ?? payload.announcementLimit,
     DEFAULT_ANNOUNCEMENT_LIMIT, 1, ANNOUNCEMENT_PAGE_LIMIT,
   );
   const eventLimit = clampInt(payload.eventLimit, DEFAULT_EVENT_LIMIT, 1, 100);

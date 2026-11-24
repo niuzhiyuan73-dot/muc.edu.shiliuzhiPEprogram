@@ -161,6 +161,19 @@ test('发布：仅管理员可发，会员被拒；发布落在报名中', async
   assert.equal(byAdmin.event.canManage, true);
 });
 
+test('学院赛发布校验标题、说明与地点', async () => {
+  const repo = fixture();
+  const before = await repo.collegeEvents.list();
+  for (const field of ['title', 'description', 'location']) {
+    const result = await call(repo, 'publishCollegeEvent', {
+      requestId: `ugc_${field}`, ...valid({ [field]: '赌博网站推广' }),
+    });
+    assert.equal(result.ok, false);
+    assert.match(result.message, /敏感/);
+  }
+  assert.deepEqual(await repo.collegeEvents.list(), before);
+});
+
 test('发布：请求编号幂等，改内容重发被拒；非法编号与非法表单被拒', async () => {
   const repo = fixture();
   const first = await publish(repo, 'r1');

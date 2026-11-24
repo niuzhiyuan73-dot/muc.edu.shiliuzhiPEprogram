@@ -28,6 +28,17 @@ function isNonEmptyString(value) {
   return typeof value === 'string' && value.trim().length > 0;
 }
 
+function validStatColumns(columns) {
+  if (!Array.isArray(columns)) return false;
+  const keys = new Set();
+  for (const column of columns) {
+    if (!column || !isNonEmptyString(column.key) || !isNonEmptyString(column.label)
+      || keys.has(column.key)) return false;
+    keys.add(column.key);
+  }
+  return true;
+}
+
 /**
  * 校验 SportAdapter 是否满足六组标准契约。
  *
@@ -71,6 +82,22 @@ function validateSportAdapter(adapter) {
       return { ok: false, message: `rules.${fnName} 必须为函数` };
     }
   }
+  if (rules.presetOptions !== undefined) {
+    if (!Array.isArray(rules.presetOptions) || rules.presetOptions.some(
+      option => !option || !isNonEmptyString(option.key) || !isNonEmptyString(option.label),
+    )) {
+      return { ok: false, message: 'rules.presetOptions 必须为包含 key 与 label 的数组' };
+    }
+    if (new Set(rules.presetOptions.map(option => option.key)).size !== rules.presetOptions.length) {
+      return { ok: false, message: 'rules.presetOptions 的 key 不得重复' };
+    }
+    // 默认预设必须真的出现在选项里，否则建赛页会静默选中 presets[0]，
+    // 插件声明的“默认规则”与用户实际拿到的规则不一致且无任何提示。
+    if (rules.presetOptions.length > 0
+      && !rules.presetOptions.some(option => option.key === rules.defaultPresetKey)) {
+      return { ok: false, message: 'rules.defaultPresetKey 必须出现在 presetOptions 中' };
+    }
+  }
 
   for (const fnName of ['canRecord', 'canSeePending', 'canSetLineup', 'canEditSchedule']) {
     if (!isFn(permissions[fnName])) {
@@ -96,13 +123,14 @@ function validateSportAdapter(adapter) {
   if (!isNonEmptyString(view.eventFormMode) || typeof view.recordHintText !== 'string') {
     return { ok: false, message: 'view 缺少 eventFormMode 或 recordHintText' };
   }
-  if (!isFn(view.recordPageUrl) || !isFn(view.liveScorePageUrl) || !Array.isArray(view.statColumns)) {
-    return { ok: false, message: 'view 缺少 recordPageUrl / liveScorePageUrl / statColumns' };
+  if (!isFn(view.recordPageUrl) || !isFn(view.liveScorePageUrl)) {
+    return { ok: false, message: 'view 缺少 recordPageUrl / liveScorePageUrl' };
   }
-  if (view.profileStatColumns !== undefined) {
-    if (!Array.isArray(view.profileStatColumns)
-      || view.profileStatColumns.some(col => !col || !isNonEmptyString(col.key) || !isNonEmptyString(col.label))) {
-      return { ok: false, message: 'view.profileStatColumns 必须为包含 key 与 label 的数组' };
+  for (const name of ['statColumns', 'profileStatColumns', 'playerStatColumns']) {
+    const columns = view[name];
+    if (name !== 'statColumns' && columns === undefined) continue;
+    if (!validStatColumns(columns)) {
+      return { ok: false, message: `view.${name} 必须为包含唯一 key 与有效 label 的数组` };
     }
   }
 
@@ -143,7 +171,18 @@ function createSportAdapter(spec) {
     ...(spec.permissions || {}),
   });
   const matchLifecycle = Object.freeze({
-    initMatchExtra: event => ({ matchTime: (event && event.startTime) || null }),
+    initMatchExtra: (event) => {
+      const extra = {
+        matchTime: meta.defaultMatchTimeFromEvent === false
+          ? null
+          : ((event && event.startTime) || null),
+      };
+      const durationOf = meta.defaultDurationMinutes;
+      if (typeof durationOf === 'function') {
+        extra.durationMinutes = durationOf(event && event.rules, event && event.format);
+      }
+      return extra;
+    },
     hasActivityOrDraft: match => Boolean(match && (
       match.status === 'live'
       || match.liveScore

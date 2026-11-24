@@ -33,6 +33,10 @@ const basketballAdapter = createSportAdapter({
   },
   rules: {
     defaultPresetKey: basketball.DEFAULT_PRESET_KEY,
+    presetOptions: Object.keys(basketball.RULE_PRESETS).map(key => ({
+      key,
+      label: basketball.RULE_PRESETS[key].label,
+    })),
     defaultRules: () => normalizeBasketball({ presetKey: basketball.DEFAULT_PRESET_KEY }),
     normalizeRules: normalizeBasketball,
     formatRules: basketball.formatBasketballRules,
@@ -45,7 +49,18 @@ const basketballAdapter = createSportAdapter({
     liveScorePageUrl: matchId => `/packageTeam/team-live-score/team-live-score?matchId=${encodeURIComponent(matchId)}`,
     statColumns: Object.freeze([
       Object.freeze({ key: 'points', label: '得分' }),
+      Object.freeze({ key: 'rebounds', label: '篮板' }),
+      Object.freeze({ key: 'assists', label: '助攻' }),
+      Object.freeze({ key: 'steals', label: '抢断' }),
+      Object.freeze({ key: 'blocks', label: '盖帽' }),
+      Object.freeze({ key: 'turnovers', label: '失误' }),
       Object.freeze({ key: 'fouls', label: '犯规' }),
+    ]),
+    playerStatColumns: Object.freeze([
+      Object.freeze({ key: 'points', label: '得分' }),
+      Object.freeze({ key: 'pointsPerGame', label: '场均' }),
+      Object.freeze({ key: 'rebounds', label: '篮板' }),
+      Object.freeze({ key: 'assists', label: '助攻' }),
     ]),
     profileStatColumns: Object.freeze([
       Object.freeze({ key: 'points', label: '得分' }),

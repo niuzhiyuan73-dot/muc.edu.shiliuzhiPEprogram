@@ -52,8 +52,20 @@ App({
     // 故意不 await：启动流程不该被一次网络往返拖住。校正结果落在
     // globalData 上，下一次页面 onShow 读全局登录态时就会体现出来。
     // 定协会排在后面串起来（不是并发）：当前协会是模块级单例，翻协会读要
-    // 一个一个来，若与 refreshSession 的读并发，会互相读到对方切到的协会
-    this.refreshSession().then(() => this.syncAssociationForUser());
+    // 一个一个来，若与 refreshSession 的读并发，会互相读到对方切到的协会。
+    // 返回这条链：小程序框架忽略返回值，无副作用；测试/宿主可 await 真实
+    // 落定，不必用固定跳数猜测异步链何时跑完。
+    this._startupTask = this.refreshSession().then(() => this.syncAssociationForUser());
+    return this._startupTask;
+  },
+
+  /**
+   * 等待最近一次切协会触发的角色重解落定。
+   * 给测试与需要同步点的宿主一个确定的等待对象，替代固定跳数轮询。
+   * @returns {Promise<void>}
+   */
+  whenViewerRoleReady() {
+    return this._viewerRoleTask || Promise.resolve();
   },
 
   /**
@@ -226,7 +238,8 @@ App({
    */
   setAssociation(id) {
     const next = this.applyAssociation(id);
-    if (this.globalData.userInfo) this.refreshViewerRole();
+    // 记录重解 Promise 供 whenViewerRoleReady() 等待；切换本身仍不阻塞。
+    if (this.globalData.userInfo) this._viewerRoleTask = this.refreshViewerRole();
     return next;
   },
 

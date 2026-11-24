@@ -72,8 +72,9 @@ describe('P-01 协会插件注册表与声明完整性', () => {
       },
       sportType: SPORT_TYPE.TEAM,
       teamSportFormat: 'volleyball6',
+      rulesKey: 'volleyballRules',
       // 团队运动必须带规则快照，否则契约拒绝（P-01 修复后）
-      volleyballRules: { sets: 3, pointsPerSet: 25 },
+      volleyballRules: { sportFormat: 'volleyball6', sets: 3, pointsPerSet: 25 },
       capabilities: [CAPABILITY.SPACE, CAPABILITY.TEAMS, CAPABILITY.MY_TEAMS, CAPABILITY.EVENTS],
       status: ASSOCIATION_STATUS.ACTIVE,
     };
@@ -110,13 +111,35 @@ describe('P-01 主题单一真值与代码边界守卫', () => {
 
     const team = {
       ...base, sportType: SPORT_TYPE.TEAM,
-      teamSportFormat: 'handball7', handballRules: { periods: 2 },
+      teamSportFormat: 'handball7', rulesKey: 'handballRules', handballRules: { sportFormat: 'handball7', periods: 2 },
     };
     assert.equal(validateAssociationPlugin(team).ok, true);
     assert.match(validateAssociationPlugin({ ...team, teamSportFormat: undefined }).message, /teamSportFormat/);
     assert.match(validateAssociationPlugin({ ...team, handballRules: undefined }).message, /规则快照/);
     // 动态注册也走同一契约：无规则快照的团队插件不得混入注册表
     assert.throws(() => registerAssociationPlugin({ ...team, id: 'bad_team', handballRules: undefined }), /规则快照/);
+  });
+
+  test('契约拒绝非法 id、重复 sportKey 与空规则快照', () => {
+    const base = {
+      id: 'vb_contract', name: '测试排球', shortName: '排球', sportName: '排球',
+      logoGlyph: '排', logoIcon: '/assets/assoc/vb.png', sportKey: 'volleyball_contract',
+      theme: { primary: '#123456', primaryDark: '#123456', primaryLight: '#abcdef', accent: '#123456' },
+      sportType: SPORT_TYPE.TEAM, teamSportFormat: 'volleyball6',
+      rulesKey: 'volleyballRules', volleyballRules: { sportFormat: 'volleyball6', sets: 3, pointsPerSet: 25 },
+      capabilities: [CAPABILITY.SPACE, CAPABILITY.TEAMS], status: ASSOCIATION_STATUS.ACTIVE,
+    };
+    assert.match(validateAssociationPlugin({ ...base, id: '../evil id' }).message, /id 非法/);
+    assert.match(validateAssociationPlugin({ ...base, sportKey: 'Bad Sport' }).message, /sportKey 非法/);
+    assert.throws(() => registerAssociationPlugin({ ...base, sportKey: 'basketball' }), /sportKey 已存在/);
+    assert.match(validateAssociationPlugin({ ...base, volleyballRules: {} }).message, /规则快照/);
+    assert.match(validateAssociationPlugin({ ...base, rulesKey: 'fooRules' }).message, /规则快照/);
+    assert.throws(() => registerAssociationPlugin({
+      ...base, rulesKey: 'basketballRules', basketballRules: getAssociation('bk').basketballRules,
+    }), /规则快照 sportFormat/);
+    assert.match(validateAssociationPlugin({
+      ...base, volleyballRules: { sets: 3 },
+    }).message, /规则快照 sportFormat/);
   });
 
   test('宿主页面根容器挂载内联主题变量，动态协会免手改 app.wxss 也能拿到主题色', () => {
@@ -134,7 +157,7 @@ describe('P-01 主题单一真值与代码边界守卫', () => {
       id: 'vb_wxss_test', name: '排球', shortName: '排球', sportName: '排球',
       logoGlyph: '排', logoIcon: '/assets/assoc/vb.png', sportKey: 'volleyball_test',
       theme: { primary: '#1E88E5', primaryDark: '#1565C0', primaryLight: '#E3F2FD', accent: '#FDD835' },
-      sportType: SPORT_TYPE.TEAM, teamSportFormat: 'volleyball6', volleyballRules: { sets: 3 },
+      sportType: SPORT_TYPE.TEAM, teamSportFormat: 'volleyball6', rulesKey: 'volleyballRules', volleyballRules: { sportFormat: 'volleyball6', sets: 3 },
       capabilities: [CAPABILITY.SPACE], status: ASSOCIATION_STATUS.ACTIVE,
     });
     try {
@@ -147,12 +170,14 @@ describe('P-01 主题单一真值与代码边界守卫', () => {
     assert.match(branding.themeStyleOf('pkb'), /--color-primary:#1565C0;/);
   });
 
-  test('app.wxss 中 .assoc-<id> 与协会插件 theme 逐色一致，branding.themeStyleOf 输出一致', () => {
-    const wxss = fs.readFileSync(path.join(ROOT, 'miniprogram', 'app.wxss'), 'utf8');
+  test('生成的 .assoc-<id> 与协会插件 theme 逐色一致，branding.themeStyleOf 输出一致', () => {
+    const appWxss = fs.readFileSync(path.join(ROOT, 'miniprogram', 'app.wxss'), 'utf8');
+    assert.match(appWxss, /@import\s+"styles\/assoc-theme\.wxss"/, 'app.wxss 必须引入生成的主题样式');
+    const wxss = fs.readFileSync(path.join(ROOT, 'miniprogram', 'styles', 'assoc-theme.wxss'), 'utf8');
     for (const assoc of allAssociations()) {
       const re = new RegExp(`\\.assoc-${assoc.id}\\s*\\{([\\s\\S]*?)\\}`, 'i');
       const match = wxss.match(re);
-      assert.ok(match, `app.wxss 缺少 .assoc-${assoc.id}`);
+      assert.ok(match, `assoc-theme.wxss 缺少 .assoc-${assoc.id}`);
       const body = match[1].toLowerCase();
       assert.ok(body.includes(`--color-primary: ${assoc.theme.primary.toLowerCase()};`), `${assoc.id} primary 不一致`);
       assert.ok(body.includes(`--color-primary-dark: ${assoc.theme.primaryDark.toLowerCase()};`), `${assoc.id} primaryDark 不一致`);

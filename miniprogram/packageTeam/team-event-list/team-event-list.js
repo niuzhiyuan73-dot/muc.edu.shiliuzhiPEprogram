@@ -17,20 +17,14 @@ const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
-const { RULE_PRESETS, DEFAULT_PRESET_KEY } = require('../../shared/utils/basketball-rules.js');
-const { getSportAdapterFor } = require('../../shared/sports/registry.js');
 const { CUP_MODE } = require('../../shared/utils/constants.js');
+const { eventFormConfigOf } = require('../services/team-event-form-view.js');
 
 /** 首版支持的赛制：与 team-event-service 的 FORMATS 保持一致 */
 const FORMAT_OPTIONS = [
   { value: 'single_elim', label: '单败淘汰' },
   { value: 'round_robin', label: '循环赛' },
 ];
-
-const PRESET_OPTIONS = Object.keys(RULE_PRESETS).map(key => ({
-  value: key,
-  label: RULE_PRESETS[key].label,
-}));
 
 function nextRequestId() {
   return `tev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
@@ -47,12 +41,13 @@ Page({
     /** 建赛表单 */
     creating: false,
     isFootball: false,
+    eventFormMode: '',
     submitting: false,
     newName: '',
     formatOptions: FORMAT_OPTIONS,
     formatIndex: 0,
-    presetOptions: PRESET_OPTIONS,
-    presetIndex: Math.max(0, PRESET_OPTIONS.findIndex(item => item.value === DEFAULT_PRESET_KEY)),
+    presetOptions: [],
+    presetIndex: 0,
     /** 单败淘汰是否加打 5–8 名排位（8 队及以上生效） */
     placementTop8: false,
     notice: '',
@@ -80,10 +75,17 @@ Page({
     const association = associationScope.getAssociation();
     this.scope = { schoolId, association };
     const cupMode = query.cupMode === CUP_MODE.COLLEGE ? CUP_MODE.COLLEGE : '';
-    this.setData({ themeClass: currentThemeClass(),
-      isFootball: getSportAdapterFor(association)?.view.eventFormMode === 'football',
+    const form = eventFormConfigOf(association);
+    const presetIndex = Math.max(0, form.presets.findIndex(item => item.key === form.defaultPresetKey));
+    this.setData({
+      themeClass: currentThemeClass(),
+      eventFormMode: form.mode,
+      isFootball: form.mode === 'football',
+      presetOptions: form.presets,
+      presetIndex,
       cupMode,
-      isCollegeCup: cupMode === CUP_MODE.COLLEGE });
+      isCollegeCup: cupMode === CUP_MODE.COLLEGE,
+    });
     // create=1：从杯赛页「发起学院赛」直接落在建赛面板上，少点一次
     if (String(query.create || '') === '1') {
       this.setData({ creating: true });
@@ -143,11 +145,15 @@ Page({
     this.setData({ submitting: true, notice: '', noticeError: false });
     try {
       const format = FORMAT_OPTIONS[this.data.formatIndex] || FORMAT_OPTIONS[0];
-      const preset = PRESET_OPTIONS[this.data.presetIndex] || PRESET_OPTIONS[0];
+      const preset = this.data.presetOptions[this.data.presetIndex];
+      if (!preset) {
+        this.setData({ submitting: false, notice: '该运动暂无可用规则预设，请使用专属建赛表单', noticeError: true });
+        return undefined;
+      }
       const result = await space.forScope(this.scope).createTeamEvent({
         name: this.data.newName,
         format: format.value,
-        presetKey: preset.value,
+        presetKey: preset.key,
         requestId: nextRequestId(),
         ...(format.value === 'single_elim' && this.data.placementTop8 ? { placementMode: 'top8' } : {}),
         // 普通赛事不带这个字段：请求体里没有杯赛标记，才不会被误读成学院赛

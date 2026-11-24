@@ -933,6 +933,10 @@ function createSchoolHandlers({ claimKey }) {
       }
 
       const schoolId = current.primarySchoolId || ctx.schoolId || '';
+      if (schoolId !== targetSchoolId
+        || Number(current.meetRoleRevision || 0) !== Number(snapshot.meetRoleRevision || 0)) {
+        return { ok: false, deactivated: false, message: '学校归属或运动会授权已变化，请刷新后重试注销' };
+      }
       const memberKey = schoolId ? schoolMemberKey(ctx.actorId, schoolId) : '';
       const roleKey = schoolId ? schoolRoleKey(ctx.actorId, schoolId) : '';
 
@@ -956,6 +960,25 @@ function createSchoolHandlers({ claimKey }) {
           const mbKey = schoolMembershipKey(ctx.actorId, { schoolId, association: assoc.id });
           const mb = await tx.memberships.getById(mbKey);
           if (mb && mb.status === 'active') memberships.push(mb);
+        }
+      }
+
+      // 同一集合的所有点读必须先于该集合首次写入。
+      const leadsToRevoke = [];
+      for (const lead of activeLeads) {
+        const key = meetCollegeLeadKey(schoolId, lead.collegeId);
+        const fresh = await tx.sportsMeetCollegeLeads.getById(key);
+        if (fresh && fresh.schoolId === schoolId && fresh.userId === ctx.actorId
+          && fresh.status === MEET_COLLEGE_LEAD_STATUS.ACTIVE) {
+          leadsToRevoke.push({ key, doc: fresh });
+        }
+      }
+      const meetsToRevoke = [];
+      for (const meet of activeChiefMeets) {
+        const fresh = await tx.sportsMeets.getById(meet._id);
+        if (fresh && fresh.schoolId === schoolId && fresh.chiefJudge?.userId === ctx.actorId
+          && fresh.chiefJudge.status === 'active') {
+          meetsToRevoke.push({ key: meet._id, doc: fresh });
         }
       }
 
@@ -1013,41 +1036,28 @@ function createSchoolHandlers({ claimKey }) {
         });
       }
 
-      // 撤销运动会专用授权：学院部长是「一院一名」的常设角色，不撤销会挡住
-      // 新任命；总裁判随届，注销后也不该继续挂在在任名单上。
-      for (const lead of activeLeads) {
-        const key = meetCollegeLeadKey(schoolId, lead.collegeId);
-        const freshLead = await tx.sportsMeetCollegeLeads.getById(key);
-        if (freshLead && freshLead.schoolId === schoolId
-          && freshLead.userId === ctx.actorId
-          && freshLead.status === MEET_COLLEGE_LEAD_STATUS.ACTIVE) {
-          await tx.sportsMeetCollegeLeads.set(key, {
-            ...freshLead,
-            status: MEET_COLLEGE_LEAD_STATUS.REVOKED,
+      // 保留已撤销的运动会授权记录，供管理端查阅。
+      for (const { key, doc } of leadsToRevoke) {
+        await tx.sportsMeetCollegeLeads.set(key, {
+          ...doc,
+          status: MEET_COLLEGE_LEAD_STATUS.REVOKED,
+          revokedBy: ctx.actorId,
+          revokedAt: nowIso,
+          updatedAt: nowIso,
+        });
+      }
+      for (const { key, doc } of meetsToRevoke) {
+        await tx.sportsMeets.set(key, {
+          ...doc,
+          chiefJudge: {
+            ...doc.chiefJudge,
+            status: 'revoked',
             revokedBy: ctx.actorId,
             revokedAt: nowIso,
-            updatedAt: nowIso,
-          });
-        }
-      }
-      for (const meet of activeChiefMeets) {
-        const freshMeet = await tx.sportsMeets.getById(meet._id);
-        if (freshMeet && freshMeet.schoolId === schoolId
-          && freshMeet.chiefJudge
-          && freshMeet.chiefJudge.userId === ctx.actorId
-          && freshMeet.chiefJudge.status === 'active') {
-          await tx.sportsMeets.set(meet._id, {
-            ...freshMeet,
-            chiefJudge: {
-              ...freshMeet.chiefJudge,
-              status: 'revoked',
-              revokedBy: ctx.actorId,
-              revokedAt: nowIso,
-            },
-            version: Number(freshMeet.version || 1) + 1,
-            updatedAt: nowIso,
-          });
-        }
+          },
+          version: Number(doc.version || 1) + 1,
+          updatedAt: nowIso,
+        });
       }
 
       await tx.audit.append({

@@ -22,6 +22,8 @@ const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { buildSchoolContext } = require('../src/server/services/school-context.js');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const { appointMeetChiefJudge } = require('../src/server/services/meet-service.js');
+const { grantMeetCollegeLead } = require('../src/server/services/meet-college-lead-service.js');
 const { getSchoolHomeSummary } = require('../src/server/services/school-home-service.js');
 const { listSchoolMatches } = require('../src/server/services/school-match-service.js');
 const { finishSchoolEvent } = require('../src/server/services/school-event-service.js');
@@ -507,13 +509,15 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
       _id: meetCollegeLeadKey('muc', 'c01'), schoolId: 'muc', collegeId: 'c01',
       userId: 'u_bye', status: 'active', grantedAt: '2026-09-01T00:00:00.000Z',
     });
-    seed.sportsMeets.push({
-      _id: 'meet_deact', schoolId: 'muc', meetId: 'meet_deact', name: '注销测试运动会',
-      status: 'running', version: 1,
-      chiefJudge: { userId: 'u_bye', schoolId: 'muc', meetId: 'meet_deact', status: 'active' },
-    });
+    for (const meetId of ['meet_deact', 'meet_deact_2']) {
+      seed.sportsMeets.push({
+        _id: meetId, schoolId: 'muc', meetId, name: '注销测试运动会',
+        status: 'running', version: 1,
+        chiefJudge: { userId: 'u_bye', schoolId: 'muc', meetId, status: 'active' },
+      });
+    }
 
-    const repo = createSchoolMemoryRepo(seed);
+    const repo = createSchoolMemoryRepo(seed, { strict: true });
     // 缺 confirm 拒绝
     const unconfirmed = (await handleSchoolRequest({
       protocolVersion: 2,
@@ -572,8 +576,10 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
 
     const leadAfter = await repo.sportsMeetCollegeLeads.getById(meetCollegeLeadKey('muc', 'c01'));
     assert.equal(leadAfter.status, 'revoked', '注销必须撤销在任学院部长');
-    const meetAfter = await repo.sportsMeets.getById('meet_deact');
-    assert.equal(meetAfter.chiefJudge.status, 'revoked', '注销必须撤销在任总裁判');
+    for (const meetId of ['meet_deact', 'meet_deact_2']) {
+      const meetAfter = await repo.sportsMeets.getById(meetId);
+      assert.equal(meetAfter.chiefJudge.status, 'revoked', '注销必须撤销每一届在任总裁判');
+    }
 
     const histMatch = await repo.matches.getById('m_hist_1');
     assert.ok(histMatch, '历史比赛账本必须保留');
@@ -588,6 +594,59 @@ describe('6. 合规闭环：脱敏、UGC 内容安全与账号注销', () => {
       payload: { patch: { nickName: '新名字' } },
     }, { repo, openId: 'op_bye' })).data;
     assert.equal(afterWrite.ok, false);
+  });
+
+  test('注销清单读完后新增学院部长或总裁判任命，拒绝本次注销并可重试', async () => {
+    const schoolId = 'muc';
+    const meetId = 'meet_deact_race';
+    const userId = 'u_deact_race';
+    for (const authorization of [
+      { collection: 'sportsMeets', appoint: appointMeetChiefJudge, payload: { userId } },
+      { collection: 'sportsMeetCollegeLeads', appoint: grantMeetCollegeLead, payload: { userId, collegeId: 'c01' } },
+    ]) {
+      const openId = `op_deact_race_${authorization.collection}`;
+      const seed = createSchoolDemoSeed();
+      seed.users.push({ _id: userId, openId, nickName: '注销测试', platformStatus: 'active',
+        platformRole: 'member', primarySchoolId: schoolId });
+      seed.schoolMembers.push({ _id: schoolMemberKey(userId, schoolId), userId, schoolId,
+        collegeId: 'c01', status: 'active' });
+      seed.sportsMeets = [...(seed.sportsMeets || []), {
+        _id: meetId, schoolId, meetId, name: '注销竞态运动会', status: 'running', version: 1,
+      }];
+      const repo = createSchoolMemoryRepo(seed, { strict: true });
+      const ctx = await buildMeetContext({ repo, actorId: 'demo_muc_admin', scope: { schoolId, meetId } });
+      const collection = repo[authorization.collection];
+      const read = collection.listBySchool.bind(collection);
+      collection.listBySchool = async id => {
+        const rows = await read(id);
+        collection.listBySchool = read;
+        const result = await authorization.appoint(authorization.payload, ctx);
+        assert.equal(result.ok, true, result.message || result.data?.message);
+        return rows;
+      };
+      const deactivate = async now => {
+        const response = await handleSchoolRequest({
+          protocolVersion: 2, schoolId, association: 'pkb',
+          action: 'deactivateMySchoolAccount', payload: { confirm: true },
+        }, { repo, openId, now });
+        assert.equal(response.ok, true, response.message);
+        return response.data;
+      };
+
+      const first = await deactivate(new Date('2026-11-24T10:00:00Z'));
+      assert.equal(first.deactivated, false);
+      assert.match(first.message, /授权已变化/);
+      assert.equal((await repo.users.getById(userId)).platformStatus, 'active');
+
+      const retry = await deactivate(new Date('2026-11-24T10:01:00Z'));
+      assert.equal(retry.deactivated, true, retry.message);
+      const status = authorization.collection === 'sportsMeets'
+        ? (await repo.sportsMeets.getById(meetId)).chiefJudge.status
+        : (await repo.sportsMeetCollegeLeads.getById(meetCollegeLeadKey(schoolId, 'c01'))).status;
+      assert.equal(status, 'revoked');
+      const after = await authorization.appoint(authorization.payload, ctx);
+      assert.equal(after.ok, false, '注销后不能再任命');
+    }
   });
 
   test('校级管理员不可自助注销，避免并发下学校失去最后审批人', async () => {
@@ -735,6 +794,22 @@ test('UGC_FAIL_CLOSED=on 时，检测器返回非 0 errCode 必须拦截', async
   }
 });
 
+test('UGC review 在失败关闭时等待人工复核，默认允许', async (t) => {
+  const prev = process.env.UGC_FAIL_CLOSED;
+  t.after(() => {
+    if (prev === undefined) delete process.env.UGC_FAIL_CLOSED;
+    else process.env.UGC_FAIL_CLOSED = prev;
+  });
+  setUgcChecker(async () => ({ errCode: 0, result: { suggest: 'review' } }));
+  process.env.UGC_FAIL_CLOSED = 'on';
+  const closed = await checkUgcContent('测试说明');
+  assert.equal(closed.ok, false);
+  assert.match(closed.message, /人工复核/);
+
+  delete process.env.UGC_FAIL_CLOSED;
+  assert.equal((await checkUgcContent('测试说明')).ok, true);
+});
+
 test('注册昵称接入 UGC：违禁昵称不落账号', async () => {
   // 用内置违禁词而不是自定义 checker：handleSchoolRequest 走云端镜像模块，
   // 与测试里 setUgcChecker 的 src 模块不是同一个实例；内置词两边都有。
@@ -757,10 +832,17 @@ test('首页 BFF 兼容 announcementLimit，首屏只取展示所需条数', asy
   }));
   const repo = createSchoolMemoryRepo(seed);
   const ctx = await buildMeetContext({ repo, actorId: 'demo_muc_member', scope: { schoolId: 'muc' } });
-  const res = await getSchoolHomeSummary({ announcementLimit: 2 }, ctx);
-  assert.equal(res.data.ok, true);
-  assert.equal(res.data.announcements.announcements.length, 2);
-  assert.equal(res.data.announcements.total, 5);
+  for (const [payload, expected] of [
+    [{}, 2],
+    [{ announcementLimit: 3 }, 3],
+    [{ announcementFetchLimit: null, announcementLimit: 3 }, 3],
+    [{ announcementFetchLimit: 4, announcementLimit: 3 }, 4],
+  ]) {
+    const res = await getSchoolHomeSummary(payload, ctx);
+    assert.equal(res.data.ok, true);
+    assert.equal(res.data.announcements.announcements.length, expected);
+    assert.equal(res.data.announcements.total, 5);
+  }
 });
 
 test('训练标题接入 UGC：违禁标题不落库', async () => {

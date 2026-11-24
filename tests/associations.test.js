@@ -188,14 +188,16 @@ test('branding —— 主题类名：已知协会 assoc-<id>，未知与空都�
   assert.strictEqual(NEUTRAL_BRAND.theme.primary.toLowerCase(), '#b23a2e');
 });
 
-test('app.wxss 的协会主题块与注册表镜像一致，JS 与 CSS 不许分叉', () => {
+test('生成的协会主题块与注册表镜像一致，JS 与 CSS 不许分叉', () => {
   const fs = require('node:fs');
-  const css = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'app.wxss'), 'utf8');
+  const appCss = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'app.wxss'), 'utf8');
+  const css = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'styles', 'assoc-theme.wxss'), 'utf8');
   const { NEUTRAL_BRAND } = require('../miniprogram/services/branding.js');
+  assert.ok(appCss.includes('@import "styles/assoc-theme.wxss"'), 'app.wxss 必须引入生成的主题样式');
 
   for (const a of activeAssociations()) {
     const block = css.match(new RegExp(`\\.assoc-${a.id}\\s*\\{([\\s\\S]*?)\\}`));
-    assert.ok(block, `app.wxss 里缺少 .assoc-${a.id}`);
+    assert.ok(block, `assoc-theme.wxss 里缺少 .assoc-${a.id}`);
     assert.ok(
       block[1].toLowerCase().includes(a.theme.primary.toLowerCase()),
       `.assoc-${a.id} 的 --color-primary 未与注册表的 ${a.theme.primary} 对齐`
@@ -203,7 +205,7 @@ test('app.wxss 的协会主题块与注册表镜像一致，JS 与 CSS 不许分
   }
 
   // 中性块的主色要与 NEUTRAL_BRAND 一致
-  const neutral = css.match(/\.assoc-neutral\s*\{([\s\S]*?)\}/);
+  const neutral = appCss.match(/\.assoc-neutral\s*\{([\s\S]*?)\}/);
   assert.ok(neutral, 'app.wxss 里缺少 .assoc-neutral');
   assert.ok(neutral[1].toLowerCase().includes(NEUTRAL_BRAND.theme.primary.toLowerCase()));
 });

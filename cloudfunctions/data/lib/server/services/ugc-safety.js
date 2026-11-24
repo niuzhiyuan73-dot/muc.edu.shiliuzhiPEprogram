@@ -102,7 +102,7 @@ async function checkUgcContent(fields, ctx = {}) {
       }
       // review（疑似）不是确定违规；默认放行并留痕，失败关闭模式下转人工前先拦。
       if (verdict && verdict.result && verdict.result.suggest === 'review') {
-        console.warn('[ugc-safety] 内容安全检测结果为 review，按当前策略放行');
+        console.warn('[ugc-safety] 内容安全检测结果为 review：', failClosed ? '等待人工复核' : '按当前策略放行');
         if (failClosed) {
           return { ok: false, code: 'UGC_UNAVAILABLE', message: '内容需要人工复核，请稍后重试' };
         }

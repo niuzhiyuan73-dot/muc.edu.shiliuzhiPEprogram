@@ -51,6 +51,10 @@ const TEAM_CAPABILITIES = Object.freeze([
 
 const VALID_CAPABILITIES = new Set(Object.values(CAPABILITY));
 const HEX_COLOR_RE = /^#[0-9a-fA-F]{6}$/;
+/** 协会 id / 运动标识会进主键、路由参数与 CSS 类名，只允许稳定的小写标识。 */
+const ASSOC_ID_RE = /^[a-z][a-z0-9_]{1,31}$/;
+const SPORT_KEY_RE = /^[a-z][a-z0-9_]{1,31}$/;
+const TEAM_SPORT_FORMAT_RE = /^[a-z][a-z0-9_]{1,31}$/;
 
 function baseRules() {
   return {
@@ -71,6 +75,7 @@ function teamRules(presetKey) {
   return {
     sportType: SPORT_TYPE.TEAM,
     teamSportFormat: 'basketball5',
+    rulesKey: 'basketballRules',
     capabilities: TEAM_CAPABILITIES.slice(),
     basketballRules: defaultRulesFor(presetKey),
   };
@@ -105,11 +110,18 @@ function validateAssociationPlugin(plugin) {
       return { ok: false, message: `协会插件缺少有效字段：${field}` };
     }
   }
+  if (!ASSOC_ID_RE.test(plugin.id)) {
+    return { ok: false, message: `协会插件 id 非法：${plugin.id}（只允许小写字母、数字、下划线，且以字母开头）` };
+  }
+  if (!SPORT_KEY_RE.test(plugin.sportKey)) {
+    return { ok: false, message: `协会插件 ${plugin.id} 的 sportKey 非法` };
+  }
   if (plugin.sportType !== SPORT_TYPE.RACKET && plugin.sportType !== SPORT_TYPE.TEAM) {
     return { ok: false, message: `协会插件 ${plugin.id} 的 sportType 非法` };
   }
   if (!Array.isArray(plugin.capabilities) || plugin.capabilities.length === 0
-    || plugin.capabilities.some(cap => !VALID_CAPABILITIES.has(cap))) {
+    || plugin.capabilities.some(cap => !VALID_CAPABILITIES.has(cap))
+    || new Set(plugin.capabilities).size !== plugin.capabilities.length) {
     return { ok: false, message: `协会插件 ${plugin.id} 的 capabilities 非法` };
   }
   if (plugin.status !== ASSOCIATION_STATUS.ACTIVE && plugin.status !== ASSOCIATION_STATUS.DISABLED) {
@@ -140,13 +152,21 @@ function validateAssociationPlugin(plugin) {
       return { ok: false, message: `协会插件 ${plugin.id} 的 ratedPairLimit 非法` };
     }
   } else {
-    if (typeof plugin.teamSportFormat !== 'string' || !plugin.teamSportFormat.trim()) {
-      return { ok: false, message: `协会插件 ${plugin.id} 缺少 teamSportFormat（团队运动必填）` };
+    if (typeof plugin.teamSportFormat !== 'string' || !TEAM_SPORT_FORMAT_RE.test(plugin.teamSportFormat)) {
+      return { ok: false, message: `协会插件 ${plugin.id} 缺少合法的 teamSportFormat（团队运动必填）` };
     }
-    const hasRuleSnapshot = Object.keys(plugin).some(key => key.endsWith('Rules')
-      && plugin[key] && typeof plugin[key] === 'object' && !Array.isArray(plugin[key]));
-    if (!hasRuleSnapshot) {
-      return { ok: false, message: `协会插件 ${plugin.id} 缺少规则快照（xxxRules，团队运动必填）` };
+    // 规则快照必须明确标识运动格式，避免把另一种运动的规则挂到当前协会。
+    if (typeof plugin.rulesKey !== 'string' || !plugin.rulesKey.endsWith('Rules')) {
+      return { ok: false, message: `协会插件 ${plugin.id} 缺少 rulesKey（团队运动必填，如 basketballRules）` };
+    }
+    const snapshot = plugin[plugin.rulesKey];
+    if (!Object.prototype.hasOwnProperty.call(plugin, plugin.rulesKey)
+      || !snapshot || typeof snapshot !== 'object' || Array.isArray(snapshot)
+      || Object.keys(snapshot).length === 0) {
+      return { ok: false, message: `协会插件 ${plugin.id} 的规则快照 ${plugin.rulesKey} 为空或非法` };
+    }
+    if (snapshot.sportFormat !== plugin.teamSportFormat) {
+      return { ok: false, message: `协会插件 ${plugin.id} 的规则快照 sportFormat 必须与 teamSportFormat 一致` };
     }
   }
   return { ok: true, message: '' };

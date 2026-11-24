@@ -12,11 +12,16 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { loadPage, instantiate, withApi, withWx } = require('./helpers/page-harness.js');
+const associationScope = require('../miniprogram/services/association-scope.js');
+
+// 团队赛事页只在团队协会下打开；测试工装默认是匹克球，显式切到篮球。
+associationScope.setAssociation('bk');
 
 const EVENT = {
   eventId: 'tev_1',
   name: '秋季联赛',
   format: 'single_elim',
+  sportFormat: 'basketball5',
   status: 'locked',
   statusLabel: '名单已锁定',
   rulesText: '4 节 × 10 分钟 · 个人 5 犯离场 · 全队每节第 5 犯起罚球 · 加时 5 分钟',
@@ -749,8 +754,11 @@ test('球员数据榜 —— 模板读服务端给的展示文本，不再把 nu
   const page = instantiate(loadPage('team-event-detail/team-event-detail.js'));
   await page.onLoad({ eventId: 'tev_1' });
 
-  assert.equal(page.data.playerStats[0].reboundsText, '—');
-  assert.equal(page.data.playerStats[0].pointsText, '12');
+  assert.deepEqual(page.data.playerStats[0].cells.map(({ label, value }) => [label, value]), [
+    ['得分', '12'], ['场均', '12'], ['篮板', '—'], ['助攻', '—'],
+  ]);
+  assert.deepEqual(page.data.playerStatFields.map(({ label }) => label), ['得分', '场均', '篮板', '助攻']);
+  assert.equal(page.data.statFields.some(({ field }) => field === 'pointsPerGame'), false);
 }));
 
 /* ============================================================

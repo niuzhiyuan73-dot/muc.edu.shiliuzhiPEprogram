@@ -9,18 +9,11 @@ const { buildSchoolContext } = require('../src/server/services/school-context');
 const { schoolMemberKey, schoolMembershipKey } = require('../src/shared/utils/school');
 const service = require('../src/server/services/team-event-service');
 
-const scope = { schoolId: 'muc', association: 'bk' };
+const basketballScope = { schoolId: 'muc', association: 'bk' };
+const footballScope = { schoolId: 'muc', association: 'fb' };
 const footballRules = defaultRulesFor();
 
-// F0 不注册足球入口。仅在隔离的测试进程中把现有协会元数据换成足球，
-// 验证将来 F1 注册后的真实 service 路径；每条用例后恢复，不伪造请求级运动开关。
-function footballMetadata(t) {
-  const association = getAssociation('bk');
-  const original = association.teamSportFormat;
-  association.teamSportFormat = 'football11';
-  t.after(() => { association.teamSportFormat = original; });
-}
-async function fixture() {
+async function fixture(scope = basketballScope) {
   const seed = createSchoolDemoSeed();
   seed.users.push({ _id: 'f0leader', openId: 'mock_f0leader', platformStatus: 'active', platformRole: 'member', primarySchoolId: 'muc' });
   seed.schoolMembers.push({ _id: schoolMemberKey('f0leader', 'muc'), userId: 'f0leader', schoolId: 'muc', status: 'active', collegeId: 'c01' });
@@ -33,15 +26,15 @@ async function fixture() {
   return { repo, call };
 }
 async function footballEvent(repo, extra = {}) {
-  const event = { _id: 'football', ...scope, name: '足球基础测试', sportFormat: 'football11',
+  const event = { _id: 'football', ...footballScope, name: '足球基础测试', sportFormat: 'football11',
     rules: footballRules, format: 'round_robin', status: 'running', revision: 1, ...extra };
   await repo.teamEvents.set(event._id, event);
   for (const id of ['a', 'b']) {
-    await repo.teams.set(id, { _id: id, ...scope, name: `队${id}`, captainId: 'f0leader', status: 'active' });
-    await repo.teamEventEntries.set(`entry${id}`, { _id: `entry${id}`, ...scope, eventId: event._id,
+    await repo.teams.set(id, { _id: id, ...footballScope, name: `队${id}`, captainId: 'f0leader', status: 'active' });
+    await repo.teamEventEntries.set(`entry${id}`, { _id: `entry${id}`, ...footballScope, eventId: event._id,
       teamId: id, status: 'locked', roster: [] });
   }
-  await repo.teamMatches.set('fmatch', { _id: 'fmatch', ...scope, sportFormat: 'football11', eventId: event._id,
+  await repo.teamMatches.set('fmatch', { _id: 'fmatch', ...footballScope, sportFormat: 'football11', eventId: event._id,
     teamA: 'a', teamB: 'b', scoreA: 0, scoreB: 0, winner: 'A', status: 'published', revision: 1, round: 1 });
   return event;
 }
@@ -92,10 +85,9 @@ test('篮球建赛拒绝伪造足球参数，个人比赛和 Elo 集合不受影
   assert.deepEqual(await repo.memberRatings.list(), ratings);
 });
 
-test('足球按独立规则建快照且详情走足球积分；不会出现篮球字段或实时能力', async t => {
-  footballMetadata(t);
-  const { repo, call } = await fixture();
-  assert.equal(basketballRulesOf('bk'), null);
+test('足球按独立规则建快照且详情走足球积分；不会出现篮球字段或实时能力', async () => {
+  const { repo, call } = await fixture(footballScope);
+  assert.equal(basketballRulesOf('fb'), null);
   const result = await call('createTeamEvent', { name: '足球规则验证', requestId: 'f0_valid' });
   assert.equal(result.ok, true, result.message);
   const stored = await repo.teamEvents.getById(result.eventId);
@@ -113,9 +105,8 @@ test('足球按独立规则建快照且详情走足球积分；不会出现篮�
   detail.table.forEach(row => { assert.equal(row.points, 1); assert.equal(row.draws, 1); assert.equal(row.rank, null); });
 });
 
-test('足球后端拒绝实时开台、操作和订阅；赛后接口拒绝缺少版本的篮球格式请求', async t => {
-  footballMetadata(t);
-  const { repo, call } = await fixture();
+test('足球后端拒绝实时开台、操作和订阅；赛后接口拒绝缺少版本的篮球格式请求', async () => {
+  const { repo, call } = await fixture(footballScope);
   await footballEvent(repo, { status: 'scheduled' });
   const match = await repo.teamMatches.getById('fmatch');
   await repo.teamMatches.set('fmatch', { ...match, status: 'scheduled', scoreA: null, scoreB: null });
@@ -140,9 +131,8 @@ test('足球后端拒绝实时开台、操作和订阅；赛后接口拒绝缺�
   assert.deepEqual(await repo.teamMatches.list(), before);
 });
 
-test('足球循环赛同分不结算；完整审计的抽签结果可使最终名次明确', async t => {
-  footballMetadata(t);
-  const { repo, call } = await fixture();
+test('足球循环赛同分不结算；完整审计的抽签结果可使最终名次明确', async () => {
+  const { repo, call } = await fixture(footballScope);
   const event = await footballEvent(repo);
   const pending = await call('settleTeamEvent', { eventId: event._id });
   assert.equal(pending.ok, false); assert.match(pending.message, /同分/);
@@ -157,9 +147,8 @@ test('足球循环赛同分不结算；完整审计的抽签结果可使最终�
   assert.deepEqual(final.placements.map(row => [row.teamId, row.rank]), [['b', 1], ['a', 2]]);
 });
 
-test('足球运动身份与存储快照不一致时拒绝载入，而不是调用篮球规则', async t => {
-  footballMetadata(t);
-  const { repo, call } = await fixture();
+test('足球运动身份与存储快照不一致时拒绝载入，而不是调用篮球规则', async () => {
+  const { repo, call } = await fixture(footballScope);
   await footballEvent(repo, { rules: { sportFormat: 'basketball5' } });
   const denied = await call('getTeamEvent', { eventId: 'football' });
   assert.equal(denied.ok, false); assert.match(denied.message, /运动规则/);

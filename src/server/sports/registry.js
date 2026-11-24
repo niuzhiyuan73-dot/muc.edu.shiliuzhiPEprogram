@@ -3,6 +3,7 @@
  */
 
 const { getSportAdapterFor } = require('../../shared/sports/registry.js');
+const { TEAM_PLUGIN_ACTION_ALLOWLIST } = require('./action-allowlist.js');
 const basketballPlugin = require('./basketball-plugin.js');
 const footballPlugin = require('./football-plugin.js');
 
@@ -11,6 +12,26 @@ const PLUGINS = new Map([
   [footballPlugin.sportFormat, footballPlugin],
 ]);
 const BUILTIN_FORMATS = new Set(PLUGINS.keys());
+const ALLOWED_ACTIONS = new Set(TEAM_PLUGIN_ACTION_ALLOWLIST);
+
+/** 动作映射必须只在白名单内且为函数；动态注册与内置插件共用这一道校验。 */
+function assertAllowedActions(plugin) {
+  if (!plugin.actions || typeof plugin.actions !== 'object' || Array.isArray(plugin.actions)) {
+    throw new Error('服务端运动插件缺少 actions 映射');
+  }
+  for (const [name, fn] of Object.entries(plugin.actions)) {
+    if (!ALLOWED_ACTIONS.has(name)) {
+      throw new Error(`服务端运动插件动作不在白名单：${name}`);
+    }
+    if (typeof fn !== 'function') {
+      throw new Error(`服务端运动插件动作必须是函数：${name}`);
+    }
+  }
+}
+
+// 内置插件直接构造、不走 registerServerSportPlugin，模块加载时补上同一道校验，
+// 免得日后误改内置动作表而绕过白名单。
+for (const plugin of PLUGINS.values()) assertAllowedActions(plugin);
 
 function getServerSportPlugin(sportFormat) {
   if (typeof sportFormat !== 'string' || !sportFormat) return null;
@@ -31,9 +52,7 @@ function registerServerSportPlugin(plugin) {
   if (!plugin || typeof plugin !== 'object' || typeof plugin.sportFormat !== 'string' || !plugin.sportFormat.trim()) {
     throw new Error('服务端运动插件缺少有效的 sportFormat');
   }
-  if (!plugin.actions || typeof plugin.actions !== 'object' || Array.isArray(plugin.actions)) {
-    throw new Error('服务端运动插件缺少 actions 映射');
-  }
+  assertAllowedActions(plugin);
   if (PLUGINS.has(plugin.sportFormat)) {
     throw new Error(`服务端运动插件已存在：${plugin.sportFormat}`);
   }
@@ -58,4 +77,5 @@ module.exports = {
   listServerSportPlugins,
   registerServerSportPlugin,
   unregisterServerSportPlugin,
+  TEAM_PLUGIN_ACTION_ALLOWLIST,
 };

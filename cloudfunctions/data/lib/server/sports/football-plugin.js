@@ -7,25 +7,11 @@
 
 const footballMatchService = require('../services/football-match-service.js');
 const footballScheduleService = require('../services/football-schedule-service.js');
-
-const FOOTBALL_ACTION_NAMES = Object.freeze([
-  'getTeamMatchStats',
-  'recordTeamMatch',
-  'publishTeamMatch',
-  'saveTeamMatchStats',
-  'reviewTeamMatchStats',
-  'getTeamMatchLineup',
-  'saveTeamMatchLineup',
-  'getTeamEventPlayerStats',
-  'getMyTeamProfile',
-  'getTeamRecord',
-  'updateTeamMatchSchedule',
-  'updateTeamRoundSchedule',
-]);
+const { TEAM_PLUGIN_ACTION_ALLOWLIST } = require('./action-allowlist.js');
 
 const merged = { ...footballMatchService, ...footballScheduleService };
 const actions = {};
-for (const name of FOOTBALL_ACTION_NAMES) {
+for (const name of TEAM_PLUGIN_ACTION_ALLOWLIST) {
   if (typeof merged[name] === 'function') actions[name] = merged[name];
 }
 

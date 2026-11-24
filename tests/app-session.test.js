@@ -119,9 +119,6 @@ function sessionDto(overrides = {}) {
   };
 }
 
-/** 让 refreshSession 里的 await 链跑完（setImmediate 排在所有微任务之后） */
-const flush = () => new Promise((resolve) => setImmediate(resolve));
-
 /**
  * 模拟一次冷启动。
  *
@@ -136,9 +133,9 @@ async function launch({ envId }) {
     systemInfo: null,
   };
 
-  appConfig.onLaunch();
-  // onLaunch 里 refreshSession 是故意不 await 的，这里补上等待
-  await flush();
+  // 等待 app 暴露的真实启动链落定（refreshSession → 定协会 → 角色重解）。
+  // 固定跳数的 setImmediate 会在请求节流延迟下抢在状态落定前断言，故不再使用。
+  await appConfig.onLaunch();
 }
 
 beforeEach(() => {
@@ -414,16 +411,16 @@ test('切换协会后按新协会重解能力 —— 学院/协会角色不跨�
   assert.strictEqual(appConfig.globalData.userInfo._id, 'demo_muc_college_leader');
 
   appConfig.setAssociation('pkb');
-  await flush();
+  await appConfig.whenViewerRoleReady();
   assert.strictEqual(appConfig.globalData.userInfo.role, ROLE.STAFF, 'pkb 里是学院负责人');
 
   appConfig.setAssociation('tt');
-  await flush();
+  await appConfig.whenViewerRoleReady();
   assert.strictEqual(appConfig.globalData.userInfo.role, ROLE.MEMBER, 'tt 里只是普通会员');
   assert.strictEqual(appConfig.globalData.userInfo.isGlobalAdmin, false, '学院负责人不是全局管理员');
 
   appConfig.setAssociation('bd');
-  await flush();
+  await appConfig.whenViewerRoleReady();
   assert.strictEqual(appConfig.globalData.userInfo.role, ROLE.MEMBER, 'bd 里也不带学院负责人身份');
 
   // 复位，别把协会状态漏给后续用例

@@ -55,6 +55,24 @@ async function makeGroup(repo, token, memberIds, opts = {}) {
 
 const trainingRows = async (repo) => repo.associationTrainings.list();
 
+test('训练发布和编辑都会校验标题、说明与场地', async () => {
+  const repo = fixture();
+  const training = await publish(repo, 'ugc_baseline');
+  const before = await trainingRows(repo);
+  for (const field of ['title', 'description', 'location']) {
+    const input = valid({ [field]: '赌博网站推广' });
+    const create = await call(repo, 'publishTraining', { ...input, requestId: `ugc_${field}` });
+    assert.equal(create.ok, false);
+    assert.match(create.message, /敏感/);
+    const update = await call(repo, 'updateTraining', {
+      ...input, trainingId: training.trainingId, expectedRevision: training.revision,
+    });
+    assert.equal(update.ok, false);
+    assert.match(update.message, /敏感/);
+  }
+  assert.deepEqual(await trainingRows(repo), before);
+});
+
 test('发布权限与表单校验：普通会员被拒，字段逐条拦截且不落库', async () => {
   const repo = fixture();
   assert.equal((await call(repo, 'publishTraining', { requestId: 'r1', ...valid() },

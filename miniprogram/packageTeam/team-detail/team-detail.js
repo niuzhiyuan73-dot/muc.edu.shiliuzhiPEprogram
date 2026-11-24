@@ -17,7 +17,7 @@ const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
-const { getSportAdapter } = require('../../shared/sports/registry.js');
+const { getSportAdapter, getSportAdapterFor } = require('../../shared/sports/registry.js');
 const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
 const { safeRouteId } = require('../../utils/route-query.js');
 
@@ -118,9 +118,11 @@ Page({
         this.setData({ record: null, recordHintText: '', recordError: (result && result.message) || '战绩加载失败' });
         return undefined;
       }
+      const format = result.sportFormat
+        || getSportAdapterFor(this.scope?.association)?.meta.sportFormat;
       this.setData({
         record: result,
-        recordHintText: getSportAdapter(result.sportFormat)?.view.recordHintText || '',
+        recordHintText: getSportAdapter(format)?.view.recordHintText || '',
         recordError: '',
       });
       return undefined;

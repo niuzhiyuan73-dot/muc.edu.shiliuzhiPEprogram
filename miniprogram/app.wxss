@@ -7,6 +7,8 @@
  */
 
 @import "templates/experience.wxss";
+/* 协会主题变量由 tools/gen-assoc-theme.js 从协会插件生成，勿手改 */
+@import "styles/assoc-theme.wxss";
 
 page {
   /* ---------- 主色：石榴红（与协会无关的界面，如首页顶栏） ---------- */
@@ -471,12 +473,9 @@ page {
 }
 
 /* ==================== 协会主题 ==================== */
-/* 「按协会套品牌」的落点：页面根节点挂 services/branding.js 给的 rootClass，
-   这里覆盖全局设计变量。小程序无法给 page 元素加类，所以色值挂在页面内部的
-   根容器上，子节点靠 var() 继承——只要根容器包住整页内容，效果与换肤一致。
-
-   颜色值是 utils/associations.js 里各协会 theme 的镜像（注册表是唯一真相源；
-   CSS 读不到 JS 常量，只能手抄一份）。新增协会时两边都要加。 */
+/* 六套协会配色由 tools/gen-assoc-theme.js 从协会插件生成到
+   styles/assoc-theme.wxss（app.wxss 顶部已 @import），新增协会只需改插件
+   后执行 npm run gen:theme。这里只保留不属于任何协会的中性外观。 */
 
 .assoc-neutral {
   --color-primary: #b23a2e;
@@ -486,67 +485,6 @@ page {
   --brand-color: #b23a2e;
   --brand-dark: #8e2c23;
   --brand-soft: #f7e9e7;
-}
-
-.assoc-pkb {
-  --color-primary: #1565c0;
-  --color-primary-dark: #0d47a1;
-  --color-primary-light: #e3f0fb;
-  --color-accent: #ff7a45;
-  --brand-color: #1565c0;
-  --brand-dark: #0d47a1;
-  --brand-soft: #e3f0fb;
-}
-
-.assoc-tt {
-  --color-primary: #004d40;
-  --color-primary-dark: #00332b;
-  --color-primary-light: #e0f0ec;
-  --color-accent: #c9a227;
-  --brand-color: #004d40;
-  --brand-dark: #00332b;
-  --brand-soft: #e0f0ec;
-}
-
-.assoc-bd {
-  --color-primary: #6a1b9a;
-  --color-primary-dark: #4a148c;
-  --color-primary-light: #f3e8f7;
-  --color-accent: #f2994a;
-  --brand-color: #6a1b9a;
-  --brand-dark: #4a148c;
-  --brand-soft: #f3e8f7;
-}
-
-.assoc-tn {
-  --color-primary: #2e7d32;
-  --color-primary-dark: #1b5e20;
-  --color-primary-light: #e8f5e9;
-  --color-accent: #c6d93b;
-  --brand-color: #2e7d32;
-  --brand-dark: #1b5e20;
-  --brand-soft: #e8f5e9;
-}
-
-/* 篮球 → 橙（与匹克球的蓝、网球的草绿拉开；accent 用琥珀配球体质感） */
-.assoc-bk {
-  --color-primary: #e65100;
-  --color-primary-dark: #bf360c;
-  --color-primary-light: #fff3e0;
-  --color-accent: #f9a825;
-  --brand-color: #e65100;
-  --brand-dark: #bf360c;
-  --brand-soft: #fff3e0;
-}
-
-.assoc-fb {
-  --color-primary: #0d6b45;
-  --color-primary-dark: #08492f;
-  --color-primary-light: #e7f3ec;
-  --color-accent: #d4af37;
-  --brand-color: #0d6b45;
-  --brand-dark: #08492f;
-  --brand-soft: #e7f3ec;
 }
 
 /* ==================== 运动会主题（恒定金色，不随协会换肤） ==================== */

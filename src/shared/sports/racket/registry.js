@@ -1,5 +1,10 @@
 /**
  * 球拍计分体系 ScoringAdapter 注册表（共享纯模块）
+ * ============================================================
+ * 目前只有 point / tennis 两套已立项计分制，因此注册表保持**静态**：
+ * 没有 `registerScoringAdapter`。第三种计分制不只是加一个显示适配器，
+ * 还要同时改 match-format 校验、match-record 录入、live-score 存储/回放；
+ * 在那些内核完成前开放动态注册，会造出“能注册但算不对”的半插件。
  */
 
 const { pointScoringAdapter } = require('./point.js');
@@ -9,8 +14,6 @@ const BUILTIN_SCORING_ADAPTERS = Object.freeze({
   point: pointScoringAdapter,
   tennis: tennisScoringAdapter,
 });
-
-const dynamicAdapters = new Map();
 
 function validateScoringAdapter(adapter) {
   if (!adapter || typeof adapter !== 'object' || Array.isArray(adapter)) {
@@ -35,7 +38,6 @@ function validateScoringAdapter(adapter) {
 
 function getScoringAdapter(scoring) {
   const key = typeof scoring === 'string' ? scoring.trim() : '';
-  if (key && dynamicAdapters.has(key)) return dynamicAdapters.get(key);
   if (key && Object.prototype.hasOwnProperty.call(BUILTIN_SCORING_ADAPTERS, key)) {
     return BUILTIN_SCORING_ADAPTERS[key];
   }
@@ -43,30 +45,11 @@ function getScoringAdapter(scoring) {
 }
 
 function listScoringAdapters() {
-  return [...Object.values(BUILTIN_SCORING_ADAPTERS), ...dynamicAdapters.values()];
-}
-
-function registerScoringAdapter(adapter) {
-  const check = validateScoringAdapter(adapter);
-  if (!check.ok) throw new Error(check.message);
-  if (Object.prototype.hasOwnProperty.call(BUILTIN_SCORING_ADAPTERS, adapter.scoring)) {
-    throw new Error(`内置计分适配器 ${adapter.scoring} 不可覆盖`);
-  }
-  if (dynamicAdapters.has(adapter.scoring)) {
-    throw new Error(`计分适配器 ${adapter.scoring} 已注册`);
-  }
-  dynamicAdapters.set(adapter.scoring, adapter);
-  return adapter;
-}
-
-function unregisterScoringAdapter(scoring) {
-  return dynamicAdapters.delete(scoring);
+  return [...Object.values(BUILTIN_SCORING_ADAPTERS)];
 }
 
 module.exports = {
   validateScoringAdapter,
   getScoringAdapter,
   listScoringAdapters,
-  registerScoringAdapter,
-  unregisterScoringAdapter,
 };

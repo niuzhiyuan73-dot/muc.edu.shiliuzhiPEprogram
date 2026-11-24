@@ -14,6 +14,7 @@ function createFootballAssociation() {
     theme: { primary: '#0D6B45', primaryDark: '#08492F', primaryLight: '#E7F3EC', accent: '#D4AF37' },
     sportType: 'team',
     teamSportFormat: 'football11',
+    rulesKey: 'footballRules',
     capabilities: ['space', 'teams', 'myTeams', 'events'],
     footballRules: defaultRulesFor(),
     status: ASSOCIATION_STATUS.ACTIVE,

@@ -287,7 +287,7 @@ test('统计草稿：按场次隔离、版本一致才恢复，成功后清除',
 
 test('统计录入：单字段更新能同步到分组，关闭后恢复草稿，保存成功即清除', async () => {
   const event = {
-    eventId: 'tev_1', name: '统计测试赛', format: 'single_elim', status: 'scheduled',
+    eventId: 'tev_1', name: '统计测试赛', format: 'single_elim', sportFormat: 'basketball5', status: 'scheduled',
     statusLabel: '赛程已发布', entryCount: 2, canManage: true, draw: { size: 2 },
     supportsMatchData: true, rulesText: '4 节', rules: {},
   };

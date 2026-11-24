@@ -2,7 +2,11 @@
 const { getSportAdapter } = require('../shared/sports/registry.js');
 
 function teamProfileView(profile) {
-  const adapter = getSportAdapter(profile && profile.sportFormat) || getSportAdapter('basketball5');
+  const format = profile && profile.sportFormat;
+  // 旧数据没有 sportFormat：保留篮球兜底；新运动有明确格式但适配器缺失时
+  // 不再假装是篮球，宁可空列，避免把篮球指标标成别的运动。
+  const adapter = getSportAdapter(format)
+    || (format ? null : getSportAdapter('basketball5'));
   const isFootball = Boolean(adapter && adapter.view.eventFormMode === 'football');
   const columns = (adapter && (adapter.view.profileStatColumns || adapter.view.statColumns)) || [];
   const definitions = columns.map(col => [col.key, col.label]);

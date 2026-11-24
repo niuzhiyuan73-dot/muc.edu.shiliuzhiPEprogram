@@ -155,7 +155,7 @@
               bindtap="onRejectScore"
             >驳回</view>
             <view
-              wx:if="{{!isFootball && match.canRecord && match.status !== 'canceled'}}"
+              wx:if="{{!isFootball && match.canRecord && match.status !== 'canceled' && statFields.length > 0}}"
               class="mini"
               data-matchid="{{match.matchId}}"
               bindtap="onOpenStats"
@@ -474,18 +474,12 @@
       <view class="table-head">
         <view class="col-name">球员</view>
         <view class="col">场次</view>
-        <view class="col">得分</view>
-        <view class="col">场均</view>
-        <view class="col">篮板</view>
-        <view class="col">助攻</view>
+        <view wx:for="{{playerStatFields}}" wx:key="field" class="col">{{item.label}}</view>
       </view>
       <view wx:for="{{playerStats}}" wx:key="userId" class="table-row">
         <view class="col-name">{{item.name}}</view>
         <view class="col">{{item.games}}</view>
-        <view class="col">{{item.pointsText}}</view>
-        <view class="col">{{item.pointsPerGameText}}</view>
-        <view class="col">{{item.reboundsText}}</view>
-        <view class="col">{{item.assistsText}}</view>
+        <view wx:for="{{item.cells}}" wx:for-item="cell" wx:key="field" class="col">{{cell.value}}</view>
       </view>
       <view class="hint-inline">只统计已发布的比赛；没录的指标显示「—」，不计入场均。</view>
     </view>

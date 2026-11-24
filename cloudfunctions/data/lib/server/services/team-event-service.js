@@ -42,7 +42,7 @@ const { roundRobinRounds } = require('../../shared/utils/standings.js');
 const { createSeededRandom, shuffle } = require('../../shared/utils/random.js');
 const { eventMatchKey, planNextRound } = require('../../shared/services/draw.js');
 const { computeTeamPlacements, isFinal } = require('../../shared/utils/team-standings.js');
-const { getSportAdapterFor } = require('../../shared/sports/registry.js');
+const { getSportAdapterFor, getSportAdapter } = require('../../shared/sports/registry.js');
 const { getServerSportPluginFor } = require('../sports/registry.js');
 const { compareCode } = require('../../shared/utils/text-order.js');
 const { checkUgcContent } = require('./ugc-safety.js');
@@ -695,13 +695,27 @@ async function commitEventChange(ctx, { event, reads = [], writes = [], nextEven
           };
         }
         await tx.teamEvents.set(event._id, updatedEvent);
-        workingEvent = updatedEvent;
-        return { ok: true, written: slice.length };
+        return { ok: true, written: slice.length, updatedEvent };
       });
+      if (txResult.ok) workingEvent = txResult.updatedEvent;
       return txResult;
     },
   });
-  if (!job.ok) return refused(job.message || '赛事批处理中止');
+  if (!job.ok) {
+    // 以下字段供可观测性与诊断：runVersionedBatchJob 未接 startCursor，
+    // nextCursor 仅表示中断位置，不构成可续跑契约；调用方按最新状态重试即可。
+    return refused(job.message || '赛事批处理中止', {
+      batchDrawPending: Boolean(workingEvent.batchDrawPending),
+      batchProgress: {
+        processed: job.processed,
+        written: job.written,
+        failed: job.failed,
+        nextCursor: job.nextCursor,
+        total: job.total,
+        stale: job.stale,
+      },
+    });
+  }
   return { ok: true, ...result, message: '' };
 }
 
@@ -2376,7 +2390,9 @@ async function settleTeamEvent(payload = {}, ctx) {
   const teams = await repo.teams.list();
   const teamName = new Map(teams.map(team => [team._id, team.name]));
 
-  const decisionCheck = adapter.matchLifecycle.validateRankingDecisions(payload, event, ctx);
+  const decisionCheck = adapter.meta.supportsRankingDecisions
+    ? adapter.matchLifecycle.validateRankingDecisions(payload, event, ctx)
+    : { ok: true, decisions: event.rankingDecisions || [] };
   if (!decisionCheck.ok) return ok(refused(decisionCheck.message));
   const rankingDecisions = decisionCheck.decisions;
   const table = strategy.computeTable({
@@ -2406,7 +2422,9 @@ async function settleTeamEvent(payload = {}, ctx) {
       draw: event.draw, matches, table,
       placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
     });
-    placements = adapter.standings.adjustEliminationPlacements(placements, matches);
+    placements = adapter.meta.sharedEliminationRank
+      ? adapter.standings.adjustEliminationPlacements(placements, matches)
+      : placements;
   }
   if (placements.length === 0) return ok(refused('还没有产生可结算的名次'));
 
@@ -2442,13 +2460,51 @@ async function settleTeamEvent(payload = {}, ctx) {
  * 「按节合计」是记录员在纸上真正会填的粒度：一节一格，四节就是四行。
  */
 const STAT_MODE = { BASIC: 'basic', DETAILED: 'detailed' };
+// 篮球上限是历史真值：老字段（points/rebounds/...）继续用它，行为不变。
 const STAT_FIELDS = BASKETBALL_STAT_LIMITS;
+const DEFAULT_STAT_MAX = 999;
 
-/** 报错时用中文指标名，不把字段键抛给用户 */
+/** 报错时用中文指标名，不把字段键抛给用户（篮球；新运动取插件 label） */
 const STAT_LABEL = {
   points: '个人得分', rebounds: '篮板', assists: '助攻',
   steals: '抢断', blocks: '盖帽', turnovers: '失误', fouls: '犯规',
 };
+
+/**
+ * 按赛事运动求统计字段定义：{ field: 上限 }。
+ *
+ * 前端的录入列与球员榜已由 SportAdapter.view.statColumns 声明驱动（见
+ * team-event-stat-view.js），服务端必须同口径——否则新运动的字段存不进去、
+ * 榜单取不出来。字段键取插件 statColumns（原始可存储字段），上限对篮球老
+ * 字段沿用 BASKETBALL_STAT_LIMITS（保证既有校验不变），新字段给宽松上限；
+ * label 取插件 label，缺省回退 STAT_LABEL。无插件声明（未知运动/历史数据）
+ * 回退篮球，保持旧行为不回归。
+ *
+ * 【为什么不用 playerStatColumns】它含 pointsPerGame 这类派生列，服务端在
+ * statCellsOf 里按 `${field}PerGame` 生成；若把它当原始字段累加，其空值会
+ * 覆盖派生结果（球员榜 pointsPerGame 变 null）。前端按 playerStatColumns
+ * 挑选展示列即可，服务端产出的字段集合以 statColumns 为准。
+ *
+ * @param {string} sportFormat 赛事/比赛的运动格式
+ * @returns {{ fields: Object<string,number>, labels: Object<string,string> }}
+ */
+function statSchemaOf(sportFormat) {
+  const view = (sportFormat && getSportAdapter(sportFormat)?.view) || null;
+  const columns = view && view.statColumns;
+  if (!Array.isArray(columns) || columns.length === 0) {
+    return { fields: STAT_FIELDS, labels: STAT_LABEL };
+  }
+  const fields = {};
+  const labels = {};
+  for (const column of columns) {
+    if (!column || !column.key) continue;
+    fields[column.key] = STAT_FIELDS[column.key] || Number(column.max) || DEFAULT_STAT_MAX;
+    // 篮球老字段沿用历史文案（如 points=「个人得分」），避免报错文案回归；
+    // 只有新运动的字段才用插件 label。
+    labels[column.key] = STAT_LABEL[column.key] || column.label || column.key;
+  }
+  return Object.keys(fields).length > 0 ? { fields, labels } : { fields: STAT_FIELDS, labels: STAT_LABEL };
+}
 
 /** 一个格子的数字：空 → null（未记录），非整数 / 越界 → 非法 */
 function parseStat(raw, max) {
@@ -2492,9 +2548,9 @@ function uniqueRows(rows, mode) {
 }
 
 /** 由各行算出合计；某个指标一行都没填 → null（不是 0） */
-function totalsOf(rows) {
+function totalsOf(rows, schema = STAT_FIELDS) {
   const out = {};
-  for (const field of Object.keys(STAT_FIELDS)) {
+  for (const field of Object.keys(schema)) {
     const filled = rows.filter(row => row[field] !== null && row[field] !== undefined);
     out[field] = filled.length > 0 ? filled.reduce((sum, row) => sum + row[field], 0) : null;
   }
@@ -2509,13 +2565,13 @@ function totalsOf(rows) {
  * 10 分与 3 分，读回来每人都是 13 分。合计是「队」的量，不是「人」的量，
  * 必须按人分开累。
  */
-function totalsByPlayer(rows) {
+function totalsByPlayer(rows, schema = STAT_FIELDS) {
   const map = new Map();
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!row || !row.userId) continue;
     if (!map.has(row.userId)) map.set(row.userId, {});
     const acc = map.get(row.userId);
-    for (const field of Object.keys(STAT_FIELDS)) {
+    for (const field of Object.keys(schema)) {
       const value = row[field];
       if (!Number.isInteger(value)) continue;
       acc[field] = (Number.isInteger(acc[field]) ? acc[field] : 0) + value;
@@ -2549,6 +2605,8 @@ async function getTeamMatchStats(payload = {}, ctx) {
   const event = await repo.teamEvents.getById(match.eventId);
   if (!inScope(event, ctx)) return ok(refused('赛事不存在，或不在本协会'));
   if (!supportsMatchData(ctx, event, match)) return ok(refused('赛事运动规则与协会不符，或统计功能尚未开放'));
+  // 统计字段按赛事运动取插件声明（与前端 team-event-stat-view 同口径）。
+  const { fields: statFields = STAT_FIELDS } = statSchemaOf(event.sportFormat || match.sportFormat);
 
   // 两处都按赛事下推（2026-10-26 第四轮审查 P-4）：原来读本协会全年的报名与
   // **全部**技术统计再筛这一场，统计集合是只增不减的，越到赛季后段越慢。
@@ -2584,7 +2642,7 @@ async function getTeamMatchStats(payload = {}, ctx) {
     const rows = uniqueRows((effective && effective.rows) || [], STAT_MODE.DETAILED);
     const savedPlayers = uniqueRows((effective && effective.players) || [], STAT_MODE.BASIC);
     // 详细模式的合计由各行算出（按人）；基础模式直接取存好的合计
-    const perPlayer = mode === STAT_MODE.DETAILED ? totalsByPlayer(rows) : new Map();
+    const perPlayer = mode === STAT_MODE.DETAILED ? totalsByPlayer(rows, statFields) : new Map();
     return {
       teamId,
       teamName: teamName.get(teamId) || '已归档球队',
@@ -2592,12 +2650,12 @@ async function getTeamMatchStats(payload = {}, ctx) {
         const out = { userId: row.userId, name: row.name || row.userId };
         if (mode === STAT_MODE.DETAILED) {
           const totals = perPlayer.get(row.userId) || {};
-          for (const field of Object.keys(STAT_FIELDS)) {
+          for (const field of Object.keys(statFields)) {
             out[field] = Number.isInteger(totals[field]) ? totals[field] : null;
           }
         } else {
           const hit = savedPlayers.find(item => item.userId === row.userId) || {};
-          for (const field of Object.keys(STAT_FIELDS)) {
+          for (const field of Object.keys(statFields)) {
             out[field] = Number.isInteger(hit[field]) ? hit[field] : null;
           }
         }
@@ -2673,6 +2731,10 @@ async function saveTeamMatchStats(payload = {}, ctx) {
     const event = await tx.teamEvents.getById(match.eventId);
     if (!inScope(event, ctx)) return refused('赛事不存在，或不在本协会');
     if (!supportsMatchData(fresh, event, match)) return refused('赛事运动规则与协会不符，或录分功能尚未开放');
+    // 保存字段同样按赛事运动取插件声明，确保新运动字段能清洗入库。
+    const statSchema = statSchemaOf(event.sportFormat || match.sportFormat);
+    const statFields = statSchema.fields;
+    const statLabels = statSchema.labels;
     if (event.status === TEAM_EVENT_STATUS.FINISHED) return refused('赛事已结束，统计不能再改');
     if (match.status === TEAM_MATCH_STATUS.CANCELED) return refused('这场已取消');
     if (match.status === TEAM_MATCH_STATUS.LIVE) return refused('请在实时计分台记录球员统计');
@@ -2722,9 +2784,9 @@ async function saveTeamMatchStats(payload = {}, ctx) {
         }
         const cleaned = { period, userId: row.userId };
         let any = false;
-        for (const [field, max] of Object.entries(STAT_FIELDS)) {
+        for (const [field, max] of Object.entries(statFields)) {
           const parsed = parseStat(row[field], max);
-          if (!parsed.ok) return refused(`第 ${period} 节的「${STAT_LABEL[field] || field}」需为 0–${max} 的整数`);
+          if (!parsed.ok) return refused(`第 ${period} 节的「${statLabels[field] || field}」需为 0–${max} 的整数`);
           cleaned[field] = parsed.value;
           if (parsed.value !== null) any = true;
         }
@@ -2747,9 +2809,9 @@ async function saveTeamMatchStats(payload = {}, ctx) {
         if (!side) return refused('统计里有人不在本场名单中');
         const cleaned = { userId: row.userId };
         let any = false;
-        for (const [field, max] of Object.entries(STAT_FIELDS)) {
+        for (const [field, max] of Object.entries(statFields)) {
           const parsed = parseStat(row[field], max);
-          if (!parsed.ok) return refused(`${STAT_LABEL[field] || field}需为 0–${max} 的整数`);
+          if (!parsed.ok) return refused(`${statLabels[field] || field}需为 0–${max} 的整数`);
           cleaned[field] = parsed.value;
           if (parsed.value !== null) any = true;
         }
@@ -2790,12 +2852,12 @@ async function saveTeamMatchStats(payload = {}, ctx) {
         integrity = rows.length === 0
           ? TEAM_STAT_INTEGRITY.NONE
           : (rosterIds.every(id => covered.has(id)) ? TEAM_STAT_INTEGRITY.FULL : TEAM_STAT_INTEGRITY.PARTIAL);
-        const pointsTotal = totalsOf(rows).points;
+        const pointsTotal = totalsOf(rows, statFields).points;
         if (pointsTotal !== null && Number.isInteger(Number(teamScore)) && pointsTotal !== Number(teamScore)) {
           warnings.push(`第 ${side.teamId === match.teamA ? 'A' : 'B'} 队个人得分合计 ${pointsTotal}，球队 ${teamScore}，差 ${Number(teamScore) - pointsTotal} 分待归属`);
         }
       } else {
-        const hasAny = side.players.some(row => Object.keys(STAT_FIELDS).some(f => row[f] !== null));
+        const hasAny = side.players.some(row => Object.keys(statFields).some(f => row[f] !== null));
         integrity = hasAny ? TEAM_STAT_INTEGRITY.BASIC : TEAM_STAT_INTEGRITY.NONE;
         const pointsTotal = side.players.reduce((sum, row) => sum + (row.points || 0), 0);
         if (hasAny && side.players.some(row => row.points !== null)
@@ -2860,6 +2922,9 @@ async function getTeamEventPlayerStats(payload = {}, ctx) {
   const repo = ctx.repo.forScope(ctx);
   const event = await repo.teamEvents.getById(payload.eventId);
   if (!inScope(event, ctx)) return ok(refused('赛事不存在，或不在本协会'));
+  // 原始字段与前端 statColumns 同口径；场均等派生列由 statCellsOf 产出，
+  // 前端再按 playerStatColumns 挑选展示（勿把派生列当原始字段累加）。
+  const { fields: playerFields = STAT_FIELDS } = statSchemaOf(event.sportFormat);
 
   // 三个集合都按赛事下推（2026-10-26 第四轮审查 P-4）：个人累计统计页原来
   // 把本协会**历年**比赛、统计与报名全部读回来再筛本届，随赛季线性变慢。
@@ -2881,12 +2946,12 @@ async function getTeamEventPlayerStats(payload = {}, ctx) {
       if (!row || !row.userId) continue;
       if (!byPlayer.has(row.userId)) {
         const acc = { userId: row.userId, games: new Set(), fields: {} };
-        for (const field of Object.keys(STAT_FIELDS)) acc.fields[field] = { sum: 0, games: new Set() };
+        for (const field of Object.keys(playerFields)) acc.fields[field] = { sum: 0, games: new Set() };
         byPlayer.set(row.userId, acc);
       }
       const acc = byPlayer.get(row.userId);
       acc.games.add(doc.matchId);
-      for (const field of Object.keys(STAT_FIELDS)) {
+      for (const field of Object.keys(playerFields)) {
         if (!Number.isInteger(row[field])) continue;
         acc.fields[field].sum += row[field];
         acc.fields[field].games.add(doc.matchId);
@@ -2918,7 +2983,7 @@ async function getTeamEventPlayerStats(payload = {}, ctx) {
         teamId: teamOf(acc.userId),
         games: acc.games.size,
       };
-      for (const field of Object.keys(STAT_FIELDS)) {
+      for (const field of Object.keys(playerFields)) {
         const cell = acc.fields[field];
         // 该指标一场都没记过 → null（未记录），不是 0
         const total = cell.games.size > 0 ? cell.sum : null;
@@ -2999,16 +3064,16 @@ function recordTextOf(record) {
 }
 
 /** 累计器：每个指标单独记「有记录的场次」，未记录 ≠ 0 */
-function emptyStatAcc() {
+function emptyStatAcc(schema = STAT_FIELDS) {
   const fields = {};
-  for (const field of Object.keys(STAT_FIELDS)) fields[field] = { sum: 0, games: new Set() };
+  for (const field of Object.keys(schema)) fields[field] = { sum: 0, games: new Set() };
   return { fields, matchIds: new Set() };
 }
 
 /** 累计器 → 数字 + 展示文本；某个指标一场都没记过就是 null 与「—」 */
-function statCellsOf(acc) {
+function statCellsOf(acc, schema = STAT_FIELDS) {
   const out = {};
-  for (const field of Object.keys(STAT_FIELDS)) {
+  for (const field of Object.keys(schema)) {
     const cell = acc.fields[field];
     const total = cell.games.size > 0 ? cell.sum : null;
     const perGame = total === null ? null : Math.round((cell.sum / cell.games.size) * 10) / 10;
@@ -3373,8 +3438,16 @@ async function getTeamRecord(payload = {}, ctx) {
     });
 
   const winRate = overall.games > 0 ? Math.round((overall.wins / overall.games) * 100) : null;
+  // 战绩页的统计列按 sportFormat 声明渲染，必须取「这支球队实际参加的赛事」
+  // 的运动格式，而不是当前浏览协会：分享链接打开跨协会/院队时两者可能不一致，
+  // 用协会格式会让页面按错误运动的列显示。赛事对象建赛时已写入 sportFormat
+  // （见 createTeamEvent），无参赛记录时再回退到当前协会适配器。
+  const playedFormat = (events.find(event => event && event.sportFormat) || {}).sportFormat;
+  const recordSportFormat = playedFormat
+    || (getSportAdapterFor(ctx.association)?.meta.sportFormat) || null;
   return ok({
     ok: true,
+    sportFormat: recordSportFormat,
     team: {
       teamId: team._id,
       name: team.name,

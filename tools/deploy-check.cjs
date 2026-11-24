@@ -5,6 +5,7 @@ const path = require('node:path');
 const ROOT = path.join(__dirname, '..');
 const steps = [
   ['镜像一致性', ['tools/sync-cloud-lib.js', '--check']],
+  ['协会主题样式', ['tools/gen-assoc-theme.js', '--check']],
   ['声明式索引', ['tools/check-db-indexes.js']],
   ['敏感信息扫描', ['tools/pre-commit-check.cjs', '--all']],
 ];

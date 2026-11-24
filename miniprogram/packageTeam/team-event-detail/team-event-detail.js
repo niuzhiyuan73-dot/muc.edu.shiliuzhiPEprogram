@@ -23,18 +23,8 @@ const space = require('../../services/association-space.js');
 const { resolveRouteId } = require('../../utils/route-query.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
 const { getSportAdapter, getSportAdapterFor } = require('../../shared/sports/registry.js');
+const { statFieldsOf } = require('../services/team-event-stat-view.js');
 const statsDraft = require('../services/stats-draft.js');
-
-/** 统计指标：顺序即页面上的列顺序，label 给人看，max 只作提示 */
-const STAT_FIELDS = [
-  { field: 'points', label: '得分' },
-  { field: 'rebounds', label: '篮板' },
-  { field: 'assists', label: '助攻' },
-  { field: 'steals', label: '抢断' },
-  { field: 'blocks', label: '盖帽' },
-  { field: 'turnovers', label: '失误' },
-  { field: 'fouls', label: '犯规' },
-];
 
 /** 把摊平的统计行按节分组；基础模式（period 为 0）自成一组 */
 function groupStatRows(rows, mode) {
@@ -137,8 +127,9 @@ Page(withDetailExperience({
     lineupPlayers: [],
     scheduleBusy: false,
     /** 统计指标列（顺序即页面列顺序） */
-    statFields: STAT_FIELDS,
+    statFields: [],
     /** 球员数据榜 */
+    playerStatFields: [],
     playerStats: [],
     playerStatsError: '',
     footballAssists: [],
@@ -273,11 +264,16 @@ Page(withDetailExperience({
           && bucket.matches.some(row => row.status === 'scheduled' && row.matchTime);
       });
       const eventAdapter = getSportAdapter(event.sportFormat) || getSportAdapterFor(this.scope?.association);
+      const statFormat = event.sportFormat
+        || getSportAdapterFor(this.scope?.association)?.meta.sportFormat;
+      const statFields = statFieldsOf(statFormat);
       this.setData({
         loading: false,
         event,
         supportsMatchData: event.supportsMatchData !== false,
         isFootball: Boolean(eventAdapter && eventAdapter.view.eventFormMode === 'football'),
+        statFields,
+        playerStatFields: statFieldsOf(statFormat, { leaderboard: true }),
         entries: result.entries || [],
         submitCandidates: result.submitCandidates || [],
         // 报名面板的身份文案由服务端给（学院负责人 / 校管代报 / 普通会员），模板不判权
@@ -633,6 +629,10 @@ Page(withDetailExperience({
       clearTimeout(this.draftTimer);
       this.draftTimer = null;
     }
+    if ((this.data.statFields || []).length === 0) {
+      this.setData({ notice: '该运动尚未配置统计字段', noticeError: true });
+      return undefined;
+    }
     this.setData({ notice: '', noticeError: false, statsDraftNote: '', statsDraftError: false });
     try {
       const result = await space.forScope(this.scope).getTeamMatchStats({ matchId: matchid });
@@ -655,14 +655,18 @@ Page(withDetailExperience({
         needReview: result.needReview === true,
       };
       const rows = [];
+      const fields = this.data.statFields || [];
       (result.sides || []).forEach((side, sideIndex) => {
         const saved = side.rows || [];
         // key 必须带上节次：同一个人在第 1 节和第 2 节是两行，撞键会串数据
-        const blankOf = (userId, name, period) => ({
-          key: period ? `${sideIndex}-${userId}-${period}` : `${sideIndex}-${userId}`,
-          sideIndex, userId, name,
-          points: '', rebounds: '', assists: '', steals: '', blocks: '', turnovers: '', fouls: '',
-        });
+        const blankOf = (userId, name, period) => {
+          const row = {
+            key: period ? `${sideIndex}-${userId}-${period}` : `${sideIndex}-${userId}`,
+            sideIndex, userId, name,
+          };
+          fields.forEach(({ field }) => { row[field] = ''; });
+          return row;
+        };
         if (editing.mode === 'detailed') {
           // 按节：一节一张小表，每个人在每个节里都有自己的一行
           for (let period = 1; period <= editing.periods; period += 1) {
@@ -670,7 +674,7 @@ Page(withDetailExperience({
               const hit = saved.find(row => row.period === period && row.userId === player.userId) || {};
               const row = blankOf(player.userId, player.name, period);
               row.period = period;
-              STAT_FIELDS.forEach(({ field }) => {
+              fields.forEach(({ field }) => {
                 row[field] = hit[field] === null || hit[field] === undefined ? '' : String(hit[field]);
               });
               rows.push(row);
@@ -681,7 +685,7 @@ Page(withDetailExperience({
           (side.players || []).forEach((player) => {
             const hit = savedPlayers.find(item => item.userId === player.userId) || {};
             const row = blankOf(player.userId, player.name, 0);
-            STAT_FIELDS.forEach(({ field }) => {
+            fields.forEach(({ field }) => {
               row[field] = hit[field] === null || hit[field] === undefined ? '' : String(hit[field]);
             });
             rows.push(row);
@@ -692,7 +696,7 @@ Page(withDetailExperience({
       // 当前值，并明确提示，不静默覆盖别人的修改。
       const draftKey = this.statsDraftKey(matchid);
       const draft = statsDraft.load(draftKey);
-      const restored = statsDraft.merge(rows, draft, STAT_FIELDS.map(item => item.field), editing.revision);
+      const restored = statsDraft.merge(rows, draft, fields.map(item => item.field), editing.revision);
       const draftNote = restored.conflict
         ? `检测到本机草稿（版本 ${draft.revision}），但这场已被更新到版本 ${editing.revision}，草稿未自动恢复`
         : restored.restored ? '已恢复本机未提交的统计草稿，请核对后保存' : '';
@@ -753,7 +757,7 @@ Page(withDetailExperience({
   persistDraft() {
     const editing = this.data.statsEditing;
     if (!editing) return false;
-    const fields = STAT_FIELDS.map(item => item.field);
+    const fields = (this.data.statFields || []).map(item => item.field);
     const rows = (this.data.statRows || [])
       .map((row) => {
         const out = { key: row.key, period: row.period || 0 };
@@ -815,7 +819,8 @@ Page(withDetailExperience({
   async onSaveStats() {
     const editing = this.data.statsEditing;
     if (!editing || this.data.statsBusy) return undefined;
-    const filled = this.data.statRows.filter(row => STAT_FIELDS.some(({ field }) => row[field] !== ''));
+    const fields = this.data.statFields || [];
+    const filled = this.data.statRows.filter(row => fields.some(({ field }) => row[field] !== ''));
     if (filled.length === 0) {
       this.setData({ notice: '还没填任何统计', noticeError: true });
       return undefined;
@@ -823,7 +828,7 @@ Page(withDetailExperience({
 
     const players = filled.map(row => {
       const out = { userId: row.userId };
-      STAT_FIELDS.forEach(({ field }) => { out[field] = row[field]; });
+      fields.forEach(({ field }) => { out[field] = row[field]; });
       if (editing.mode === 'detailed') out.period = row.period;
       return out;
     });
@@ -936,7 +941,15 @@ Page(withDetailExperience({
         this.setData({ playerStats: [], playerStatsError: (result && result.message) || '' });
         return undefined;
       }
-      this.setData({ playerStats: result.players || [], playerStatsError: '',
+      const players = (result.players || []).map(row => ({
+        ...row,
+        cells: this.data.playerStatFields.map(field => ({
+          field: field.field,
+          label: field.label,
+          value: row[`${field.field}Text`] ?? '—',
+        })),
+      }));
+      this.setData({ playerStats: players, playerStatsError: '',
         footballAssists: result.assists || [], footballCoverage: result.coverageText || '' });
       return undefined;
     } catch (err) {

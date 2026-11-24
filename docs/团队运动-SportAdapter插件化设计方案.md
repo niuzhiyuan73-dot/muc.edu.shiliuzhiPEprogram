@@ -1,7 +1,7 @@
 # 团队运动 · `SportAdapter` 插件化设计方案
 
-> **文档状态**：设计留存（按「三次法则」，待排球协会或第三个团队运动正式立项时启动实施）
-> **代码基线**：`f2ca8fe`（第二十四轮审查补修后） · 关联规划：[系统性架构治理与演进总规划](系统性架构治理与演进总规划.md) · 业务调研：[篮球、足球、排球协会调研与实施规划](篮球足球排球协会-调研与实施规划.md)
+> **文档状态**：已实施（P-02～P-04，含复核补修）。后续排球等新团队运动按本契约扩展。
+> **代码基线**：`8554062`（P-02 契约与双插件） / `bcccd68`（P-03 服务端接线）；关联规划：[系统性架构治理与演进总规划](系统性架构治理与演进总规划.md) · 业务调研：[篮球、足球、排球协会调研与实施规划](篮球足球排球协会-调研与实施规划.md)
 
 ---
 
@@ -37,53 +37,71 @@
 
 ```js
 const SportAdapterContract = {
-  // 1. 身份与能力声明
+  // 1. 身份与能力声明（全部布尔标志都是内核实际读取的开关）
   meta: {
     sportFormat: 'volleyball6',      // 'basketball5' | 'football11' | 'volleyball6'
+    sportKey: 'volleyball',
     supportsLiveScore: true,         // 是否支持实时计分台
+    supportsMatchData: true,         // 是否支持录分/统计/名单
     supportsRedraw: true,            // 开赛前是否允许重抽
     allowsDraw: false,               // 循环赛是否允许平局
     defaultMatchTimeFromEvent: true, // 生成赛程时是否继承赛事默认开赛时间
+    defaultDurationMinutes(rules, format) {}, // 单场默认时长
+    schedulePeopleSource: 'membership', // 'membership' | 'school'
+    requiresStrictRulesOnEntry: false,
+    requiresWinnerOnElimSettle: false,
+    sharedEliminationRank: false,
+    supportsRankingDecisions: false,
+    strictEntryRosterCheck: false,
   },
 
-  // 2. 规则快照
+  // 2. 规则快照与前端预设
   rules: {
+    defaultPresetKey: 'fivb-bo5',
+    presetOptions: [{ key: 'fivb-bo5', label: '五局三胜' }], // 可选；建赛页据此渲染
     defaultRules(presetKey) {},      // 返回默认规则快照
     normalizeRules(input) {},        // 严格白名单校验与归一化
     formatRules(rules) {},           // 生成前端展示文案
   },
 
-  // 3. 运动级权限差异（消除 L422/L1378 硬编码）
+  // 3. 运动级权限差异
   permissions: {
     canRecord({ manage, captain, isRecorder, match }) {},
     canSeePending({ manage, captain, isRecorder, match }) {},
-    canEditLineup({ active, manage, captain, match }) {},
-    canEditSchedule({ manage, match }) {},
+    canSetLineup({ active, manage, captain, match }) {},
+    canEditSchedule({ manage, eventActive, match }) {},
   },
 
-  // 4. 单场数据结构与结果钩子（消除 L1299/L2234 字段硬编码）
+  // 4. 单场数据结构与结果钩子
   matchLifecycle: {
     initMatchExtra(event) {},            // 建场次时附带的运动专属字段
     hasActivityOrDraft(match) {},        // 是否已有录分/草稿（用于拦截重抽与结算）
-    validateDraft(draft, rules) {},      // 校验单场赛后报告或实时比分合法性
-    resolveOutcome(published, rules) {}, // 得出 { scoreA, scoreB, winner, sets? }
+    validateBeforeSettle(matches) {},    // 结算前拦截（如待审核报告）
+    validateRankingDecisions(payload, event, ctx) {}, // 抽签/公平竞赛仲裁校验
+    validateEntryPayload(payload, event) {},          // 报名名单校验
+    decorateMatchView(match, { canSeePending }) {},
   },
 
-  // 5. 积分榜与个人/球队统计
+  // 5. 积分榜与名次
   standings: {
-    computeTable(matches, entries, rules, decisions) {},
-    validateRankingDecisions(decisions, table) {}, // 如抽签/公平竞赛仲裁校验
-    aggregatePlayerStats(publishedMatches) {},     // 个人生涯/赛季累计统计
+    computeTable({ entries, matches, rules, rankingDecisions }) {},
+    adjustEliminationPlacements(placements, matches) {},
   },
 
   // 6. 视图与前端入口映射
   view: {
-    decorateMatchView(match, { canSeePending }) {},
-    recordPagePath: '/packageTeam/volleyball-match/volleyball-match',
-    statColumns: [/* 表头与字段映射，供个人页/球队页动态渲染 */],
+    eventFormMode: 'volleyball',
+    recordPageUrl(matchId, { lineup }) {},
+    liveScorePageUrl(matchId) {},
+    recordHintText: '',
+    statColumns: [{ key: 'spikes', label: '扣球' }], // 单场统计录入
+    profileStatColumns: [{ key: 'spikes', label: '扣球' }], // 个人档案
+    playerStatColumns: [{ key: 'spikes', label: '扣球' }], // 赛事球员榜，可省略并复用 statColumns
   },
 };
 ```
+
+P-02（`8554062`）落地六组契约、双适配器和服务端注册表。默认钩子工厂 `createSportAdapter` 由 P-03（`bcccd68`）新增，通用服务在 P-03 接入适配器查询和动作分派。当前实现以 `src/shared/sports/contract.js` 为准。
 
 ---
 
@@ -93,7 +111,7 @@ const SportAdapterContract = {
 
 ```
 src/shared/sports/
-  ├── registry.js          ← 统一注册表，导出 getSportAdapter(associationId, event)
+  ├── registry.js          ← 按协会取 getSportAdapterFor(associationId, event)，按格式取 getSportAdapter(sportFormat)
   ├── basketball/          ← 篮球插件（规则、实时计分、排名、统计、视图）
   ├── football/            ← 足球插件（规则、赛后报告、排名、统计、视图）
   └── volleyball/          ← 未来新增排球：仅增此目录 + registry 注册 1 行
@@ -102,7 +120,8 @@ src/shared/sports/
 内核调用收口示例：
 
 ```js
-const adapter = getSportAdapter(ctx.association, event);
+const adapter = getSportAdapterFor(ctx.association, event);
+if (!adapter) return ok(refused('赛事运动规则与协会不符'));
 if (!adapter.meta.supportsRedraw && existingMatches.length) {
   return ok(refused('当前赛制不允许重抽，请核对现有签表或重建赛事'));
 }
@@ -118,8 +137,9 @@ const canRecord = adapter.permissions.canRecord({ manage, captain, isRecorder, m
    - 运动专属草稿与发布明细统一收口为 **`match.sportDraft`** 与 **`match.sportPublished`**，由对应 `adapter` 读写校验；若在上线后实施，老足球插件兼容读取存量 `footballDraft` / `footballPublished` 字段，免除全量数据迁移。
 2. **前端按声明驱动**：
    - 赛事列表、报名、审核、签表、赛程、球队管理 100% 复用通用页面；
-   - 录分入口读取 `adapter.view.recordPagePath` 跳转，仅针对差异巨大的录分台按运动独立建页；
-   - 个人/球队统计页读取 `adapter.view.statColumns` 动态渲染列。
+   - 录分入口调用 `adapter.view.recordPageUrl(matchId, options)`。
+   - 单场统计按 `statColumns` 录入，团队成绩档案按 `profileStatColumns` 展示，赛事球员榜按 `playerStatColumns` 展示。省略球员榜声明时复用 `statColumns`，列键与服务端返回的 `<key>Text` 对应。
+   - 团队协会的规则快照必须由 `rulesKey` 指向，快照的 `sportFormat` 与协会的 `teamSportFormat` 一致。协会与适配器配对时同时匹配运动格式和 `sportKey`。
 
 ---
 
@@ -128,6 +148,6 @@ const canRecord = adapter.permissions.canRecord({ manage, captain, isRecorder, m
 - **公共契约测试**（类比 `cloud-repo-contract.test.js`）：遍历 `registry` 中所有已注册 `SportAdapter`，统一断言：
   1. 6 组必需字段与方法签名齐全；
   2. `normalizeRules` 拒绝未知字段与跨运动字段；
-  3. `resolveOutcome` / `computeTable` 返回结构满足通用内核契约；
+  3. `validateBeforeSettle` / `computeTable` / `adjustEliminationPlacements` 返回结构满足通用内核契约；
   4. `hasActivityOrDraft` 在有草稿或已开赛时恒返回 `true`。
-- **实施触发时机**：遵守「三次法则」——仅当排球协会（或第三个团队运动）正式立项时，连同拆解 `team-event-service.js` 一并落地，不在此前提前过度抽象。
+- **实施触发时机**：已提前实施（P-02/P-03/P-04），后续排球等新团队运动直接复用本契约；不再等待“第三个运动”触发。

@@ -240,6 +240,9 @@ test('球队战绩 —— 胜负、胜率、名次与近期战绩都对得上，
 
   const record = await call(repo, 'getTeamRecord', { teamId: teamIds[0] }, 'u_t1p0');
   assert.equal(record.ok, true, record.message);
+  // 战绩的 sportFormat 取球队实际参赛赛事的声明（篮球赛 → basketball5），
+  // 而不是笼统按当前协会回退；跨协会分享打开时两者可能不同。
+  assert.equal(record.sportFormat, 'basketball5');
   assert.equal(record.team.name, '球队1');
   assert.equal(record.team.statusLabel, '正常');
   assert.equal(record.team.captainName, 'u_t0c昵称', '队长的名字给昵称，不把编号铺到页面上');

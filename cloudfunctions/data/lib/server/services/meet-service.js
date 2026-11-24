@@ -899,13 +899,8 @@ async function finishSportsMeet(payload = {}, ctx) {
   if (!meetReadable(ctx) || !ctx.meetId) return refused('请先登录');
   const scope = { schoolId: ctx.schoolId, meetId: ctx.meetId };
 
-  // 事务内不能查集合，「哪些项目还没发布」在事务外读一次快照。
-  const [meet, events, publications, entries] = await Promise.all([
-    ctx.repo.sportsMeets.getById(ctx.meetId),
-    listAliveEvents(ctx.repo.forMeet(scope).sportsMeetEvents),
-    ctx.repo.forMeet(scope).sportsMeetPublications.list(),
-    ctx.repo.forMeet(scope).sportsMeetEntries.list(),
-  ]);
+  // 版本必须先于明细读取，才能察觉明细查询期间提交的变更。
+  const meet = await ctx.repo.sportsMeets.getById(ctx.meetId);
   if (!isAlive(meet) || meet.schoolId !== ctx.schoolId) return refused('运动会不存在或已删除');
   if (!canManageMeet(ctx)) return refused('只有校级管理员及以上可以结束运动会');
   if (meet.status === MEET_STATUS.DRAFT) return refused('筹备中的运动会不能结束，请先发布报名');
@@ -913,6 +908,12 @@ async function finishSportsMeet(payload = {}, ctx) {
     return ok({ meet: meetSummary(meet), finished: false }); // 幂等
   }
 
+  const scoped = ctx.repo.forMeet(scope);
+  const [events, publications, entries] = await Promise.all([
+    listAliveEvents(scoped.sportsMeetEvents),
+    scoped.sportsMeetPublications.list(),
+    scoped.sportsMeetEntries.list(),
+  ]);
   const official = new Set(
     publications.filter((doc) => doc.official === true).map((doc) => doc.eventKey),
   );
@@ -1012,6 +1013,8 @@ async function appointMeetChiefJudge(payload = {}, ctx) {
       updatedAt: at,
       version: (meet.version || 1) + 1,
     };
+    // 与注销共用目标账号的版本戳，覆盖事务外枚举授权之后新增的任命。
+    await tx.users.set(userId, { ...user, meetRoleRevision: Number(user.meetRoleRevision || 0) + 1 });
     await tx.sportsMeets.set(fresh.meetId, next);
     return ok({ chiefJudge: next.chiefJudge });
   });

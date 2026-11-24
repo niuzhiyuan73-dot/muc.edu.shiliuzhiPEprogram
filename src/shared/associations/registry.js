@@ -146,6 +146,9 @@ function registerAssociationPlugin(plugin) {
   if (isKnownAssociation(plugin.id)) {
     throw new Error(`协会插件 id 已存在：${plugin.id}`);
   }
+  if (ASSOCIATIONS.some(item => item.sportKey === plugin.sportKey)) {
+    throw new Error(`协会插件 sportKey 已存在：${plugin.sportKey}`);
+  }
   const cloned = {
     ...plugin,
     theme: { ...plugin.theme },
