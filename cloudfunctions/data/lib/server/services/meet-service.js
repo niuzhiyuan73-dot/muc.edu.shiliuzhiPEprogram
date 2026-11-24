@@ -1,5 +1,5 @@
 const { parseMeetTime, isCalendarDate } = require('./meet-time.js');
-const { unchanged, scheduleRevisionOf, touchScheduleRevision } = require('./meet-consistency.js');
+const { unchanged, unchangedEvent, scheduleRevisionOf, touchScheduleRevision } = require('./meet-consistency.js');
 /**
  * 运动会：草稿、项目运行时配置与报名发布（B4）
  * ============================================================
@@ -940,6 +940,14 @@ async function finishSportsMeet(payload = {}, ctx) {
       || scheduleRevisionOf(current) !== scheduleRevisionOf(meet)
       || Number(current.version || 0) !== Number(meet.version || 0)) {
       return refused('成绩或赛程数据已变化，请刷新后重试');
+    }
+    // 小届次（<= 6 项）在事务内顺手核对单项目版本戳，兼容不写 contentRevision 的高频变更感知
+    if (events.length <= 6) {
+      for (const ev of events) {
+        if (!await unchangedEvent(tx, ev)) {
+          return refused('成绩或赛程数据已变化，请刷新后重试');
+        }
+      }
     }
     const now = fresh.now instanceof Date ? fresh.now.toISOString() : String(fresh.now);
     const next = {

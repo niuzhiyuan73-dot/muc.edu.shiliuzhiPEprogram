@@ -73,7 +73,7 @@ test('已经finished但报名名次未写齐的旧数据，重试按已结算快
 });
 
 test('超大抽签在写前返回明确容量错误，没有创建部分赛程', async () => {
-  const f = await fixture({ count: 11, format: 'round_robin' });
+  const f = await fixture({ count: 21, format: 'round_robin' });
   const result = await f.call('drawTeamEvent', { eventId: 'event' });
   assert.equal(result.code, 'TEAM_BATCH_LIMIT');
   assert.equal(f.db.traces.length, 0, '容量不足时不启动事务');

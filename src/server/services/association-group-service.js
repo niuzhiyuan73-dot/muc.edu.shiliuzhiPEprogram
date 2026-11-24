@@ -26,6 +26,7 @@
 const { buildSchoolContext } = require('./school-context.js');
 const { loadColleges } = require('./college-directory.js');
 const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
+const { runVersionedBatchJob } = require('./versioned-batch-job.js');
 const { permissionLabelOf } = require('./school-permission.js');
 const {
   schoolKey, schoolMemberKey, schoolRoleKey, schoolMembershipKey, belongsToSchoolScope,
@@ -544,23 +545,34 @@ async function deleteAssociationGroup(payload = {}, ctx) {
     let cursor = '';
     do {
       const page = await ctx.repo.forScope(ctx).associationGroupMembers.listGroupPage({ groupId: group._id, cursor });
-      const result = await ctx.repo.transaction(async tx => {
-        const fresh = await freshContext(tx, ctx);
-        if (!canManageAssociationSpace(fresh)) return refused('当前已无删除权限');
-        const current = await tx.associationGroups.getById(group._id);
-        if (!current || current.status !== GROUP_STATUS.DELETED || current.revision !== group.revision) return refused('小组状态已变化');
-        const relations = [];
-        for (const row of page.rows) {
-          relations.push({ id: row._id, relation: await tx.associationGroupMembers.getById(row._id) });
-        }
-        for (const { id, relation } of relations) {
-          if (relation && relation.status === GROUP_MEMBER_STATUS.ACTIVE) await tx.associationGroupMembers.set(id,
-            { ...relation, status: GROUP_MEMBER_STATUS.REMOVED, removedAt: fresh.now, removedBy: fresh.actorId });
-        }
-        if (!page.hasMore) await tx.associationGroups.set(group._id, { ...current, cleanupPending: false });
-        return { ok: true };
+      const rowsToClean = page.rows.length > 0 ? page.rows : [null];
+      const job = await runVersionedBatchJob({
+        items: rowsToClean,
+        opsPerItem: 2,
+        fixedOps: 9,
+        maxOpsPerBatch: 60,
+        runBatch: async ({ slice, isLast }) => {
+          const rows = slice.filter(Boolean);
+          const result = await ctx.repo.transaction(async tx => {
+            const fresh = await freshContext(tx, ctx);
+            if (!canManageAssociationSpace(fresh)) return refused('当前已无删除权限');
+            const current = await tx.associationGroups.getById(group._id);
+            if (!current || current.status !== GROUP_STATUS.DELETED || current.revision !== group.revision) return refused('小组状态已变化');
+            const relations = [];
+            for (const row of rows) {
+              relations.push({ id: row._id, relation: await tx.associationGroupMembers.getById(row._id) });
+            }
+            for (const { id, relation } of relations) {
+              if (relation && relation.status === GROUP_MEMBER_STATUS.ACTIVE) await tx.associationGroupMembers.set(id,
+                { ...relation, status: GROUP_MEMBER_STATUS.REMOVED, removedAt: fresh.now, removedBy: fresh.actorId });
+            }
+            if (isLast && !page.hasMore) await tx.associationGroups.set(group._id, { ...current, cleanupPending: false });
+            return { ok: true };
+          });
+          return result.ok ? { ok: true, written: rows.length } : { ok: false, stale: true, message: result.message };
+        },
       });
-      if (!result.ok) return ok(refused('小组已关闭；' + result.message + '，恢复权限后可重试删除以完成清理', { cleanupPending: true }));
+      if (!job.ok) return ok(refused('小组已关闭；' + job.message + '，恢复权限后可重试删除以完成清理', { cleanupPending: true }));
       cursor = page.nextCursor;
     } while (cursor);
   } catch (error) { return ok(refused('小组已关闭，成员清理未完成，请重试删除', { cleanupPending: true })); }

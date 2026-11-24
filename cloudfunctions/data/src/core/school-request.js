@@ -60,15 +60,13 @@ const SCOPE_ONLY_INVALIDATION = new Set([
   'startTeamLiveScore', 'updateTeamLiveScore',
 ]);
 
+/** 运动会纯录分写动作：只失效本届运动会缓存（meet:<schoolId>:<meetId>），不再全容器清空。 */
+const MEET_SCOPE_INVALIDATION = new Set(['saveMeetJudgeScore', 'submitMeetJudgeScore']);
+
 /**
  * 会改写身份 / 角色 / 学校 / 协会 / 运动会届次上下文文档的写动作。
  * 只有命中此白名单才触发 `contextCache.invalidateAll()`；其余纯业务写动作
  * （报名、排程、小组、训练、公告、跨校比赛等）不再打穿全容器缓存。
- *
- * 运动会录分（`saveMeetJudgeScore` / `submitMeetJudgeScore`）仍列在这里：
- * 它们会推进 `sportsMeets.contentRevision`，而运动会上下文缓存了这份文档；
- * 读取侧 5 秒内可能拿到旧版本。暂按全清保守处理，若要降读放大需先给运动会
- * 单独的范围失效粒度（学校 + 届次），不能直接删。
  */
 const IDENTITY_INVALIDATION_ACTIONS = new Set([
   'registerSchoolAccount', 'applySchoolMembership', 'reviewSchoolMembership',
@@ -77,7 +75,6 @@ const IDENTITY_INVALIDATION_ACTIONS = new Set([
   'createSportsMeet', 'updateMeetDraft', 'publishMeetRegistration',
   'deleteSportsMeet', 'finishSportsMeet', 'appointMeetChiefJudge',
   'revokeMeetChiefJudge', 'grantMeetCollegeLead', 'revokeMeetCollegeLead',
-  'saveMeetJudgeScore', 'submitMeetJudgeScore',
 ]);
 
 /**
@@ -181,6 +178,8 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
     if (!readOnly) {
       if (SCOPE_ONLY_INVALIDATION.has(event.action) && event.association) {
         contextCache.invalidateScope(event.schoolId, event.association);
+      } else if (MEET_SCOPE_INVALIDATION.has(event.action) && event.schoolId) {
+        contextCache.invalidateMeet(event.schoolId, event.meetId);
       } else if (IDENTITY_INVALIDATION_ACTIONS.has(event.action)) {
         contextCache.invalidateAll();
       }

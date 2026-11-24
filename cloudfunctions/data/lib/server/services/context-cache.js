@@ -185,6 +185,19 @@ function invalidateScope(schoolId, association) {
   }
 }
 
+/** 按运动会届次失效：`meet|<schoolId>|<meetId>|`，只清本届缓存，不影响其他届次与协会缓存。 */
+function invalidateMeet(schoolId, meetId) {
+  if (!schoolId) return invalidateAll();
+  const prefix = `meet|${schoolId}|${meetId ? `${meetId}|` : ''}`;
+  for (const key of [...store.keys()]) if (key.startsWith(prefix)) store.delete(key);
+  scopeInvalidatedAt.set(prefix, Date.now());
+  if (scopeInvalidatedAt.size > MAX_ENTRIES) {
+    const cutoff = [...scopeInvalidatedAt.entries()].sort((a, b) => a[1] - b[1])
+      .slice(0, scopeInvalidatedAt.size - MAX_ENTRIES);
+    for (const [key] of cutoff) scopeInvalidatedAt.delete(key);
+  }
+}
+
 /** 仅供诊断：当前窗口与缓存条数。 */
 function stats() {
   return { ttlMs, size: store.size };
@@ -201,6 +214,6 @@ function __setTtlForTest(ms) {
 }
 
 module.exports = {
-  isReadAction, keyOf, get, set, invalidateAll, invalidateScope, stats,
+  isReadAction, keyOf, get, set, invalidateAll, invalidateScope, invalidateMeet, stats,
   __setTtlForTest, DEFAULT_TTL_MS,
 };

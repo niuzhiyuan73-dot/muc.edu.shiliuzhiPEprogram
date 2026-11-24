@@ -16,6 +16,7 @@
  */
 
 const { canManageAssociationSpace, canReadAssociationSpace } = require('./association-space-permission.js');
+const { runVersionedBatchJob } = require('./versioned-batch-job.js');
 const { collegeMemberCandidates, resolveCollegeTeam } = require('./team-service.js');
 const { createBasketballLive, applyBasketballOperation, basketballLiveView, BASKETBALL_STAT_LIMITS } = require('../../shared/utils/basketball-live.js');
 const { buildDirectory } = require('./school-actor.js');
@@ -570,34 +571,116 @@ function sameRecord(a, b) {
   return JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
 }
 
-/** 多记录变更必须整体提交；不在事务中查询集合。名单增改同步更新赛事版本以封住新增行窗口。 */
+const TEAM_BATCH_MAX_WRITES = 200;
+const SINGLE_TX_WRITE_LIMIT = 45;
+
+function isSingleFenceEnabled() {
+  if (typeof process !== 'undefined' && process && process.env && process.env.SINGLE_FENCE === 'off') return false;
+  return true;
+}
+
+function isBatchJobEnabled() {
+  if (typeof process !== 'undefined' && process && process.env && process.env.BATCH_JOB === 'off') return false;
+  return true;
+}
+
+/**
+ * 多记录变更提交（G3 单栅栏守卫 + VersionedBatchJob 统一分批）。
+ *
+ * - 小批量（<= 45 写）：单事务原子提交；单栅栏模式下仅核对 `event.revision` 并仅预读待写目标，
+ *   不再重读上百条无关 `reads`（可通过 `SINGLE_FENCE=off` 回退逐条对比）。
+ * - 大批量（46 ~ 200 写，如 11–16 队循环赛抽签）：通过 `VersionedBatchJob` 按每批 <= 60 ops 分批写入，
+ *   每批事务核对 `event.revision` 乐观锁并推进版本；最后一批写入完整 `nextEvent`。
+ */
 async function commitEventChange(ctx, { event, reads = [], writes = [], nextEvent, result }) {
-  const expected = new Map(reads.map(row => [JSON.stringify([row.key, row.id || row.doc._id]),
-    { key: row.key, id: row.id || row.doc._id, doc: row.doc }]));
-  for (const row of writes) {
-    const key = JSON.stringify([row.key, row.doc._id]);
-    if (!expected.has(key)) expected.set(key, { key: row.key, id: row.doc._id, doc: null });
+  const singleFence = isSingleFenceEnabled();
+  const batchJob = isBatchJobEnabled();
+
+  if (writes.length > TEAM_BATCH_MAX_WRITES || (!batchJob && writes.length > SINGLE_TX_WRITE_LIMIT)) {
+    return refused('本次处理规模超过云端单事务安全容量，请减少本次场次或参赛队数后重试', { code: 'TEAM_BATCH_LIMIT' });
   }
-  // 身份 6 点读 + 赛事 1 点读/1 写，其余按实际预读的记录和写入数计费。
-  if (8 + expected.size + writes.length > 100) return refused(
-    '本次处理规模超过云端单事务安全容量，请减少本次场次或参赛队数后重试', { code: 'TEAM_BATCH_LIMIT' });
-  return ctx.repo.transaction(async root => {
-    const fresh = await freshContext(root, ctx);
-    if (!canReadAssociationSpace(fresh)) return refused('账号或本校身份已失效');
-    if (!canManageAssociationSpace(fresh)) return refused('当前已无赛事管理权限');
-    const tx = root.forScope(fresh);
-    const current = await tx.teamEvents.getById(event._id);
-    if (!current || Number(current.revision || 0) !== Number(event.revision || 0)) {
-      return refused('赛事刚被改过，请刷新后重试');
+
+  const runSingleTx = async () => {
+    const expected = new Map();
+    if (!singleFence) {
+      for (const row of reads) {
+        expected.set(JSON.stringify([row.key, row.id || row.doc._id]),
+          { key: row.key, id: row.id || row.doc._id, doc: row.doc });
+      }
     }
-    for (const row of expected.values()) {
-      const actual = await tx[row.key].getById(row.id);
-      if (!sameRecord(actual, row.doc)) return refused('名单或比赛刚被改过，请刷新后重试');
+    for (const row of writes) {
+      const id = row.doc._id;
+      const key = JSON.stringify([row.key, id]);
+      if (!expected.has(key)) expected.set(key, { key: row.key, id, doc: null, writeOnly: true });
     }
-    for (const row of writes) await tx[row.key].set(row.doc._id, row.doc);
-    await tx.teamEvents.set(event._id, nextEvent);
-    return { ok: true, ...result, message: '' };
+    if (8 + expected.size + writes.length > 100) return refused(
+      '本次处理规模超过云端单事务安全容量，请减少本次场次或参赛队数后重试', { code: 'TEAM_BATCH_LIMIT' });
+    return ctx.repo.transaction(async root => {
+      const fresh = await freshContext(root, ctx);
+      if (!canReadAssociationSpace(fresh)) return refused('账号或本校身份已失效');
+      if (!canManageAssociationSpace(fresh)) return refused('当前已无赛事管理权限');
+      const tx = root.forScope(fresh);
+      const current = await tx.teamEvents.getById(event._id);
+      if (!current || Number(current.revision || 0) !== Number(event.revision || 0)) {
+        return refused('赛事刚被改过，请刷新后重试');
+      }
+      for (const row of expected.values()) {
+        const actual = await tx[row.key].getById(row.id);
+        if (!singleFence && !row.writeOnly && !sameRecord(actual, row.doc)) {
+          return refused('名单或比赛刚被改过，请刷新后重试');
+        }
+      }
+      for (const row of writes) await tx[row.key].set(row.doc._id, row.doc);
+      await tx.teamEvents.set(event._id, nextEvent);
+      return { ok: true, ...result, message: '' };
+    });
+  };
+
+  if (writes.length <= SINGLE_TX_WRITE_LIMIT) {
+    return runSingleTx();
+  }
+
+  let workingEvent = { ...event, revision: Number(event.revision || 0) };
+  const job = await runVersionedBatchJob({
+    items: writes,
+    opsPerItem: 2,
+    fixedOps: 8,
+    maxOpsPerBatch: 60,
+    runBatch: async ({ slice, isLast }) => {
+      const txResult = await ctx.repo.transaction(async root => {
+        const fresh = await freshContext(root, ctx);
+        if (!canReadAssociationSpace(fresh)) return refused('账号或本校身份已失效');
+        if (!canManageAssociationSpace(fresh)) return refused('当前已无赛事管理权限');
+        const tx = root.forScope(fresh);
+        const current = await tx.teamEvents.getById(event._id);
+        if (!current || Number(current.revision || 0) !== Number(workingEvent.revision || 0)) {
+          return { ok: false, stale: true, message: '赛事刚被改过，请刷新后重试' };
+        }
+        // 严格先读后写：先预读本批写入文档以对齐事务快照
+        for (const row of slice) await tx[row.key].getById(row.doc._id);
+        for (const row of slice) await tx[row.key].set(row.doc._id, row.doc);
+        let updatedEvent;
+        if (isLast) {
+          const { batchDrawPending, ...cleanNext } = nextEvent;
+          void batchDrawPending;
+          updatedEvent = { ...cleanNext, revision: Number(current.revision || 0) + 1 };
+        } else {
+          updatedEvent = {
+            ...current,
+            batchDrawPending: true,
+            revision: Number(current.revision || 0) + 1,
+            updatedAt: nextEvent.updatedAt || fresh.now,
+          };
+        }
+        await tx.teamEvents.set(event._id, updatedEvent);
+        workingEvent = updatedEvent;
+        return { ok: true, written: slice.length };
+      });
+      return txResult;
+    },
   });
+  if (!job.ok) return refused(job.message || '赛事批处理中止');
+  return { ok: true, ...result, message: '' };
 }
 
 /* ---------------- 写 ---------------- */
@@ -1210,6 +1293,9 @@ async function saveTeamMatchLineup(payload = {}, ctx) {
       ...match, lineups, revision: nextRevision, updatedAt: fresh.now,
     };
     await tx.teamMatches.set(match._id, next);
+    await tx.teamEvents.set(event._id, {
+      ...event, revision: Number(event.revision || 1) + 1, updatedAt: fresh.now,
+    });
 
     return {
       ok: true,
@@ -1647,14 +1733,12 @@ async function recordTeamMatch(payload = {}, ctx) {
       updatedAt: now,
     });
 
-    if (event.status === TEAM_EVENT_STATUS.SCHEDULED) {
-      await tx.teamEvents.set(event._id, {
-        ...event,
-        status: TEAM_EVENT_STATUS.RUNNING,
-        revision: Number(event.revision || 1) + 1,
-        updatedAt: now,
-      });
-    }
+    await tx.teamEvents.set(event._id, {
+      ...event,
+      status: event.status === TEAM_EVENT_STATUS.SCHEDULED ? TEAM_EVENT_STATUS.RUNNING : event.status,
+      revision: Number(event.revision || 1) + 1,
+      updatedAt: now,
+    });
 
     return {
       ok: true, status: TEAM_MATCH_STATUS.REVIEWING, winner, warnings, revision: nextRevision, message: '',
@@ -1735,6 +1819,9 @@ async function publishTeamMatch(payload = {}, ctx) {
           updatedAt: now,
         });
       }
+      await tx.teamEvents.set(event._id, {
+        ...event, revision: Number(event.revision || 1) + 1, updatedAt: now,
+      });
       return { ok: true, status: TEAM_MATCH_STATUS.SCHEDULED, message: '' };
     }
 
@@ -1757,10 +1844,10 @@ async function publishTeamMatch(payload = {}, ctx) {
       publishedStats += 1;
     }
 
-    if (inScope(event, ctx) && event.status === TEAM_EVENT_STATUS.SCHEDULED) {
+    if (inScope(event, ctx)) {
       await tx.teamEvents.set(event._id, {
         ...event,
-        status: TEAM_EVENT_STATUS.RUNNING,
+        status: event.status === TEAM_EVENT_STATUS.SCHEDULED ? TEAM_EVENT_STATUS.RUNNING : event.status,
         revision: Number(event.revision || 1) + 1,
         updatedAt: now,
       });
@@ -2051,6 +2138,9 @@ async function updateTeamMatchSchedule(payload = {}, ctx) {
       scheduleUpdatedAt: fresh.now,
     };
     await tx.teamMatches.set(match._id, next);
+    await tx.teamEvents.set(event._id, {
+      ...event, revision: Number(event.revision || 1) + 1, updatedAt: fresh.now,
+    });
 
     return {
       ok: true,
@@ -2143,6 +2233,9 @@ async function updateTeamRoundSchedule(payload = {}, ctx) {
     }
     if (writes.length === 0) return refused('这一轮没有可顺延的比赛（已发布或没有开赛时间）');
     for (const doc of writes) await tx.teamMatches.set(doc._id, doc);
+    await tx.teamEvents.set(currentEvent._id, {
+      ...currentEvent, revision: Number(currentEvent.revision || 1) + 1, updatedAt: fresh.now,
+    });
     return { ok: true, shifted: writes.length, skipped, minute: shift, message: '' };
   });
   return ok(result);
@@ -3403,13 +3496,18 @@ async function startTeamLiveScore(payload = {}, ctx) {
       state = ensureLiveCourt(integrateLiveStats(state, event, statContext), statContext);
       await tx.teamMatches.set(match._id, { ...match, status: TEAM_MATCH_STATUS.LIVE, liveScore: state,
         revision: (Number(match.revision) || 0) + 1, updatedAt: fresh.now });
-      if (event.status === TEAM_EVENT_STATUS.SCHEDULED) {
-        await tx.teamEvents.set(event._id, { ...event, status: TEAM_EVENT_STATUS.RUNNING,
-          revision: (Number(event.revision) || 0) + 1, updatedAt: fresh.now });
-      }
+      await tx.teamEvents.set(event._id, {
+        ...event,
+        status: event.status === TEAM_EVENT_STATUS.SCHEDULED ? TEAM_EVENT_STATUS.RUNNING : event.status,
+        revision: (Number(event.revision) || 0) + 1,
+        updatedAt: fresh.now,
+      });
     } else if (!state.statsIntegrated || !state.onCourt) {
       state = ensureLiveCourt(state.statsIntegrated ? state : integrateLiveStats(state, event, statContext), statContext);
       await tx.teamMatches.set(match._id, { ...match, liveScore: state });
+      await tx.teamEvents.set(event._id, {
+        ...event, revision: (Number(event.revision) || 0) + 1, updatedAt: fresh.now,
+      });
     } else if (state.submittedAt) {
       // 完赛后补录过统计时，只读计分台也使用最新工作副本。
       state = integrateLiveStats(state, event, statContext);

@@ -48,6 +48,7 @@ const { collegeKey } = require('../../shared/utils/school.js');
 const {
   unchangedEvent, touchEvent, liveMeet, publishedRowsOf, isCurrentJudgeAssignment,
 } = require('./meet-consistency.js');
+const { runVersionedBatchJob } = require('./versioned-batch-job.js');
 const { meetReadable, canManageMeet, canPublishMeetResult } = require('./meet-permission.js');
 const { compareCode } = require('../../shared/utils/text-order.js');
 
@@ -833,7 +834,7 @@ async function publishMeetResults(payload = {}, ctx) {
     if ((latest ? latest.version : null) !== (current ? current.version : null)) {
       return refused('发布状态已变化，请刷新后重试');
     }
-    await touchEvent(tx, eventKey);
+    await touchEvent(tx, eventKey, { bumpMeet: true });
     const now = toIso(fresh.now);
     const version = (latest ? Number(latest.version) || 0 : 0) + 1;
     const rules = {
@@ -984,26 +985,32 @@ const RESULT_DETAIL_BATCH = 20;
  * @returns {Promise<boolean>} 全部写入成功返回 true
  */
 async function writeDetailBatch(repo, key, entries) {
-  for (let i = 0; i < entries.length; i += RESULT_DETAIL_BATCH) {
-    const slice = entries.slice(i, i + RESULT_DETAIL_BATCH);
-    try {
-      await repo.transaction(async tx => {
-        const existing = new Map();
-        for (const [id] of slice) {
-          existing.set(id, await tx[key].getById(id));
-        }
-        for (const [id, doc] of slice) {
-          const current = existing.get(id);
-          if (current && Number(current.version) > Number(doc.version)) continue;
-          await tx[key].set(id, doc);
-        }
-      });
-    } catch (err) {
-      console.warn('[meet] 成绩明细写入失败', err && (err.message || err));
-      return false;
-    }
-  }
-  return true;
+  const job = await runVersionedBatchJob({
+    items: entries,
+    opsPerItem: 2,
+    fixedOps: 4,
+    maxItemsPerBatch: RESULT_DETAIL_BATCH,
+    runBatch: async ({ slice }) => {
+      try {
+        await repo.transaction(async tx => {
+          const existing = new Map();
+          for (const [id] of slice) {
+            existing.set(id, await tx[key].getById(id));
+          }
+          for (const [id, doc] of slice) {
+            const current = existing.get(id);
+            if (current && Number(current.version) > Number(doc.version)) continue;
+            await tx[key].set(id, doc);
+          }
+        });
+        return { ok: true, written: slice.length };
+      } catch (err) {
+        console.warn('[meet] 成绩明细写入失败', err && (err.message || err));
+        return { ok: false, message: (err && err.message) || '成绩明细写入失败' };
+      }
+    },
+  });
+  return job.ok;
 }
 
 /**
