@@ -35,6 +35,15 @@ const DEFAULT_EVENT_LIMIT = 3;
 /** 公告首页最多取一页，完整列表由公告页继续翻页。 */
 const PAGE_LIMIT = 50;
 
+function isHomeBffEnabled(options = {}) {
+  if (options.useBff === false) return false;
+  const proc = typeof process !== 'undefined' ? process : null;
+  if (proc && proc.env && proc.env.HOME_BFF === 'off') {
+    return false;
+  }
+  return true;
+}
+
 /** 时间字段转毫秒。非法值一律当 0 沉底，绝不产生 NaN 比较 */
 function timeValue(value) {
   if (!value) return 0;
@@ -150,10 +159,62 @@ async function loadSchoolHomeView(options = {}) {
   const announcementLimit = Number.isInteger(options.announcementLimit)
     ? options.announcementLimit : DEFAULT_ANNOUNCEMENT_LIMIT;
   const eventLimit = Number.isInteger(options.eventLimit) ? options.eventLimit : DEFAULT_EVENT_LIMIT;
+  const primaryAssociation = (allAssociations()[0] || {}).id || '';
+
+  // G4 首页 BFF 聚合：未传入旧多接口替身且未关闭开关时，优先走单次 getSchoolHomeSummary
+  const shouldUseBff = isHomeBffEnabled(options) && (Boolean(options.identityClient) || !options.client);
+  if (shouldUseBff) {
+    try {
+      const identityClient = options.identityClient
+        || require('./school-identity.js').forSchoolIdentity({ schoolId, association: primaryAssociation });
+      if (identityClient && typeof identityClient.getSchoolHomeSummary === 'function') {
+        const bff = await identityClient.getSchoolHomeSummary({
+          announcementLimit,
+          eventLimit,
+          guest: !viewerId,
+        });
+        if (bff && bff.ok) {
+          const annGroup = bff.announcements || {};
+          const rawAnnouncements = Array.isArray(annGroup.announcements) ? annGroup.announcements : [];
+          const announcementDocs = rawAnnouncements.map(item => announcementRow(item));
+          const upcomingEvents = viewerId
+            ? (Array.isArray(bff.upcomingEvents) ? bff.upcomingEvents : [])
+              .map(event => eventRow(event, getAssociation(event.association)))
+            : [];
+          const summary = viewerId && bff.summary ? {
+            memberCount: Number(bff.summary.memberCount || 0),
+            matchCount: Number(bff.summary.matchCount || 0),
+            eventCount: Number(bff.summary.eventCount || 0),
+            seasonText: `第 ${Number(bff.summary.seasonNumber || 1)} 赛季`,
+          } : null;
+          return {
+            loggedIn: Boolean(viewerId),
+            announcements: {
+              rows: announcementDocs.slice(0, announcementLimit),
+              total: Number.isFinite(annGroup.total) ? annGroup.total : announcementDocs.length,
+              hasMore: Boolean(annGroup.hasMore) || announcementDocs.length > announcementLimit,
+            },
+            upcomingEvents,
+            summary,
+          };
+        }
+        const msg = String((bff && bff.message) || '');
+        if (!msg.includes('尚未支持') && !msg.includes('未知')) {
+          throw new Error(msg || '首页数据加载失败，请稍后重试');
+        }
+      }
+    } catch (err) {
+      const msg = String((err && err.message) || '');
+      if (!msg.includes('尚未支持') && !msg.includes('未知')) {
+        throw new Error('首页数据加载失败，请稍后重试');
+      }
+      console.warn('[home] BFF 不可用，降级回退多接口聚合', msg);
+    }
+  }
+
   const client = options.client || require('./association-space.js');
 
   // 公告：学校级一条通道，只取一次（按协会各取一次会把同一条公告重复三遍）
-  const primaryAssociation = (allAssociations()[0] || {}).id || '';
   const announcementApi = client.forScope({ schoolId, association: primaryAssociation });
   let announcementPage = { announcements: [], hasMore: false };
   let announcementFailed = false;

@@ -289,14 +289,6 @@ async function listTeamEvents(payload = {}, ctx) {
   // 【2026-10-26 第六轮 D】原来还在这里 buildDirectory：整个函数只用它的
   // `collegeIdOf(ctx.actorId)`，而那正是上下文里已有的 schoolMember.collegeId。
   // 为一个字段读全校名册 + 全量账号（2000 人 40 次 RPC）不划算，直接取上下文。
-  const [events, entries] = await Promise.all([
-    repo.teamEvents.list(), repo.teamEventEntries.list(),
-  ]);
-  const countByEvent = new Map();
-  for (const entry of entries) {
-    countByEvent.set(entry.eventId, (countByEvent.get(entry.eventId) || 0) + 1);
-  }
-
   // 石榴籽杯页面的筛选口径：杯赛归属、关键词（名称/场地）、发起年份。
   // 与学院赛列表同口径——年份按**发起时间**归档，不按开赛时间（一场可以提前很久发布）。
   const cupMode = payload.cupMode === CUP_MODE.COLLEGE
@@ -316,40 +308,63 @@ async function listTeamEvents(payload = {}, ctx) {
     schoolId: ctx.schoolId, association: ctx.association, collegeId: myCollegeId,
   });
 
-  const rows = events
-    .filter(event => event.status !== TEAM_EVENT_STATUS.DRAFT || manage)
-    .filter((event) => {
-      if (!cupMode) return true;
-      return cupMode === CUP_MODE.COLLEGE
-        ? event.cupMode === CUP_MODE.COLLEGE
-        : event.cupMode !== CUP_MODE.COLLEGE;
-    })
-    .filter(event => !keyword || [event.name, event.location]
-      .some(value => String(value || '').toLowerCase().includes(keyword)))
-    .filter((event) => {
-      if (!yearFilter) return true;
-      // 年份按东八区判（displayYearOf），不用 getFullYear()：云函数是 UTC，
-      // 跨年前后 8 小时内建的赛事会归错年，本地与云端结果不一致。
-      return displayYearOf(event.createdAt) === yearFilter;
-    })
-    .sort((a, b) => compareCode(b.createdAt, a.createdAt))
-    .map((event) => {
-      const view = eventView(event, ctx, { manage, entryCount: countByEvent.get(event._id) });
-      if (!view.isCollegeCup) return { ...view, canSubmit: false, myEntryStatusLabel: '' };
-      const mine = myTeamId ? entries.find(row => row.eventId === event._id && row.teamId === myTeamId) : null;
-      const entered = Boolean(mine) && mine.status !== TEAM_ENTRY_STATUS.REJECTED;
-      return {
-        ...view,
-        /** 学院负责人（及以上）在报名阶段、本学院还没有有效报名时可以报名；校管可代任意学院 */
-        canSubmit: (canManageMyCollege || manage)
-          && event.status === TEAM_EVENT_STATUS.REGISTRATION && !entered,
-        myEntryStatusLabel: mine ? (TEAM_ENTRY_STATUS_LABEL[mine.status] || '') : '',
-      };
-    });
-  const total = rows.length;
   const offset = Math.max(0, Number(payload.offset) || 0);
   const limit = Math.min(100, Math.max(1, Number(payload.limit) || 100));
-  const page = rows.slice(offset, offset + limit);
+
+  let events;
+  let entries;
+  let total;
+  let pagedRows;
+  if (!keyword && !yearFilter) {
+    const eventPage = await repo.teamEvents.listPage({ includeDraft: manage, cupMode, offset, limit });
+    pagedRows = eventPage.rows;
+    total = eventPage.total;
+    entries = pagedRows.length
+      ? await repo.teamEventEntries.listByEvents(pagedRows.map(event => event._id))
+      : [];
+  } else {
+    [events, entries] = await Promise.all([
+      repo.teamEvents.list(), repo.teamEventEntries.list(),
+    ]);
+    const filtered = events
+      .filter(event => event.status !== TEAM_EVENT_STATUS.DRAFT || manage)
+      .filter((event) => {
+        if (!cupMode) return true;
+        return cupMode === CUP_MODE.COLLEGE
+          ? event.cupMode === CUP_MODE.COLLEGE
+          : event.cupMode !== CUP_MODE.COLLEGE;
+      })
+      .filter(event => !keyword || [event.name, event.location]
+        .some(value => String(value || '').toLowerCase().includes(keyword)))
+      .filter((event) => {
+        if (!yearFilter) return true;
+        // 年份按东八区判（displayYearOf），不用 getFullYear()：云函数是 UTC，
+        // 跨年前后 8 小时内建的赛事会归错年，本地与云端结果不一致。
+        return displayYearOf(event.createdAt) === yearFilter;
+      })
+      .sort((a, b) => compareCode(b.createdAt, a.createdAt));
+    total = filtered.length;
+    pagedRows = filtered.slice(offset, offset + limit);
+  }
+
+  const countByEvent = new Map();
+  for (const entry of entries) {
+    countByEvent.set(entry.eventId, (countByEvent.get(entry.eventId) || 0) + 1);
+  }
+
+  const page = pagedRows.map((event) => {
+    const view = eventView(event, ctx, { manage, entryCount: countByEvent.get(event._id) });
+    if (!view.isCollegeCup) return { ...view, canSubmit: false, myEntryStatusLabel: '' };
+    const mine = myTeamId ? entries.find(row => row.eventId === event._id && row.teamId === myTeamId) : null;
+    const entered = Boolean(mine) && mine.status !== TEAM_ENTRY_STATUS.REJECTED;
+    return {
+      ...view,
+      /** 学院负责人（及以上）在报名阶段、本学院还没有有效报名时可以报名；校管可代任意学院 */
+      canSubmit: (canManageMyCollege || manage)
+        && event.status === TEAM_EVENT_STATUS.REGISTRATION && !entered,
+      myEntryStatusLabel: mine ? (TEAM_ENTRY_STATUS_LABEL[mine.status] || '') : '',
+    };
+  });
   const hasMore = offset + page.length < total;
   return ok({ ok: true, total, offset, limit, hasMore,
     nextOffset: hasMore ? offset + page.length : null,

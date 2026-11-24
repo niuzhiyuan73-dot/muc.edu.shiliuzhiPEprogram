@@ -28,6 +28,7 @@
 const { canManageAssociationSpace, canParticipateInAssociation, canReadAssociationSpace } = require('./association-space-permission.js');
 const { buildDirectory, buildCollegeDirectory } = require('./school-actor.js');
 const { buildSchoolContext } = require('./school-context.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 const { canSchoolAction } = require('./school-permission.js');
 const { teamKey, teamMemberKey, collegeTeamKey, schoolMemberKey, schoolKey } = require('../../shared/utils/school.js');
 const {
@@ -401,6 +402,8 @@ async function createTeamApplication(payload = {}, ctx) {
   const token = payload.requestId;
   if (typeof token !== 'string' || !REQUEST_ID_PATTERN.test(token)) return ok(refused('建队请求编号无效'));
   const college = String(payload.college || '').trim();
+  const ugc = await checkUgcContent({ name: name.value, college }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
 
   const teamId = teamKey(`${ctx.actorId}|${token}`, ctx);
   // 重名检查放在事务外：内存仓储与云端仓储都不允许事务内整表查询。

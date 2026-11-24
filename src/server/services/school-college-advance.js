@@ -74,7 +74,7 @@ async function advanceCollegeAfterLeg(ctx, legMatch) {
 
   // 下一轮的对阵要在事务外算（事务里不能按赛事条件读大场）。插入仍走「只补不覆盖」，
   // 所以这里多算一次是安全的。
-  const allTies = (await ctx.repo.forScope(ctx).ties.list())
+  const allTies = (await ctx.repo.forScope(ctx).ties.listByEvent(snapshot.eventId))
     .filter(item => item.eventId === snapshot.eventId);
   const merged = allTies.map(item => (item._id === snapshot._id ? { ...item, ...tiePatch } : item));
   const pairs = nextRoundPairsOf({ draw: event.draw, ties: merged, round: snapshot.round });

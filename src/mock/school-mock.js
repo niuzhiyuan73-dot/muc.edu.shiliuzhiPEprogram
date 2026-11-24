@@ -2,6 +2,7 @@ const { createSchoolDemoSeed, createSchoolDemoContent } = require('./school-seed
 const { createSchoolMemoryRepo } = require('./school-memory-repo.js');
 const { createSchoolHandlers } = require('../server/services/school-membership-service.js');
 const personalSportsService = require('../server/services/personal-sports-service.js');
+const schoolHomeService = require('../server/services/school-home-service.js');
 const { buildSchoolContext } = require('../server/services/school-context.js');
 const { buildMeetContext } = require('../server/services/meet-context.js');
 const { meetRequestScope } = require('../shared/utils/meet-scope.js');
@@ -174,6 +175,7 @@ let repo;
 const handlers = Object.freeze(pickActions([
   createSchoolHandlers({ claimKey: (schoolId, studentId) => schoolKey('demo-claim', schoolId, studentId) }),
   personalSportsService,
+  schoolHomeService,
 ], SCHOOL_IDENTITY_ACTIONS));
 /**
  * 重置学校维度内存仓储。
@@ -266,7 +268,8 @@ function forSchoolIdentity(input) {
   const boundRepo = repo;
   return Object.freeze(Object.fromEntries(Object.entries(handlers).map(([name, handler]) => [name, async payload => {
     if (name === 'getMySportsDashboard') await meetDemoReady;
-    const ctx = name === 'getMySportsDashboard'
+    const isSchoolOnlyHome = name === 'getMySportsDashboard' || name === 'getSchoolHomeSummary';
+    const ctx = isSchoolOnlyHome
       ? { ...await buildMeetContext({ repo: boundRepo, ...binding, scope: { schoolId: scope.schoolId } }), isMock: true }
       : await buildSchoolContext({ repo: boundRepo, ...binding, scope });
     const result = await handler(payload || {}, ctx);

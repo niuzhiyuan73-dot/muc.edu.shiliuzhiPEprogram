@@ -355,9 +355,11 @@ async function listCollegeEntries(payload = {}, ctx) {
     return ok({ ok: false, entries: [], canManage: false, message: '没有读取协会空间的权限' });
   }
 
-  const all = await ctx.repo.forScope(ctx).collegeEntries.list();
-  const rows = typeof payload.eventId === 'string' && payload.eventId
-    ? all.filter(row => row.eventId === payload.eventId) : all;
+  const scoped = ctx.repo.forScope(ctx);
+  const hasEventId = typeof payload.eventId === 'string' && payload.eventId;
+  const rows = hasEventId
+    ? await scoped.collegeEntries.listByEvent(payload.eventId)
+    : await scoped.collegeEntries.list();
 
   // 名单能否再改，取决于所属学院赛是否仍在报名阶段；取不到的赛事不传，行内 canEdit 自动为假。
   const event = typeof payload.eventId === 'string' && payload.eventId
@@ -385,9 +387,11 @@ async function listCollegeTies(payload = {}, ctx) {
   const dir = await buildCollegeDirectory(ctx);
   const actor = legacyActorOf(ctx, dir);
 
-  const all = (await ctx.repo.forScope(ctx).ties.list()).filter(isCollegeTieDoc);
-  const rows = typeof payload.eventId === 'string' && payload.eventId
-    ? all.filter(row => row.eventId === payload.eventId) : all;
+  const scoped = ctx.repo.forScope(ctx);
+  const hasEventId = typeof payload.eventId === 'string' && payload.eventId;
+  const rows = (hasEventId
+    ? await scoped.ties.listByEvent(payload.eventId)
+    : await scoped.ties.list()).filter(isCollegeTieDoc);
 
   const sorted = rows.slice().sort(
     (a, b) => (Number(a.round) - Number(b.round)) || (Number(a.slot) - Number(b.slot)));
@@ -636,8 +640,8 @@ async function drawCollegeEvent(payload = {}, ctx) {
     return ok(refused(event.status !== COLLEGE_EVENT_STATUS.SIGNUP ? '只能在报名阶段抽签' : '只有管理员可以抽签'));
   }
 
-  // 名单直读集合：只有已通过审核的学院才进签表（旧栈 approvedCollegesOf 同口径）。
-  const entries = (await ctx.repo.forScope(ctx).collegeEntries.list())
+  // 名单按赛事下推查询：只有已通过审核的学院才进签表（旧栈 approvedCollegesOf 同口径）。
+  const entries = (await ctx.repo.forScope(ctx).collegeEntries.listByEvent(event._id))
     .filter(row => row.eventId === event._id);
   // seedValue 由调用方给（测试可复现）；没给就现取一个随机值并落库备查。
   // 只认「本身就是有限数字」的入参：`Number(null)===0`、`Number('')===0`，
@@ -953,7 +957,7 @@ async function finishCollegeEvent(payload = {}, ctx) {
   if (!canFinishCollegeEvent(event, actor)) return ok(refused('只有管理员可以录入名次'));
 
   // 只能给「已通过审核」的学院记名次，挡住手滑写进来的学院名。
-  const entries = (await ctx.repo.forScope(ctx).collegeEntries.list())
+  const entries = (await ctx.repo.forScope(ctx).collegeEntries.listByEvent(event._id))
     .filter(row => row.eventId === event._id && row.status === COLLEGE_ENTRY_STATUS.APPROVED);
   const checked = validateCollegePlacements(payload.results, { colleges: entries.map(row => row.college) });
   if (!checked.ok) return ok(refused(checked.firstError));

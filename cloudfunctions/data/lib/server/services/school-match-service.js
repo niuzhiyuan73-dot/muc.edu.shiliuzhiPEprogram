@@ -317,8 +317,9 @@ async function listSchoolMatches(payload = {}, ctx) {
     cursor = { matchTime: decoded.matchTime, id: decoded.id };
   }
   if (cursor && offset > 0) return ok(refused('比赛分页游标无效'));
+  const skipCount = Boolean((cursor && payload.includeCounts !== true) || payload.skipCount === true);
   const page = await ctx.repo.forScope(ctx).matches.listPage({
-    filter: listFilter(payload), limit, offset, cursor,
+    filter: listFilter(payload), limit, offset, cursor, skipCount,
   });
   // 【不再为一页比赛读全校名册】（2026-10-23 第三轮审查 X-3）
   // 原实现每次翻页都 `buildDirectory`：2000 人的学校 = 20（名册）+ 20（账号）+ 1

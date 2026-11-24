@@ -262,6 +262,15 @@ async function listTrainings(payload = {}, ctx) {
   }
   const canManage = canManageAssociationSpace(ctx);
   const nowMs = ctx.now.getTime();
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0
+    ? Math.min(payload.limit, TRAINING_LIST_MAX) : TRAINING_LIST_LIMIT;
+  const after = typeof payload.cursor === 'string' ? payload.cursor : '';
+  if (!payload.state) {
+    const pageResult = await ctx.repo.forScope(ctx).associationTrainings.listPage({ cursor: after, limit });
+    const page = (pageResult.rows || []).filter(isTrainingDoc);
+    return ok({ ok: true, canManage, hasMore: Boolean(pageResult.hasMore), nextCursor: pageResult.nextCursor || '',
+      trainings: page.map(row => trainingSummary(row, nowMs)), message: '' });
+  }
   let rows = (await ctx.repo.forScope(ctx).associationTrainings.list()).filter(isTrainingDoc);
   if (typeof payload.state === 'string' && payload.state) {
     rows = rows.filter(row => trainingState(row, nowMs) === payload.state);
@@ -274,7 +283,6 @@ async function listTrainings(payload = {}, ctx) {
     if (sa !== sb) return sa - sb;
     return a._id < b._id ? -1 : 1;
   });
-  const after = typeof payload.cursor === 'string' ? payload.cursor : '';
   let start = 0;
   if (after) {
     const [startAt, id] = after.split('|').map(decodeURIComponent);
@@ -282,8 +290,6 @@ async function listTrainings(payload = {}, ctx) {
       (String(row.startAt || '') === startAt && row._id > id));
     if (start < 0) start = sorted.length;
   }
-  const limit = Number.isInteger(payload.limit) && payload.limit > 0
-    ? Math.min(payload.limit, TRAINING_LIST_MAX) : TRAINING_LIST_LIMIT;
   const page = sorted.slice(start, start + limit);
   const hasMore = sorted.length > start + limit;
   const nextCursor = hasMore && page.length

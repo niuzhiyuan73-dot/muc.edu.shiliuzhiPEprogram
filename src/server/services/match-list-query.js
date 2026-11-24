@@ -72,22 +72,23 @@ function matchListWhere(scope, filter, cursor) {
   return and.length === 1 ? where : { $and: and };
 }
 
-function memoryMatchPage(docs, scope, { filter = {}, limit = 20, offset = 0, cursor = null }) {
+function memoryMatchPage(docs, scope, { filter = {}, limit = 20, offset = 0, cursor = null, skipCount = false }) {
   const raw = limit === undefined || limit === null ? 20 : Number(limit);
   // 内存端夹到 100；云端 listPage 因「多取 1 条判 hasMore」夹到 99。
   // 生产调用方最大只传 20（首页只传 1），这个边界差异只影响演示/测试；
   // 若要彻底对齐，需连同演示台账与分页用例一起改，见第二十三轮审查 P1-30。
   const size = Number.isFinite(raw) ? Math.max(0, Math.min(raw, 100)) : 20;
+  const needCounts = size === 0 || (!cursor && offset > 0) || skipCount !== true;
   const base = docs.filter(doc => isListMatch(doc) && doc.schoolId === scope.schoolId &&
     doc.association === scope.association &&
     (filter.pool === undefined || doc.pool === filter.pool) &&
     (!filter.eventId || doc.eventId === filter.eventId) &&
     (!filter.userId || doc.teamA.includes(filter.userId) || doc.teamB.includes(filter.userId)));
-  const pendingCount = base.filter(doc => doc.status === MATCH_STATUS.PENDING).length;
+  const pendingCount = needCounts ? base.filter(doc => doc.status === MATCH_STATUS.PENDING).length : null;
   const rows = base.filter(doc => filter.status === undefined || doc.status === filter.status).sort(compareMatches);
   const remaining = cursor ? rows.filter(doc => compareMatches(doc, { matchTime: cursor.matchTime, _id: cursor.id }) > 0) : rows;
   const start = cursor ? 0 : offset;
-  return { rows: remaining.slice(start, start + size), total: rows.length, pendingCount,
+  return { rows: remaining.slice(start, start + size), total: needCounts ? rows.length : null, pendingCount,
     hasMore: remaining.length > start + size };
 }
 

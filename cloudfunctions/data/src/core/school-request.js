@@ -70,8 +70,8 @@ const MEET_SCOPE_INVALIDATION = new Set(['saveMeetJudgeScore', 'submitMeetJudgeS
  */
 const IDENTITY_INVALIDATION_ACTIONS = new Set([
   'registerSchoolAccount', 'applySchoolMembership', 'reviewSchoolMembership',
-  'grantSchoolPermission', 'updateSchoolProfile', 'applySchoolTransfer',
-  'reviewSchoolTransfer', 'cancelSchoolTransfer',
+  'grantSchoolPermission', 'updateSchoolProfile', 'deactivateMySchoolAccount',
+  'applySchoolTransfer', 'reviewSchoolTransfer', 'cancelSchoolTransfer',
   'createSportsMeet', 'updateMeetDraft', 'publishMeetRegistration',
   'deleteSportsMeet', 'finishSportsMeet', 'appointMeetChiefJudge',
   'revokeMeetChiefJudge', 'grantMeetCollegeLead', 'revokeMeetCollegeLead',
@@ -149,6 +149,13 @@ async function handleSchoolRequest(event, { repo, openId, clientIp = '', now = n
       if (!event.schoolId) return fail('本人体育中心接口必须指定学校');
       const personalCtx = await buildMeetContext({ repo, openId, now, scope: { schoolId: event.schoolId } });
       return acceptResult(await handlers[event.action](event.payload || {}, personalCtx));
+    }
+    if (event.action === 'getSchoolHomeSummary') {
+      if (!event.schoolId) return fail('首页接口必须指定学校');
+      const homeCtx = await buildMeetContext({
+        repo, openId, now, action: event.action, scope: { schoolId: event.schoolId },
+      });
+      return acceptResult(await handlers[event.action](event.payload || {}, homeCtx));
     }
     // 运动会分支：只要求 schoolId，meetId 按动作可选（列表/建赛/搜项目都没有届）。
     if (MEET_ACTIONS.has(event.action)) {

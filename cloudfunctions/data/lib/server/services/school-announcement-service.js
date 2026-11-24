@@ -38,6 +38,7 @@ const { canReadAssociationSpace } = require('./association-space-permission.js')
 const { canSchoolAction } = require('./school-permission.js');
 const { legacyActorOf } = require('./school-actor.js');
 const { buildAnnouncementRecord } = require('../../shared/services/announcement.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 const {
   schoolKey, schoolAnnouncementKey,
 } = require('../../shared/utils/school.js');
@@ -152,6 +153,8 @@ async function publishSchoolAnnouncement(payload = {}, ctx) {
   const built = buildAnnouncementRecord(withCategory, { actor, now: ctx.now });
   if (!built.ok) return ok(refused(built.firstError, { errors: built.errors }));
   const { title, content, category, pinned } = built.record;
+  const ugc = await checkUgcContent({ title, content }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   const fingerprint = JSON.stringify([title, content, category, pinned]);
 
   const result = await ctx.repo.transaction(async tx => {

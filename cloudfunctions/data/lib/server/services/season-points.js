@@ -56,7 +56,7 @@
  */
 
 const { schoolMemberKey, scopeKey } = require('../../shared/utils/school.js');
-const { aggregatePoints } = require('./school-points-service.js');
+const { aggregatePoints, collectEventPointFacts } = require('./school-points-service.js');
 const { runVersionedBatchJob } = require('./versioned-batch-job.js');
 
 /**
@@ -391,6 +391,89 @@ async function applyTrainingFactDelta(tx, ctx, { userId, delta, effectiveAt } = 
 }
 
 /**
+ * 单场赛事结算的积分增量维护（G4）：
+ * 当赛季已物化且本场获奖人数 ≤ TX_ROWS（25）时，先读后写直接更新获奖者积分并
+ * 原子推进代际，避免 finishSchoolEvent 每次整表重读 events/trainings/registrations/schoolMembers。
+ */
+async function applyEventFactDelta(tx, ctx, eventDoc) {
+  const id = scopeKey({ schoolId: ctx.schoolId, association: ctx.association });
+  const doc = await tx.seasons.getById(id);
+  const season = doc && doc.schoolId === ctx.schoolId ? doc : null;
+  const now = new Date(ctx.now || Date.now());
+  if (!season || !isSettled(season)) {
+    await bumpSeasonVersion(tx, ctx, now);
+    return { applied: false, needsRefresh: true, updated: 0 };
+  }
+
+  const facts = collectEventPointFacts({ events: [eventDoc], resetTime: season.resetTime });
+  const deltas = new Map();
+  for (const fact of facts) {
+    if (!fact || !fact.userId || !(fact.amount > 0)) continue;
+    deltas.set(fact.userId, (deltas.get(fact.userId) || 0) + Number(fact.amount));
+  }
+
+  const nowIso = now.toISOString();
+  const nextVersion = seasonVersionOf(season) + 1;
+  if (deltas.size === 0) {
+    await tx.seasons.set(id, {
+      ...season,
+      version: nextVersion,
+      pointsSettledVersion: nextVersion,
+      pointsSchemaVersion: POINTS_SCHEMA,
+      updatedAt: nowIso,
+    });
+    return { applied: true, needsRefresh: false, updated: 0 };
+  }
+
+  if (deltas.size > TX_ROWS) {
+    await bumpSeasonVersion(tx, ctx, now);
+    return { applied: false, needsRefresh: true, updated: 0 };
+  }
+
+  const anchor = anchorOf(season);
+  const association = String(ctx.association);
+  const currVersion = seasonVersionOf(season);
+  const pendingWrites = [];
+
+  // 先读后写，严格遵守事务内同集合先读再写约定
+  for (const [userId, amount] of deltas.entries()) {
+    const key = schoolMemberKey(userId, ctx.schoolId);
+    const row = await tx.schoolMembers.getById(key);
+    const points = pointsOfRow(row, association);
+    const rowAnchor = anchorOfRow(row, association);
+    const marked = row && row[VERSION_FIELD] && row[VERSION_FIELD][association];
+    const isUnmaterializedZero = points === 0 && rowAnchor === '';
+    if (!row || (rowAnchor !== anchor && !isUnmaterializedZero)
+      || (marked !== undefined && Number(marked) > currVersion)) {
+      await bumpSeasonVersion(tx, ctx, now);
+      return { applied: false, needsRefresh: true, updated: 0 };
+    }
+    pendingWrites.push({
+      key,
+      nextDoc: {
+        ...row,
+        [POINTS_MAP_FIELD]: { ...(row[POINTS_MAP_FIELD] || {}), [association]: Math.max(0, points + amount) },
+        [ANCHOR_MAP_FIELD]: { ...(row[ANCHOR_MAP_FIELD] || {}), [association]: anchor },
+        [VERSION_FIELD]: { ...(row[VERSION_FIELD] || {}), [association]: nextVersion },
+        [UPDATED_FIELD]: nowIso,
+      },
+    });
+  }
+
+  for (const item of pendingWrites) {
+    await tx.schoolMembers.set(item.key, item.nextDoc);
+  }
+  await tx.seasons.set(id, {
+    ...season,
+    version: nextVersion,
+    pointsSettledVersion: nextVersion,
+    pointsSchemaVersion: POINTS_SCHEMA,
+    updatedAt: nowIso,
+  });
+  return { applied: true, needsRefresh: false, updated: pendingWrites.length };
+}
+
+/**
  * 在事务内把赛季的积分代际 +1。
  *
  * 【为什么放在事务里】「事实变了」与「代际变了」必须原子：先写事实再单独推代际，
@@ -453,6 +536,7 @@ module.exports = {
   settledPointsOf,
   refreshAssociationPoints,
   applyTrainingFactDelta,
+  applyEventFactDelta,
   bumpSeasonVersion,
   refreshAfterWrite,
 };

@@ -29,6 +29,7 @@
 const { buildSchoolContext } = require('./school-context.js');
 const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
 const { validateAnnouncement } = require('../../shared/services/announcement.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 const { schoolKey, belongsToSchoolScope, associationNoticeKey } = require('../../shared/utils/school.js');
 const {
   ASSOCIATION_NOTICE_STATUS, ASSOCIATION_NOTICE_STATUS_LABEL,
@@ -94,34 +95,16 @@ async function listAssociationNotices(payload = {}, ctx) {
       message: '没有读取协会空间的权限' });
   }
   const canManage = canManageAssociationSpace(ctx);
-  const all = (await ctx.repo.forScope(ctx).associationNotices.list()).filter(isNoticeDoc);
-  // 撤回的通知对普通会员不再可读；管理者保留可见以便审计（§3.3）。
-  const visible = canManage
-    ? all
-    : all.filter(row => row.status === ASSOCIATION_NOTICE_STATUS.PUBLISHED);
-  const sorted = visible.slice().sort(compareNotices);
-
-  const after = typeof payload.cursor === 'string' ? payload.cursor : '';
-  let start = 0;
-  if (after) {
-    const [pin, publishedAt, id] = after.split('|').map(decodeURIComponent);
-    const cursorRow = { pinned: pin === '1', publishedAt, _id: id };
-    start = sorted.findIndex(row => compareNotices(row, cursorRow) > 0);
-    if (start < 0) start = sorted.length;
-  }
   const limit = Number.isInteger(payload.limit) && payload.limit > 0
     ? Math.min(payload.limit, NOTICE_LIST_MAX) : NOTICE_LIST_LIMIT;
-  const page = sorted.slice(start, start + limit);
-  const hasMore = sorted.length > start + limit;
-  const nextCursor = hasMore && page.length
-    ? [
-      page[page.length - 1].pinned ? '1' : '0',
-      encodeURIComponent(String(page[page.length - 1].publishedAt || '')),
-      encodeURIComponent(page[page.length - 1]._id),
-    ].join('|')
-    : '';
+  const pageResult = await ctx.repo.forScope(ctx).associationNotices.listPage({
+    canManage,
+    cursor: typeof payload.cursor === 'string' ? payload.cursor : '',
+    limit,
+  });
+  const page = (pageResult.rows || []).filter(isNoticeDoc);
 
-  return ok({ ok: true, canManage, hasMore, nextCursor,
+  return ok({ ok: true, canManage, hasMore: Boolean(pageResult.hasMore), nextCursor: pageResult.nextCursor || '',
     notices: page.map(row => noticeSummary(row, canManage)), message: '' });
 }
 
@@ -143,6 +126,8 @@ async function publishAssociationNotice(payload = {}, ctx) {
   const validation = validateAnnouncement(payload);
   if (!validation.ok) return ok(refused(validation.firstError));
   const { title, content, category, pinned } = validation.draft;
+  const ugc = await checkUgcContent({ title, content }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   const token = payload.requestId;
   if (typeof token !== 'string' || !REQUEST_ID_PATTERN.test(token)) return ok(refused('发布请求编号无效'));
   const fingerprint = JSON.stringify([title, content, category, pinned]);
@@ -181,6 +166,8 @@ async function updateAssociationNotice(payload = {}, ctx) {
   const validation = validateAnnouncement(payload);
   if (!validation.ok) return ok(refused(validation.firstError));
   const { title, content, category, pinned } = validation.draft;
+  const ugc = await checkUgcContent({ title, content }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   if (!Number.isInteger(payload.expectedRevision) || payload.expectedRevision < 1) {
     return ok(refused('请刷新通知版本后重试'));
   }

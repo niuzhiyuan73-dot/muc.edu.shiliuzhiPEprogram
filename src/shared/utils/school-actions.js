@@ -27,14 +27,14 @@
  * ============================================================
  */
 
-/** 学校身份（`forSchoolIdentity` 声明，14 个）。 */
+/** 学校身份（`forSchoolIdentity` 声明，16 个）。 */
 const SCHOOL_IDENTITY_ACTIONS = Object.freeze([
   'registerSchoolAccount',    'applySchoolMembership',    'reviewSchoolMembership',
   'getMySchoolMembership',    'getSchoolApplications',    'getSchoolDirectory',
   'getSchoolIdentitySession', 'getSchoolMembers',         'grantSchoolPermission',
   'updateSchoolProfile',      'applySchoolTransfer',      'reviewSchoolTransfer',
-  'cancelSchoolTransfer',
-  'getMySportsDashboard',
+  'cancelSchoolTransfer',     'getMySportsDashboard',     'getSchoolHomeSummary',
+  'deactivateMySchoolAccount',
 ]);
 
 /** 协会空间（`forAssociationSpace` 声明，119 个）。 */

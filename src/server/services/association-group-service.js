@@ -24,6 +24,7 @@
  */
 
 const { buildSchoolContext } = require('./school-context.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 const { loadColleges } = require('./college-directory.js');
 const { canReadAssociationSpace, canManageAssociationSpace } = require('./association-space-permission.js');
 const { runVersionedBatchJob } = require('./versioned-batch-job.js');
@@ -199,33 +200,23 @@ async function listAssociationGroups(payload = {}, ctx) {
       message: '没有读取协会空间的权限' });
   }
   const canManage = canManageAssociationSpace(ctx);
-  // 普通成员不见已删除组；管理员保留待清理记录，便于重进页面后恢复删除。
-  const rows = (await ctx.repo.forScope(ctx).associationGroups.list())
-    .filter(row => isGroupDoc(row) && (row.status !== GROUP_STATUS.DELETED || canManage && row.cleanupPending));
-  const mine = new Set((await ctx.repo.forScope(ctx).associationGroupMembers.listByUser(ctx.actorId))
+  const limit = Number.isInteger(payload.limit) && payload.limit > 0 ? Math.min(payload.limit, 99) : GROUP_LIST_LIMIT;
+  const scoped = ctx.repo.forScope(ctx);
+  const [pageResult, myRelations] = await Promise.all([
+    scoped.associationGroups.listPage({
+      canManage,
+      cursor: typeof payload.cursor === 'string' ? payload.cursor : '',
+      limit,
+    }),
+    scoped.associationGroupMembers.listByUser(ctx.actorId),
+  ]);
+  const mine = new Set((myRelations || [])
     .filter(row => row.userId === ctx.actorId && row.status === GROUP_MEMBER_STATUS.ACTIVE)
     .map(row => row.groupId));
+  const rows = (pageResult.rows || []).filter(isGroupDoc);
 
-  const sorted = rows.slice().sort((a, b) =>
-    ((a.createdAt || '') < (b.createdAt || '') ? -1 : (a.createdAt || '') > (b.createdAt || '') ? 1 : 0)
-    || (a._id < b._id ? -1 : a._id > b._id ? 1 : 0));
-  const after = typeof payload.cursor === 'string' ? payload.cursor : '';
-  let start = 0;
-  if (after) {
-    const [createdAt, id] = after.split('|').map(decodeURIComponent);
-    start = sorted.findIndex(row => String(row.createdAt || '') > createdAt ||
-      (String(row.createdAt || '') === createdAt && row._id > id));
-    if (start < 0) start = sorted.length;
-  }
-  const limit = Number.isInteger(payload.limit) && payload.limit > 0 ? Math.min(payload.limit, 100) : GROUP_LIST_LIMIT;
-  const page = sorted.slice(start, start + limit);
-  const hasMore = sorted.length > start + limit;
-  const nextCursor = hasMore && page.length
-    ? [encodeURIComponent(String(page[page.length - 1].createdAt || '')), encodeURIComponent(page[page.length - 1]._id)].join('|')
-    : '';
-
-  return ok({ ok: true, canManage, hasMore, nextCursor,
-    groups: page.map(group => ({ ...groupSummary(group, mine.has(group._id)),
+  return ok({ ok: true, canManage, hasMore: Boolean(pageResult.hasMore), nextCursor: pageResult.nextCursor || '',
+    groups: rows.map(group => ({ ...groupSummary(group, mine.has(group._id)),
       canReadRoster: !group.cleanupPending && (canManage || mine.has(group._id)) })), message: '' });
 }
 
@@ -236,7 +227,7 @@ async function getAssociationGroup(payload = {}, ctx) {
   if (!isLiveGroupDoc(group, ctx)) return ok(refused('小组不存在'));
 
   // 名单只给组内成员与空间管理者看；普通非组员只看组基本信息。
-  const relations = (await ctx.repo.forScope(ctx).associationGroupMembers.list())
+  const relations = (await ctx.repo.forScope(ctx).associationGroupMembers.listByGroup(group._id))
     .filter(row => row.groupId === group._id);
   const joined = relations.some(row => row.userId === ctx.actorId && row.status === GROUP_MEMBER_STATUS.ACTIVE);
   const canManage = canManageAssociationSpace(ctx);
@@ -258,6 +249,8 @@ async function createAssociationGroup(payload = {}, ctx) {
   if (name.value.length < 2) return ok(refused('组名需 2～30 个字'));
   const description = text(payload.description, MAX_DESCRIPTION_LENGTH);
   if (!description.ok) return ok(refused(description.message));
+  const ugc = await checkUgcContent({ name: name.value, description: description.value }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   const members = normalizeMemberIds(payload.memberIds);
   if (!members.ok) return ok(refused(members.message));
   const token = payload.requestId;
@@ -326,6 +319,8 @@ async function updateAssociationGroup(payload = {}, ctx) {
   if (name.value.length < 2) return ok(refused('组名需 2～30 个字'));
   const description = text(payload.description, MAX_DESCRIPTION_LENGTH);
   if (!description.ok) return ok(refused(description.message));
+  const ugc = await checkUgcContent({ name: name.value, description: description.value }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   if (!Number.isInteger(payload.expectedRevision) || payload.expectedRevision < 1) {
     return ok(refused('请刷新小组版本后重试'));
   }

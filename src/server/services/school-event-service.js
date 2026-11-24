@@ -40,7 +40,8 @@
 
 const { buildSchoolContext } = require('./school-context.js');
 const { loadColleges } = require('./college-directory.js');
-const { bumpSeasonVersion, refreshAfterWrite } = require('./season-points.js');
+const { bumpSeasonVersion, applyEventFactDelta, refreshAfterWrite } = require('./season-points.js');
+const { checkUgcContent } = require('./ugc-safety.js');
 const {
   canReadAssociationSpace, canManageAssociationSpace, canParticipateInAssociation,
 } = require('./association-space-permission.js');
@@ -595,6 +596,12 @@ async function publishSchoolEvent(payload = {}, ctx) {
 
   const built = buildEventRecord(payload, { actor: ctx.actor, now: ctx.now });
   if (!built.ok) return ok(refused(built.firstError, { errors: built.errors }));
+  const ugc = await checkUgcContent({
+    title: built.record.title,
+    location: built.record.location,
+    description: built.record.description,
+  }, ctx);
+  if (!ugc.ok) return ok(refused(ugc.message));
   const capacity = drawCapacityOf(built.record);
   if (Number(built.record.quota) > capacity) {
     const message = `本赛制最多支持 ${capacity} 人，请缩小名额`;
@@ -974,13 +981,20 @@ async function finishSchoolEvent(payload = {}, ctx) {
     await tx.audit.append({ _id: eventAuditKey(doc._id, 'finishEvent', next.revision),
       action: 'finishEvent', schoolId: ctx.schoolId, association: ctx.association,
       actorId: ctx.actorId, eventId: doc._id, at: nowIso });
-    // 名次一落库，赛季积分的事实就变了：同一事务里把物化代际 +1
-    // （2026-10-29 第十三轮：赛季积分物化）。事务外再重算物化表；重算失败也只是让读取端
-    // 回退实时聚合，不会读错分。
-    await bumpSeasonVersion(tx, ctx, ctx.now);
-    return { ok: true, event: eventSummary(next), results: checked.results, message: '' };
+    // 名次一落库，先尝试在同一事务内对获奖者做增量积分更新；未物化/超批时再回退事务外重算
+    const deltaRes = await applyEventFactDelta(tx, ctx, next);
+    return {
+      ok: true,
+      event: eventSummary(next),
+      results: checked.results,
+      needsRefresh: Boolean(deltaRes && deltaRes.needsRefresh),
+      message: '',
+    };
   });
-  if (result && result.ok) await refreshAfterWrite(ctx);
+  if (result && result.ok) {
+    if (result.needsRefresh) await refreshAfterWrite(ctx);
+    delete result.needsRefresh;
+  }
   return ok(result);
 }
 

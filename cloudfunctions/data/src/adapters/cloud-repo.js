@@ -53,9 +53,13 @@ async function readMatchPage(scope, schoolScope, options) {
   };
   const where = matchListWhere(schoolScope, filter);
   const pageWhere = cursor ? matchListWhere(schoolScope, filter, cursor) : where;
+  // 续页翻页（已带 cursor 或显式 skipCount）且非 offset 越界探测时，跳过 2 次冗余 count 聚合
+  const needCounts = size === 0 || (!cursor && offset > 0) || options.skipCount !== true;
   const pendingFilter = { ...filter, status: MATCH_STATUS.PENDING };
-  const pendingPromise = count(matchListWhere(schoolScope, pendingFilter));
-  const totalPromise = filter.status === MATCH_STATUS.PENDING ? pendingPromise : count(where);
+  const pendingPromise = needCounts ? count(matchListWhere(schoolScope, pendingFilter)) : Promise.resolve(null);
+  const totalPromise = !needCounts
+    ? Promise.resolve(null)
+    : (filter.status === MATCH_STATUS.PENDING ? pendingPromise : count(where));
   const pagePromise = size === 0 ? Promise.resolve([]) : (async () => {
     // 兼容任意非负 offset；超出结果集直接返回，避免把巨大的 skip 传给数据库。
     if (!cursor && offset > 0 && offset >= await totalPromise) return [];

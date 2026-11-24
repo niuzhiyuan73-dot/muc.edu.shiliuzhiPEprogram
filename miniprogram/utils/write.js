@@ -35,6 +35,7 @@ const SCHOOL_WRITE_ACTIONS = [
   'reviewSchoolMembership',
   'grantSchoolPermission',
   'updateSchoolProfile',
+  'deactivateMySchoolAccount',
   'applySchoolTransfer',
   'reviewSchoolTransfer',
   'cancelSchoolTransfer',

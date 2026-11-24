@@ -12,6 +12,10 @@ const { allAssociations } = require('../../shared/utils/associations.js');
 const { detachUserFromTeams } = require('./team-service.js');
 const { syncRatingProfileInTransaction } = require('./school-rating-service.js');
 const {
+  isPrivacyMaskEnabled, maskRealName, maskDisplayName,
+} = require('../../shared/utils/privacy-mask.js');
+const { checkUgcContent } = require('./ugc-safety.js');
+const {
   schoolMemberKey, schoolRoleKey, schoolMembershipKey, collegeKey,
   PLATFORM_ROLE, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS, SCHOOL_ROLE,
 } = require('../../shared/utils/school.js');
@@ -673,9 +677,10 @@ function createSchoolHandlers({ claimKey }) {
     const members = rows.map(row => {
       const membership = membershipById.get(schoolMembershipKey(row.userId, ctx));
       const isCollegeStaff = membership?.status === 'active' && membership?.role === 'staff';
+      const rawNick = (userById.get(row.userId) || {}).nickName || '会员';
       const item = {
         userId: row.userId,
-        nickName: (userById.get(row.userId) || {}).nickName || '会员',
+        nickName: readOnly && isPrivacyMaskEnabled('PRIVACY_MASK_PUBLIC') ? maskDisplayName(rawNick) : rawNick,
         collegeId: row.collegeId || '',
         collegeName: collegeName(row.collegeId),
       };
@@ -800,6 +805,8 @@ function createSchoolHandlers({ claimKey }) {
     if (!built.ok) {
       return ok({ ok: false, account: null, errors: built.errors, firstError: built.firstError });
     }
+    const ugc = await checkUgcContent({ nickName: built.patch.nickName }, ctx);
+    if (!ugc.ok) return ok(refused(ugc.message));
     const result = await ctx.repo.transaction(async tx => {
       const current = await tx.users.getById(ctx.actorId);
       if (!current || current.platformStatus !== PLATFORM_STATUS.ACTIVE) {
@@ -815,9 +822,112 @@ function createSchoolHandlers({ claimKey }) {
     return ok(result);
   }
 
+  /**
+   * 账号注销与数据删除闭环（G4 合规补齐）：
+   * 仅限本人确认注销，擦除 OpenID/实名/学号/头像，释放学号占用，撤销活跃角色与会籍，
+   * 保留匿名历史比赛战绩不破坏对手账本。事务内严格先读后写。
+   */
+  async function deactivateMySchoolAccount(payload = {}, ctx) {
+    if (!ctx.actorId) return ok(refused('请先登录'));
+    if (!payload || payload.confirm !== true) {
+      return ok({ ok: false, deactivated: false, message: '请确认注销账号后再提交' });
+    }
+
+    const result = await ctx.repo.transaction(async tx => {
+      const current = await tx.users.getById(ctx.actorId);
+      if (!current || current.platformStatus !== PLATFORM_STATUS.ACTIVE) {
+        return { ok: false, deactivated: false, message: '账号已注销或不可用' };
+      }
+      if (current.platformRole === PLATFORM_ROLE.ADMIN) {
+        return { ok: false, deactivated: false, message: '平台管理员账号不可自助注销，请先交接权限' };
+      }
+
+      const targetSchoolId = current.primarySchoolId || ctx.schoolId || '';
+      const memberKey = targetSchoolId ? schoolMemberKey(ctx.actorId, targetSchoolId) : '';
+      const roleKey = targetSchoolId ? schoolRoleKey(ctx.actorId, targetSchoolId) : '';
+
+      const member = memberKey ? await tx.schoolMembers.getById(memberKey) : null;
+      const roleDoc = roleKey ? await tx.schoolRoles.getById(roleKey) : null;
+      const claimId = (member && member.studentId && targetSchoolId && claimKey)
+        ? claimKey(targetSchoolId, member.studentId)
+        : '';
+      const claimDoc = claimId ? await tx.studentIdClaims.getById(claimId) : null;
+
+      const memberships = [];
+      if (targetSchoolId) {
+        for (const assoc of allAssociations()) {
+          const mbKey = schoolMembershipKey(ctx.actorId, { schoolId: targetSchoolId, association: assoc.id });
+          const mb = await tx.memberships.getById(mbKey);
+          if (mb && mb.status === 'active') memberships.push(mb);
+        }
+      }
+
+      const nowIso = new Date(ctx.now || Date.now()).toISOString();
+      await tx.users.set(ctx.actorId, {
+        ...current,
+        openId: '',
+        nickName: '已注销用户',
+        realName: '',
+        gender: '',
+        avatarUrl: '',
+        primarySchoolId: '',
+        searchName: '',
+        platformStatus: PLATFORM_STATUS.DISABLED,
+        deleted: true,
+        deactivatedAt: nowIso,
+        updatedAt: nowIso,
+      });
+
+      if (member) {
+        await tx.schoolMembers.set(memberKey, {
+          ...member,
+          status: SCHOOL_MEMBER_STATUS.LEFT,
+          studentId: '',
+          deleted: true,
+          deactivatedAt: nowIso,
+          updatedAt: nowIso,
+        });
+      }
+
+      if (claimDoc && claimDoc.userId === ctx.actorId) {
+        if (typeof tx.studentIdClaims.remove === 'function') {
+          await tx.studentIdClaims.remove(claimId);
+        } else {
+          await tx.studentIdClaims.set(claimId, {
+            ...claimDoc, userId: '', status: 'released', releasedAt: nowIso,
+          });
+        }
+      }
+
+      if (roleDoc && roleDoc.status === 'active') {
+        await tx.schoolRoles.set(roleKey, {
+          ...roleDoc, status: 'disabled', updatedBy: ctx.actorId, updatedAt: nowIso,
+        });
+      }
+
+      for (const mb of memberships) {
+        await tx.memberships.set(mb._id, {
+          ...mb, role: 'member', collegeId: '', status: 'revoked', updatedBy: ctx.actorId, updatedAt: nowIso,
+        });
+      }
+
+      await tx.audit.append({
+        _id: `deactivate_${ctx.actorId}_${Date.parse(nowIso) || Date.now()}`,
+        action: 'deactivateMySchoolAccount',
+        schoolId: targetSchoolId || ctx.schoolId,
+        actorId: ctx.actorId,
+        userId: ctx.actorId,
+        at: nowIso,
+      });
+
+      return { ok: true, deactivated: true, userId: ctx.actorId, message: '账号已注销，个人资料已脱敏清除' };
+    });
+    return ok(result);
+  }
+
   return { registerSchoolAccount, applySchoolMembership, reviewSchoolMembership, getMySchoolMembership,
     getSchoolApplications, getSchoolDirectory, getSchoolIdentitySession, getSchoolMembers,
-    grantSchoolPermission, updateSchoolProfile,
+    grantSchoolPermission, updateSchoolProfile, deactivateMySchoolAccount,
     // 转校：仅转校申请 + 目标学校审批 + 申请人撤回（原学校无需同意）
     applySchoolTransfer, reviewSchoolTransfer, cancelSchoolTransfer };
 }

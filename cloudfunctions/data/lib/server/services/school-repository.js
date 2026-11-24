@@ -237,6 +237,16 @@ function buildScoped(repo, io, inTx, options) {
     };
   }
 
+  if (result.associationGroupMembers) {
+    result.associationGroupMembers.listByGroup = (groupId) => {
+      if (inTx) throw new Error('事务内不允许条件读取（associationGroupMembers），请改用 getById');
+      if (typeof groupId !== 'string' || !groupId) return Promise.resolve([]);
+      return io.query('associationGroupMembers', {
+        schoolId: scope.schoolId, association: scope.association, groupId,
+      });
+    };
+  }
+
   if (result.memberRatings) {
     const rankedWhere = ({
       pool, gender = null, memberStatus = SCHOOL_MEMBER_STATUS.ACTIVE, minElo = null,

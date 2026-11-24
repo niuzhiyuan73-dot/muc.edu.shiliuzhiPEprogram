@@ -77,13 +77,16 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     // 免得为了一次录分把历年台账翻一遍（2026-10-22 第二轮审查 P-2）。
     // 再加一个 listMineSince：本赛季 + 只含本人（第三轮 X-7）。
     if (key === 'matches') expected = [...expected, 'listSince', 'listPage', 'listMineSince'];
-    if (key === 'announcements') expected = [...expected, 'listPage'];
+    if (key === 'announcements' || key === 'associationGroups'
+      || key === 'associationNotices' || key === 'associationTrainings') {
+      expected = [...expected, 'listPage'];
+    }
     // 赛事 / 学院赛列表下推（2026-10-29 第十二轮审计）：范围 + 状态 + 时间区间 +
     // 排序 + offset 分页一起交给数据库，两端同一份实现（event-list-page.js）。
     if (key === 'events' || key === 'collegeEvents') expected = [...expected, 'listPage'];
     if (key === 'memberships') expected = [...expected, 'listCollegeMembers'];
-    if (key === 'associationGroupMembers') expected = [...expected, 'listGroupPage'];
-    if (key === 'teamEvents') expected = [...expected, 'homeSummary'];
+    if (key === 'associationGroupMembers') expected = [...expected, 'listGroupPage', 'listByGroup'];
+    if (key === 'teamEvents') expected = [...expected, 'homeSummary', 'listPage'];
     // 这两个额外有 listByUser：都是「只增不减 + 一个人只有几十条」的集合，
     // 调用方只关心一个人的那几条——训练报名（H-2）、小组归属（H-3）。
     if (key === 'trainingRegistrations' || key === 'associationGroupMembers') {
@@ -115,7 +118,7 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     if (key === 'teamEventEntries') {
       // listByTeam（2026-10-26 只读审查 P2-7）：单队战绩按球队取报名，
       // 不再把本协会历年全部报名读回来再按 teamId 过滤。
-      expected = [...expected, 'listForUser', 'listByTeam'];
+      expected = [...expected, 'listForUser', 'listByTeam', 'listByEvents'];
     }
     if (key === 'teamMatches') expected = [...expected, 'listByEvents', 'listByTeams', 'listForPlayer', 'listScheduleCandidates'];
     if (key === 'teamMatchStats') expected = [...expected, 'listForUser'];

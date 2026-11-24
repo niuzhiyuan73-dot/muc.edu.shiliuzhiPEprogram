@@ -33,6 +33,7 @@ const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = requi
 const { settledPointsOf, isSettled } = require('./season-points.js');
 const { buildProjectLeaderboard } = require('../../shared/utils/leaderboard.js');
 const { getPoolRating } = require('../../shared/utils/rating.js');
+const { maskRealName } = require('../../shared/utils/privacy-mask.js');
 const {
   buildEventRecord, summarizeEvents, buildRatingHistory, buildHeadToHead,
   buildPartnerRecord, buildMatchHistory, summarizeForm,
@@ -409,11 +410,18 @@ async function loadProfileFacts(ctx, userId) {
  * @param {string} myId 当前登录会员编号
  * @returns {Array<Object>}
  */
-function buildRows(users, project, myId) {
+function buildRows(users, project, myId, options = {}) {
   const board = buildProjectLeaderboard(users, project)
     .filter(row => (row.matchCount || 0) > 0)
     .map((row, index) => ({ ...row, rank: index + 1 }));
   const realNameById = new Map(users.map(user => [user._id, user.realName || '']));
+  const realNameOf = (userId) => {
+    const raw = realNameById.get(userId) || '';
+    // 【D2 合规】普通成员视角只下发脱敏实名；本人 / 管理员保留完整值。
+    // 前端 rank-view 用 realName 做搜索匹配，脱敏后仍可按姓氏 / 末字命中；
+    // 完整姓名搜索由昵称承担——这是"不泄露他人实名"的必要取舍。
+    return (userId === myId || options.keepAllRealNames) ? raw : maskRealName(raw);
+  };
   return board.map(row => ({
     userId: row._id,
     rank: row.rank,
@@ -423,7 +431,7 @@ function buildRows(users, project, myId) {
     // 只参与搜索，不渲染；页面上显示的一律是昵称
     // 下发但**不渲染**：只用于按真实姓名搜索。榜单里只有出场过的参赛者，
     // 与赛事公示名单同口径，不含未参赛会员（2026-10-21 评估后保留）。
-    realName: realNameById.get(row._id) || '',
+    realName: realNameOf(row._id),
     avatarText: avatarOf(row.nickName),
     avatarUrl: row.avatarUrl || '',
     detailText: `${row.wins} 胜 ${row.losses} 负`,
@@ -548,6 +556,8 @@ async function getSchoolRanking(payload = {}, ctx) {
   }
 
   const myId = ctx.actorId || '';
+  // 管理员 / 审核角色可看完整实名；普通成员只拿脱敏值（D2 按角色脱敏）。
+  const canReview = canSchoolAction(ctx, 'reviewMembers', ctx);
   const { pool, gender } = RANK_PROJECT_CONFIG[activeProject];
   const scopeRepo = ctx.repo.forScope(ctx);
 
@@ -583,7 +593,7 @@ async function getSchoolRanking(payload = {}, ctx) {
   const ids = [...new Set([...topDocs.map(doc => doc.userId), myId].filter(Boolean))];
   const userById = new Map((await ctx.repo.users.listByIds(ids)).map(user => [user._id, user]));
 
-  const allRows = buildRows(membersFromRatingDocs(topDocs, userById), activeProject, myId);
+  const allRows = buildRows(membersFromRatingDocs(topDocs, userById), activeProject, myId, { keepAllRealNames: canReview });
   let myRow = allRows.find(row => row.isMe) || null;
 
   // 榜外也要给「我」一行：me 卡片要名次，搜索要能搜到自己。
@@ -592,7 +602,7 @@ async function getSchoolRanking(payload = {}, ctx) {
       pool, gender, memberStatus: SCHOOL_MEMBER_STATUS.ACTIVE, minElo: myDoc.elo,
     });
     const rank = above + 1;
-    const meRows = buildRows(membersFromRatingDocs([myDoc], userById), activeProject, myId);
+    const meRows = buildRows(membersFromRatingDocs([myDoc], userById), activeProject, myId, { keepAllRealNames: canReview });
     if (meRows.length > 0) {
       myRow = { ...meRows[0], rank, medal: medalOf(rank) };
       allRows.push(myRow);
@@ -649,6 +659,9 @@ async function getSchoolRanking(payload = {}, ctx) {
  */
 async function getSchoolMemberStats(payload = {}, ctx) {
   if (!canReadAssociationSpace(ctx)) return ok({ ok: false, members: [], message: '没有读取本协会成绩的权限' });
+  // 本人 / 审核角色保留完整实名；其余视角脱敏（D2）。
+  const canSeeRealName = canSchoolAction(ctx, 'reviewMembers', ctx);
+  const keepRealNameFor = (member) => member._id === ctx.actorId || canSeeRealName;
   const wanted = new Set((Array.isArray(payload.userIds) ? payload.userIds : [])
     .filter(id => typeof id === 'string' && id));
   // 【编号数量上限】（2026-11-07 审查 P2）：这里每个编号会展开成
@@ -702,8 +715,8 @@ async function getSchoolMemberStats(payload = {}, ctx) {
     await fillRatings(ctx, meMember ? [...picked, meMember] : picked);
     return ok({
       ok: true,
-      top: picked.map((member, index) => ({ ...memberStatsRow(member), rank: index + 1 })),
-      me: mine >= 0 ? { ...memberStatsRow(scored[mine]), rank: mine + 1 } : null,
+      top: picked.map((member, index) => ({ ...memberStatsRow(member, keepRealNameFor(member)), rank: index + 1 })),
+      me: mine >= 0 ? { ...memberStatsRow(scored[mine], true), rank: mine + 1 } : null,
       total,
       message: '',
     });
@@ -711,7 +724,7 @@ async function getSchoolMemberStats(payload = {}, ctx) {
 
   // 成绩同榜单：评级已落库，不需要读比赛流水。
   const { members } = await loadScopeView(ctx, { needMatches: false });
-  return ok({ ok: true, members: members.map(member => memberStatsRow(member)), message: '' });
+  return ok({ ok: true, members: members.map(member => memberStatsRow(member, keepRealNameFor(member))), message: '' });
 }
 
 /** 按编号取成绩时一次最多查多少人：与名录的批读上限对齐。 */
@@ -748,12 +761,16 @@ async function fillRatings(ctx, members) {
   }
 }
 
-/** 一个会员行的对外形状（评级四池 + 赛季积分）。全量与按编号两条路共用。 */
-function memberStatsRow(member) {
+/**
+ * 一个会员行的对外形状（评级四池 + 赛季积分）。全量与按编号两条路共用。
+ * @param {Object} member 会员
+ * @param {boolean} keepRealName 本人 / 管理员视角才为 true；普通成员视角脱敏（D2）
+ */
+function memberStatsRow(member, keepRealName = false) {
   return {
     userId: member._id,
     nickName: member.nickName || '',
-    realName: member.realName || '',
+    realName: keepRealName ? (member.realName || '') : maskRealName(member.realName || ''),
     avatarUrl: member.avatarUrl || '',
     points: Number(member.points || 0),
     ratings: ALL_RATING_POOLS.reduce((acc, pool) => {
@@ -784,6 +801,9 @@ function memberStatsRow(member) {
  * @returns {Promise<Array<Object>>}
  */
 async function statsOfMembers(ctx, userIds, { ratingsOnly }) {
+  // 指定人查询也按视角脱敏：本人 / 管理员完整，其余脱敏（D2）。
+  const canSeeRealName = canSchoolAction(ctx, 'reviewMembers', ctx);
+  const keepRealNameFor = (member) => member._id === ctx.actorId || canSeeRealName;
   const scope = ctx.repo.forScope(ctx);
   const ratingKeys = userIds.flatMap(userId => ALL_RATING_POOLS.map(pool => memberRatingKey(userId, pool, ctx)));
   const [memberRows, users, ratingDocs] = await Promise.all([
@@ -805,7 +825,7 @@ async function statsOfMembers(ctx, userIds, { ratingsOnly }) {
       }, {}),
     }));
 
-  if (ratingsOnly || members.length === 0) return members.map(member => memberStatsRow(member));
+  if (ratingsOnly || members.length === 0) return members.map(member => memberStatsRow(member, keepRealNameFor(member)));
 
   // 【物化优先】（2026-10-29 第十三轮）：积分就在上面那批会员行里，跟得上事实
   // 时**一次额外读都不发**；只有脏了才回退「读三份事实 + 按人下推签到」。
@@ -828,7 +848,7 @@ async function statsOfMembers(ctx, userIds, { ratingsOnly }) {
     });
   }
   for (const member of members) member.points = pointsByUser.get(member._id) || 0;
-  return members.map(member => memberStatsRow(member));
+  return members.map(member => memberStatsRow(member, keepRealNameFor(member)));
 }
 
 /**
@@ -983,19 +1003,20 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
   const form = summarizeForm(matches, userId, { limit: 5 });
   const eventRecords = buildEventRecord(events.filter(isEventDoc), userId);
 
+  // 本人 / 审核角色才能看到完整实名与学号；其余视角按 D2 脱敏。
+  const canSeeFullIdentity = userId === ctx.actorId || canSchoolAction(ctx, 'reviewMembers', ctx);
   return ok({
     ok: true, found: true, message: '',
     // 本人账号 / 档案展示字段；权限档只作展示，服务端写路径另行判权。
     user: {
       userId,
       nickName: member.nickName || '',
-      realName: member.realName || '',
+      realName: canSeeFullIdentity ? (member.realName || '') : maskRealName(member.realName || ''),
       avatarUrl: member.avatarUrl || '',
       gender: member.gender || '',
       collegeId: (memberDoc && memberDoc.collegeId) || '',
       college: collegeName((memberDoc && memberDoc.collegeId) || ''),
-      ...(userId === ctx.actorId || canSchoolAction(ctx, 'reviewMembers', ctx)
-        ? { studentId: (memberDoc && memberDoc.studentId) || '' } : {}),
+      ...(canSeeFullIdentity ? { studentId: (memberDoc && memberDoc.studentId) || '' } : {}),
       points: Number(member.points || 0),
       permissionLabel: permissionLabelOf(role, membership),
       // 权限档位的机器可读值（schoolAdmin / associationLeader / collegeLeader / 空）：

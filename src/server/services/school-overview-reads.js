@@ -1,4 +1,7 @@
-const { TEAM_EVENT_STATUS } = require('../../shared/utils/constants.js');
+const {
+  TEAM_EVENT_STATUS, ASSOCIATION_NOTICE_STATUS,
+} = require('../../shared/utils/constants.js');
+const GROUP_DELETED_STATUS = 'deleted';
 
 /** 有界的公告分页与团队首页摘要，查询条件始终包含资源范围。 */
 function attachOverviewReads(surface, { inTx, top, count, command: cmd }) {
@@ -67,6 +70,115 @@ function attachOverviewReads(surface, { inTx, top, count, command: cmd }) {
       count('teamMatches', base),
     ]);
     return { events: events.slice(0, limit), totalAll, matchTotal, hasMore: events.length > limit };
+  };
+
+  if (surface.associationGroups) surface.associationGroups.listPage = async (options = {}) => {
+    assertRead();
+    const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 99) : 20;
+    const canManage = options.canManage === true;
+    const base = { schoolId: scope.schoolId, association: scope.association };
+    const statusFilter = canManage
+      ? cmd.or([{ status: cmd.neq(GROUP_DELETED_STATUS) }, { status: GROUP_DELETED_STATUS, cleanupPending: true }])
+      : { status: cmd.neq(GROUP_DELETED_STATUS) };
+    const parts = [base, statusFilter];
+    if (options.cursor) {
+      const [createdAt, id] = String(options.cursor).split('|').map(decodeURIComponent);
+      parts.push(cmd.or([
+        { createdAt: cmd.gt(createdAt) },
+        { createdAt, _id: cmd.gt(id) },
+      ]));
+    }
+    const where = cmd.and(parts);
+    const rows = await top('associationGroups', where, [
+      { field: 'createdAt', direction: 'asc' }, { field: '_id', direction: 'asc' },
+    ], limit + 1);
+    const page = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last
+      ? [encodeURIComponent(String(last.createdAt || '')), encodeURIComponent(last._id)].join('|')
+      : '';
+    return { rows: page, hasMore, nextCursor };
+  };
+
+  if (surface.associationNotices) surface.associationNotices.listPage = async (options = {}) => {
+    assertRead();
+    const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const canManage = options.canManage === true;
+    const base = canManage
+      ? { schoolId: scope.schoolId, association: scope.association }
+      : { schoolId: scope.schoolId, association: scope.association, status: ASSOCIATION_NOTICE_STATUS.PUBLISHED };
+    let where = base;
+    if (options.cursor) {
+      const [pin, publishedAt, id] = String(options.cursor).split('|').map(decodeURIComponent);
+      const isPinned = pin === '1';
+      const pinnedCond = isPinned ? true : cmd.neq(true);
+      const after = [
+        { pinned: pinnedCond, publishedAt: cmd.lt(publishedAt) },
+        { pinned: pinnedCond, publishedAt, _id: cmd.gt(id) },
+      ];
+      if (isPinned) after.push({ pinned: cmd.neq(true) });
+      where = cmd.and([base, cmd.or(after)]);
+    }
+    const rows = await top('associationNotices', where, [
+      { field: 'pinned', direction: 'desc' },
+      { field: 'publishedAt', direction: 'desc' },
+      { field: '_id', direction: 'asc' },
+    ], limit + 1);
+    const page = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last
+      ? [
+        last.pinned ? '1' : '0',
+        encodeURIComponent(String(last.publishedAt || '')),
+        encodeURIComponent(last._id),
+      ].join('|')
+      : '';
+    return { rows: page, hasMore, nextCursor };
+  };
+
+  if (surface.associationTrainings) surface.associationTrainings.listPage = async (options = {}) => {
+    assertRead();
+    const limit = Number.isInteger(options.limit) && options.limit > 0 ? Math.min(options.limit, 50) : 20;
+    const base = { schoolId: scope.schoolId, association: scope.association };
+    let where = base;
+    if (options.cursor) {
+      const [startAt, id] = String(options.cursor).split('|').map(decodeURIComponent);
+      where = cmd.and([base, cmd.or([
+        { startAt: cmd.gt(startAt) },
+        { startAt, _id: cmd.gt(id) },
+      ])]);
+    }
+    const rows = await top('associationTrainings', where, [
+      { field: 'startAt', direction: 'asc' }, { field: '_id', direction: 'asc' },
+    ], limit + 1);
+    const page = rows.slice(0, limit);
+    const hasMore = rows.length > limit;
+    const last = page[page.length - 1];
+    const nextCursor = hasMore && last
+      ? [encodeURIComponent(String(last.startAt || '')), encodeURIComponent(last._id)].join('|')
+      : '';
+    return { rows: page, hasMore, nextCursor };
+  };
+
+  if (surface.teamEvents) surface.teamEvents.listPage = async (options = {}) => {
+    assertRead();
+    const limit = Math.min(100, Math.max(1, Number(options.limit) || 100));
+    const offset = Math.max(0, Number(options.offset) || 0);
+    const base = { schoolId: scope.schoolId, association: scope.association };
+    const parts = [base];
+    if (options.includeDraft !== true) parts.push({ status: cmd.neq(TEAM_EVENT_STATUS.DRAFT) });
+    if (options.cupMode === 'college') parts.push({ cupMode: 'college' });
+    else if (options.cupMode === 'free') parts.push({ cupMode: cmd.neq('college') });
+    const where = parts.length === 1 ? base : cmd.and(parts);
+    const [rows, total] = await Promise.all([
+      top('teamEvents', where, [
+        { field: 'createdAt', direction: 'desc' }, { field: '_id', direction: 'desc' },
+      ], limit, offset),
+      count('teamEvents', where),
+    ]);
+    return { rows, total, hasMore: offset + rows.length < total };
   };
 }
 

@@ -46,11 +46,22 @@ const crypto = require('crypto');
 const { createRepo } = require('./src/adapters/cloud-repo.js');
 const { handleSchoolRequest } = require('./src/core/school-request.js');
 const { isSchoolRequest } = require('./src/core/route.js');
+const { setUgcChecker } = require('./lib/server/services/ugc-safety.js');
 const {
   createTraceId, runWithTrace, mapErrorToFail, shouldEmitStructuredLog, buildStructuredLog,
 } = require('./src/core/observability.js');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
+
+if (process.env.UGC_WECHAT_CHECK === 'on'
+  && cloud.openapi && cloud.openapi.security && typeof cloud.openapi.security.msgSecCheck === 'function') {
+  setUgcChecker(async ({ content, openId, scene }) => cloud.openapi.security.msgSecCheck({
+    content,
+    version: 2,
+    scene: scene || 2,
+    openid: openId || undefined,
+  }));
+}
 
 /**
  * 日志里的用户标识：OpenID 的短哈希。

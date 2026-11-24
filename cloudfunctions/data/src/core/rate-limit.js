@@ -86,6 +86,7 @@ const ACTION_READ_COST = Object.freeze({
   // 录分入口已改窄查
   getSchoolMatchEntryContext: 5,
   getMySportsDashboard: 20,
+  getSchoolHomeSummary: 8,
   // 赛事 / 比赛分页下推；训练列表仍为范围扫描
   listSchoolEvents: 2,
   listCollegeEvents: 2,
@@ -112,7 +113,7 @@ const ACTION_READ_COST = Object.freeze({
  * 保守取值，避免误伤正常操作。
  */
 const WRITE_READ_COST = Object.freeze({
-  // 结算要重算：赛事 + 训练 + 全部签到 + 全部会员行，还带一批行写入
+  // 结算默认记重算兜底成本（未物化/超批时仍重算）；已物化 ≤25 人时实际走增量更新
   finishSchoolEvent: 20,
   // 取消训练令整场签到失效，同样走整次重算
   cancelTraining: 20,
