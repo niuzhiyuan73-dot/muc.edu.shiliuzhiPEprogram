@@ -31,7 +31,7 @@ const { permissionOf, permissionLabelOf, canSchoolAction } = require('./school-p
 const { displayRating, adjustMemberRating } = require('./school-rating-service.js');
 const { aggregatePoints, collectEventPointFacts, mountEventPointDeltas } = require('./school-points-service.js');
 const { settledPointsOf, isSettled } = require('./season-points.js');
-const { buildProjectLeaderboard } = require('../../shared/utils/leaderboard.js');
+const { buildProjectLeaderboard, sortProjectsForDisplay } = require('../../shared/utils/leaderboard.js');
 const { getPoolRating } = require('../../shared/utils/rating.js');
 const { maskRealName, maskPublicNickName } = require('../../shared/utils/privacy-mask.js');
 const {
@@ -1004,10 +1004,13 @@ async function getSchoolMemberProfile(payload = {}, ctx) {
     });
   }
   projects.sort((a, b) => b.matchCount - a.matchCount);
-  const active = projects[0] || null;
+  const active = projects.find(item => item.project === payload.project) || sortProjectsForDisplay(projects)[0] || null;
   const poolFilter = active ? active.pool : null;
 
-  const ratingHistory = active ? buildRatingHistory(matches, userId, active.pool, { order: "settlement" }) : [];
+  const ratingHistory = active ? buildRatingHistory(matches, userId, active.pool, {
+    order: 'settlement',
+    adjustments: await scopeRepo.ratingAdjustments.listByUser(userId),
+  }) : [];
   const headToHead = buildHeadToHead(matches, userId, { nameOf, pool: poolFilter });
   const partners = buildPartnerRecord(matches, userId, { nameOf, pool: poolFilter });
   const history = buildMatchHistory(matches, userId, { nameOf, pool: poolFilter, limit: historyLimit });

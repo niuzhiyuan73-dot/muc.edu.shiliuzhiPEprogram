@@ -220,12 +220,40 @@ test('管理员可从身份页调整当前评级：必填原因、目标分边�
   // 这里只验证到"请求已发出且被服务端以'还没有评级'拒绝"，证明门面接线正确。
   p.onRatingReasonInput(select('复核更正'));
   await p.onSubmitRating();
-  assert.ok(
-    /还没有评级/.test(p.data.error) || p.data.submitting === false,
-    '提交经 space 门面到达服务端（无评级时给出明确拒绝，而非前端报错）',
-  );
+  assert.match(p.data.error, /还没有评级/, '提交经 space 门面到达服务端');
   assert.equal(p.data.submitting, false, '提交结束不会卡住');
 
   p.onCancelRating();
   assert.equal(p.data.ratingEditor, null);
+});
+
+test('目标分必填，同内容重试复用编号，编辑后使用新编号且显示实际响应', async (t) => {
+  const original = service.forSpace;
+  t.after(() => { service.forSpace = original; });
+  const calls = [];
+  service.forSpace = () => ({ async adjustMemberRating(payload) {
+    calls.push(payload);
+    if (calls.length < 3) throw new Error('测试：响应丢失');
+    return { ok: true, adjustment: { pool: 'singles', after: 1750 } };
+  } });
+  const p = page();
+  mock.setDemoActor('demo_muc_admin');
+  await p.onLoad();
+  p.onAdjustRating({ currentTarget: { dataset: { userId: 'demo_muc_member' } } });
+  p.onRatingReasonInput(select('复核更正'));
+  await p.onSubmitRating();
+  assert.match(p.data.error, /目标分/);
+  assert.equal(calls.length, 0);
+
+  p.onRatingTargetInput(select('0'));
+  await p.onSubmitRating();
+  await p.onSubmitRating();
+  assert.equal(calls[0].targetElo, 0);
+  assert.deepEqual(calls[1], calls[0]);
+
+  p.onRatingTargetInput(select('1700'));
+  await p.onSubmitRating();
+  assert.notEqual(calls[2].requestId, calls[0].requestId);
+  assert.equal(calls[2].targetElo, 1700);
+  assert.match(p.data.notice, /1750/);
 });

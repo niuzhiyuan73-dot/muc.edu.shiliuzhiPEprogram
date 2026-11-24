@@ -200,7 +200,7 @@ function buildScoped(repo, io, inTx, options) {
     });
   };
 
-  for (const key of ['trainingRegistrations', 'associationGroupMembers', 'memberRatings']) {
+  for (const key of ['trainingRegistrations', 'associationGroupMembers', 'memberRatings', 'ratingAdjustments']) {
     if (!result[key]) continue;
     result[key].listByUser = (userId) => {
       if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);

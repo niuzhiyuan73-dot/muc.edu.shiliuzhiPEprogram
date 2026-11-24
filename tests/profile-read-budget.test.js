@@ -17,6 +17,7 @@ const assert = require('node:assert/strict');
 const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const rank = require('../src/server/services/school-rank-service');
+const { buildChart } = require('../miniprogram/services/profile-view');
 const {
   collegeKey, schoolMemberKey, memberRatingKey, schoolAssociationKey,
 } = require('../src/shared/utils/school');
@@ -113,7 +114,7 @@ function spyScope(repo) {
   const raw = repo.forScope;
   repo.forScope = (input) => {
     const surface = raw(input);
-    for (const key of ['matches', 'trainingRegistrations', 'memberRatings']) {
+    for (const key of ['matches', 'trainingRegistrations', 'memberRatings', 'ratingAdjustments']) {
       const collection = surface[key];
       if (!collection) continue;
       for (const method of ['list', 'listPage', 'listByUser']) {
@@ -163,6 +164,53 @@ test('个人主页的走势与战绩只含自己的比赛', async () => {
   const ids = data.history.map(row => row.matchId).filter(Boolean);
   assert.ok(ids.length > 0, '自己的比赛要出现在逐场战绩里');
   assert.ok(!JSON.stringify(data.history).includes('m_other'), '别人的比赛不能混进来');
+});
+
+test('评级走势按序号合并调分与比赛，调分不混入战绩或单场涨幅', async () => {
+  const seed = seedOf();
+  const singles = seed.memberRatings.find(doc => doc.userId === 'u_me');
+  singles.elo = 1750;
+  const doubles = {
+    ...singles, _id: memberRatingKey('u_me', 'doubles', singles), pool: 'doubles', elo: 1800, matchCount: 9,
+  };
+  seed.memberRatings.push(doubles);
+  const match = ratedMatch('m_later', 'u_me', 'u_rival', 4);
+  Object.assign(match.settlement.players[0], { eloBefore: 1700, eloAfter: 1716 });
+  seed.matches.push(match);
+  const adjustment = (seq, before, after, overrides = {}) => ({
+    _id: `ra_${seq}`, schoolId: SCHOOL, association: ASSOC, userId: 'u_me', pool: 'singles',
+    seq, before, after, delta: after - before, createdAt: NOW.toISOString(),
+    reason: '内部审计', operatorId: 'u_admin', ...overrides,
+  });
+  const repo = createSchoolMemoryRepo({
+    ...seed,
+    ratingAdjustments: [
+      adjustment(5, 1716, 1750), adjustment(2, 1516, 1700),
+      adjustment(3, 1500, 1800, { pool: 'doubles' }),
+      adjustment(6, 1750, 2000, { association: 'tt' }),
+      adjustment(7, 1750, 2100, { schoolId: 'buaa' }),
+      adjustment(8, 1750, 2200, { userId: 'u_other' }),
+    ],
+  });
+  const calls = spyScope(repo);
+  const data = await callProfile(repo, { userId: 'u_me' });
+  assert.equal(data.ok, true, data.message);
+  assert.deepEqual(data.ratingHistory.map(point => point.eloAfter), [1516, 1700, 1716, 1750]);
+  const chart = buildChart(data.ratingHistory, 1500);
+  assert.deepEqual(chart.adjustmentIndexes, [2, 4]);
+  assert.equal(chart.currentElo, 1750);
+  assert.equal(chart.best.deltaText, '+16');
+  assert.equal(data.history.length, 2);
+  assert.doesNotMatch(JSON.stringify(data.ratingHistory), /内部审计|u_admin/);
+  assert.deepEqual(calls.filter(call => call.key === 'ratingAdjustments'), [
+    { key: 'ratingAdjustments', method: 'listByUser', args: ['u_me'] },
+  ]);
+
+  const other = await callProfile(repo, { userId: 'u_me', project: 'doubles' });
+  assert.equal(other.active, 'doubles');
+  assert.deepEqual(other.ratingHistory.map(point => point.eloAfter), [1800]);
+  assert.equal(buildChart(other.ratingHistory, 1500).best, null);
+  assert.deepEqual(other.history, []);
 });
 
 test('训练报名按 userId 下推，不再整表读', async () => {

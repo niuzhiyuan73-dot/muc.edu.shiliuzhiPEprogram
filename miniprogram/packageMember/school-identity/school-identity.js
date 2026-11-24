@@ -14,7 +14,7 @@ Page({
     loading: true, submitting: false, error: '', notice: '',
     user: null, account: null, statusText: '', canApply: false, canReview: false, applications: [],
     members: [], grants: [], readOnly: false, applicationsHasMore: false, grantEditor: null, managedCollegeName: '',
-    /** 管理员评级调整弹层：{ userId, name, poolIndex, targetElo, reason, requestId } */
+    /** 管理员评级调整弹层，保留上次提交用于重试。 */
     ratingEditor: null, ratingPools: RATING_POOL_OPTIONS,
     // 名册分页（2026-10-26 第四轮审查 P-2）：一页 50 人，总数单独下发。
     memberTotal: 0, memberHasMore: false, memberCursor: '', memberLoadingMore: false,
@@ -302,7 +302,7 @@ Page({
     const member = this.data.members.find(row => row.userId === userId);
     if (!member) return;
     this.update({ ratingEditor: { userId, name: member.nickName || userId,
-      poolIndex: 0, targetElo: '', reason: '', requestId: '' }, error: '', notice: '' });
+      poolIndex: 0, targetElo: '', reason: '', lastRequest: null }, error: '', notice: '' });
   },
   onRatingPoolChange(event) {
     if (this.data.submitting || !this.data.ratingEditor) return;
@@ -321,21 +321,25 @@ Page({
     const editor = this.data.ratingEditor;
     if (!editor || this.data.submitting) return;
     const pool = (RATING_POOL_OPTIONS[editor.poolIndex] || {}).pool;
-    const targetElo = Number(editor.targetElo);
+    const targetText = String(editor.targetElo ?? '').trim();
+    const targetElo = Number(targetText);
     const reason = String(editor.reason || '').trim();
-    if (!pool || !Number.isInteger(targetElo) || targetElo < 0 || targetElo > 3000) {
+    if (!pool || !targetText || !Number.isInteger(targetElo) || targetElo < 0 || targetElo > 3000) {
       this.update({ error: '目标分需为 0–3000 的整数' }); return;
     }
     if (!reason) { this.update({ error: '请填写调整原因（审计必填）' }); return; }
-    // requestId 在弹层实例里生成一次，重试原样重发以保证幂等
-    const requestId = editor.requestId || `ra_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
-    this.update({ submitting: true, error: '', notice: '', ratingEditor: { ...editor, requestId } });
+    const last = editor.lastRequest;
+    const sameRequest = last && last.pool === pool && last.targetElo === targetElo && last.reason === reason;
+    const requestId = sameRequest ? last.requestId : `ra_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const request = { userId: editor.userId, pool, targetElo, reason, requestId };
+    this.update({ submitting: true, error: '', notice: '', ratingEditor: { ...editor, lastRequest: request } });
     try {
       const space = service.forSpace({ schoolId: this.data.schoolId, association: this.data.association });
-      const result = await space.adjustMemberRating({ userId: editor.userId, pool, targetElo, reason, requestId });
-      if (!result.ok) throw new Error(result.message || '调整失败');
+      const result = await space.adjustMemberRating(request);
+      if (!result?.ok || !result.adjustment) throw new Error(result?.message || '未能确认调整结果，请重试');
+      const label = RATING_POOL_OPTIONS.find(option => option.pool === result.adjustment.pool)?.label || '';
       await this.reload();
-      this.update({ notice: `已将 ${editor.name} 的${(RATING_POOL_OPTIONS[editor.poolIndex] || {}).label}评级调整为 ${targetElo}；不产生比赛记录，排名可能变化。` });
+      this.update({ notice: `已将 ${editor.name} 的${label}评级调整为 ${result.adjustment.after}，排名可能变化。` });
     } catch (err) {
       this.update({ error: err.message || '调整失败，请重试' });
     } finally {

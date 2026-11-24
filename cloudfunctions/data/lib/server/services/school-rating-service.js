@@ -42,7 +42,7 @@ const {
 } = require('../../shared/utils/elo.js');
 const {
   memberRatingKey, ratingSeqKey, belongsToSchoolScope, schoolScope, schoolMemberKey, schoolKey,
-  SCHOOL_MEMBER_STATUS,
+  PLATFORM_STATUS, SCHOOL_MEMBER_STATUS,
 } = require('../../shared/utils/school.js');
 const { allAssociations } = require('../../shared/utils/associations.js');
 const { isDoublesDiscipline } = require('../../shared/services/college-tie.js');
@@ -621,7 +621,7 @@ async function syncRatingProfileInTransaction(tx, {
  */
 function ratingAdjustmentKey(scope, requestId) {
   const s = schoolScope(scope);
-  if (typeof requestId !== 'string' || !requestId.trim()) {
+  if (typeof requestId !== 'string' || !/^[a-zA-Z0-9_-]{1,64}$/.test(requestId)) {
     throw new Error('评级调整缺少有效的 requestId');
   }
   return schoolKey('mra', s.schoolId, s.association, requestId);
@@ -660,7 +660,7 @@ async function adjustMemberRating(payload = {}, ctx) {
 
   const { userId, pool, targetElo } = payload;
   const requestId = payload.requestId;
-  if (typeof userId !== 'string' || !userId) return ok(refused('缺少会员编号'));
+  if (typeof userId !== 'string' || !userId || userId.length > 128) return ok(refused('会员编号无效'));
   if (!ALL_RATING_POOLS.includes(pool)) return ok(refused('未知的评级池'));
   const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
   if (!reason || reason.length > 200) return ok(refused('请填写调整原因（不超过 200 字）'));
@@ -678,16 +678,21 @@ async function adjustMemberRating(payload = {}, ctx) {
       return refused('当前已无评级调整权限');
     }
 
-    // 先点读幂等键：同一请求重放直接返回首次结果
     const prior = await tx.ratingAdjustments.getById(adjustKey);
-    if (prior && belongsToSchoolScope(prior, ctx)) {
+    if (prior) {
+      if (!belongsToSchoolScope(prior, ctx) || prior.operatorId !== fresh.actorId
+        || prior.userId !== userId || prior.pool !== pool || prior.after !== targetElo || prior.reason !== reason) {
+        return refused('该请求编号已用于其他评级调整，请重新提交');
+      }
       return { ok: true, adjustment: summaryOfAdjustment(prior), repeated: true };
     }
 
-    // 目标会员必须是本校本协会在册：事务内点读，不用事务外快照
+    const user = await tx.users.getById(userId);
     const member = await tx.schoolMembers.getById(schoolMemberKey(userId, ctx.schoolId));
-    if (!member || member.status !== SCHOOL_MEMBER_STATUS.ACTIVE) {
-      return refused('目标会员不在本校在册名单中');
+    if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== ctx.schoolId
+      || !member || member.schoolId !== ctx.schoolId || member.userId !== userId
+      || member.status !== SCHOOL_MEMBER_STATUS.ACTIVE) {
+      return refused('目标会员不在本校有效在册名单中');
     }
     const doc = await tx.memberRatings.getById(ratingKey);
     if (!doc || !belongsToSchoolScope(doc, ctx) || doc.userId !== userId || doc.pool !== pool) {

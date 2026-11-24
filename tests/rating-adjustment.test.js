@@ -54,7 +54,9 @@ test('ratingAdjustmentKey —— 同 requestId 同键，缺 requestId 抛错', (
   const a = ratingAdjustmentKey(SCOPE, 'req-1');
   assert.equal(ratingAdjustmentKey(SCOPE, 'req-1'), a);
   assert.notEqual(ratingAdjustmentKey(SCOPE, 'req-2'), a);
-  assert.throws(() => ratingAdjustmentKey(SCOPE, ''));
+  for (const invalid of ['', ' ', 'a/b', 'x'.repeat(65)]) {
+    assert.throws(() => ratingAdjustmentKey(SCOPE, invalid));
+  }
 });
 
 test('调整落库：评级改分 + 审计记录 + 复用范围序号，不伪造比赛', async () => {
@@ -100,6 +102,17 @@ test('幂等：同一 requestId 重放返回首次结果且不重复加分', asy
   const second = await adjustMemberRating(payload, ctx);
   assert.equal(second.data.repeated, true);
   assert.equal(second.data.adjustment.seq, first.data.adjustment.seq);
+  for (const change of [{ targetElo: 1700 }, { pool: RATING_POOL.DOUBLES },
+    { reason: '另外的原因' }, { userId: 'demo_muc_admin' }]) {
+    const collision = await adjustMemberRating({ ...payload, ...change }, ctx);
+    assert.equal(collision.data.ok, false);
+    assert.match(collision.data.message, /请求编号已用于其他评级调整/);
+  }
+  const platformAdmin = await repo.users.getById('demo_buaa_admin');
+  await repo.users.set(platformAdmin._id, { ...platformAdmin, platformRole: 'admin' });
+  const collision = await adjustMemberRating(payload, await ctxOf(repo, platformAdmin._id));
+  assert.equal(collision.data.ok, false);
+  assert.match(collision.data.message, /请求编号已用于其他评级调整/);
   const rating = await repo.memberRatings.getById(ratingKey);
   assert.equal(rating.elo, 1600, '重放没有二次调整');
   assert.equal(rating.version, 8);
@@ -128,6 +141,21 @@ test('边界：目标分越界 / 无原因 / 无评级记录都拒绝', async ()
   const inRoster = await repo.schoolMembers.getById(schoolMemberKey('demo_muc_admin', 'muc'));
   assert.ok(inRoster, '测试前提：该会员在册');
   assert.match((await adjustMemberRating({ ...base, userId: 'demo_muc_admin', requestId: 'e3' }, ctx)).data.message, /还没有评级/);
+});
+
+test('账号停用、归属已变化或账号缺失时不调整评级', async () => {
+  for (const change of [{ platformStatus: 'disabled' }, { primarySchoolId: 'buaa' }, null]) {
+    const seed = createSchoolDemoSeed();
+    if (change) Object.assign(seed.users.find(user => user._id === TARGET), change);
+    else seed.users = seed.users.filter(user => user._id !== TARGET);
+    const repo = createSchoolMemoryRepo(seed, { strict: true });
+    const key = await seedRating(repo);
+    const res = await adjustMemberRating({ userId: TARGET, pool: RATING_POOL.SINGLES,
+      targetElo: 1600, reason: '更正', requestId: 'ineligible-target' }, await ctxOf(repo, 'demo_muc_admin'));
+    assert.equal(res.data.ok, false);
+    assert.match(res.data.message, /有效在册/);
+    assert.equal((await repo.memberRatings.getById(key)).elo, 1500);
+  }
 });
 
 test('无在册会籍的目标会员被拒绝', async () => {

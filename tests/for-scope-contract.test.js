@@ -89,7 +89,7 @@ test('受范围仓储的集合方法面就是约定的那一套（钉住契约�
     if (key === 'teamEvents') expected = [...expected, 'homeSummary', 'listPage'];
     // 这两个额外有 listByUser：都是「只增不减 + 一个人只有几十条」的集合，
     // 调用方只关心一个人的那几条——训练报名（H-2）、小组归属（H-3）。
-    if (key === 'trainingRegistrations' || key === 'associationGroupMembers') {
+    if (key === 'trainingRegistrations' || key === 'associationGroupMembers' || key === 'ratingAdjustments') {
       expected = [...expected, 'listByUser'];
     }
     // 训练报名还要「按训练取」（一场训练几十条，集合只增不减，第三轮 X-8）。

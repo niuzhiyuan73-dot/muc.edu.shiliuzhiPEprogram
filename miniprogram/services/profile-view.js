@@ -78,17 +78,22 @@ function pickProject(projects, preferred) {
  * 序列首部补一个「入池起点分」，这样曲线从进池那天开始画，
  * 和图上那条虚线（起点）自然衔接，一眼能看出「这一路涨了多少」。
  *
- * @param {Array<Object>} ratingHistory buildRatingHistory 的结果（时间升序）
+ * @param {Array<Object>} ratingHistory 按结算和调整序号排列的变化记录
  * @param {number} startElo 入池起点分
  * @returns {Object}
  */
 function buildChart(ratingHistory, startElo) {
   const list = Array.isArray(ratingHistory) ? ratingHistory : [];
   const values = [startElo, ...list.map((point) => point.eloAfter)];
-  const deltas = list.map((point) => ({
-    value: point.eloDelta,
-    matchTime: point.matchTime,
-  }));
+  const adjustmentIndexes = [];
+  const deltas = [];
+  list.forEach((point, index) => {
+    if (point.kind === 'adjustment') {
+      adjustmentIndexes.push(index + 1); // 图表第一个点是入池起点
+    } else {
+      deltas.push({ value: point.eloDelta, matchTime: point.matchTime });
+    }
+  });
 
   // 单场最大涨幅：这是「加减分情况」里最值得单独拎出来的一条
   let best = null;
@@ -107,6 +112,7 @@ function buildChart(ratingHistory, startElo) {
     empty: list.length === 0,
     values,
     pointCount: list.length,
+    adjustmentIndexes,
     startElo,
     currentElo: values[values.length - 1],
     maxElo: Math.max(...values),

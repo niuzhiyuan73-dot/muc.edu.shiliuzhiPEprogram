@@ -310,31 +310,48 @@ function buildMatchHistory(matches, userId, options = {}) {
  * @param {string} pool 等级分池
  * @param {Object} [options]
  * @param {'time'|'settlement'} [options.order='time'] 排序口径
+ * @param {Array<Object>} [options.adjustments] 独立的管理员调分记录
  * @returns {Array<Object>} 按所选顺序排列
  */
 function buildRatingHistory(matches, userId, pool, options = {}) {
-  const { order = 'time' } = options;
+  const { order = 'time', adjustments = [] } = options;
   if (!ALL_RATING_POOLS.includes(pool)) {
     throw new Error(`未知的等级分池：${pool}`);
   }
 
   const points = findPlayerMatches(matches, userId)
-    .filter((view) => view.pool === pool && typeof view.eloAfter === 'number')
-    .map((view) => ({ ...view, settlementSeq: (view.settlement && view.settlement.settlementSeq) || null }));
-  if (order === 'settlement') {
-    points.sort((a, b) => (a.settlementSeq || 0) - (b.settlementSeq || 0));
-  } else {
-    points.sort((a, b) => new Date(a.matchTime) - new Date(b.matchTime));
+    .filter(view => view.pool === pool && typeof view.eloAfter === 'number')
+    .map(view => ({
+      seq: view.settlement?.settlementSeq || 0,
+      at: view.matchTime,
+      point: {
+        matchId: view.matchId,
+        matchTime: view.matchTime,
+        eloBefore: view.eloBefore,
+        eloAfter: view.eloAfter,
+        eloDelta: view.eloDelta,
+        isWin: view.isWin,
+        opponentIds: view.opponentIds,
+      },
+    }));
+  for (const record of adjustments) {
+    if (record.userId !== userId || record.pool !== pool || !Number.isFinite(record.after)) continue;
+    points.push({
+      seq: record.seq || 0,
+      at: record.createdAt,
+      point: {
+        kind: 'adjustment',
+        adjustedAt: record.createdAt,
+        eloBefore: record.before,
+        eloAfter: record.after,
+        eloDelta: record.delta,
+      },
+    });
   }
-  return points.map((view) => ({
-    matchId: view.matchId,
-    matchTime: view.matchTime,
-    eloBefore: view.eloBefore,
-    eloAfter: view.eloAfter,
-    eloDelta: view.eloDelta,
-    isWin: view.isWin,
-    opponentIds: view.opponentIds,
-  }));
+  points.sort(order === 'settlement'
+    ? (a, b) => a.seq - b.seq
+    : (a, b) => new Date(a.at) - new Date(b.at));
+  return points.map(item => item.point);
 }
 
 /**

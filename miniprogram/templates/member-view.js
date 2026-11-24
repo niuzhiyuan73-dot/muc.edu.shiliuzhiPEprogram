@@ -174,6 +174,7 @@ function createMemberPage(options = {}) {
 
       renderEloChart(this, {
         values: view.chart.values,
+        style: { markedIndexes: view.chart.adjustmentIndexes },
         // 参考线画在入池起点分上，一眼能看出总共涨了多少
         reference: view.chart.startElo,
       });

@@ -150,6 +150,7 @@ function computeChartGeometry(values, options = {}) {
  * @param {string} [style.font='10px sans-serif']
  * @param {number} [style.lineWidth=2]
  * @param {number} [style.labelOffset=14] 刻度文字与右边框的距离
+ * @param {number[]} [style.markedIndexes] 需要方框标记的点下标
  */
 function drawLineChart(ctx, geometry, style = {}) {
   if (!ctx || !geometry || geometry.empty) return;
@@ -162,6 +163,7 @@ function drawLineChart(ctx, geometry, style = {}) {
     font = '10px sans-serif',
     lineWidth = 2,
     labelOffset = 14,
+    markedIndexes = [],
   } = style;
 
   const { points, grid, reference, plot } = geometry;
@@ -235,6 +237,12 @@ function drawLineChart(ctx, geometry, style = {}) {
   ctx.globalAlpha = 0.35;
   ctx.stroke();
   ctx.globalAlpha = 1;
+
+  ctx.strokeStyle = lineColor;
+  for (const index of markedIndexes) {
+    const point = points[index];
+    if (point) ctx.strokeRect(point.x - 5, point.y - 5, 10, 10);
+  }
 }
 
 module.exports = {

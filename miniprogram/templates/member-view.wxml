@@ -154,7 +154,7 @@
 <template name="memberChart">
   <view class="card">
     <view class="card-title">分数走势</view>
-    <view class="card-subtitle">虚线是入池起点，曲线是每一场之后的分数</view>
+    <view class="card-subtitle">虚线是入池起点，曲线记录评级变化<text wx:if="{{chart.adjustmentIndexes.length}}">，方框标记管理员调整</text></view>
 
     <view wx:if="{{chart.empty}}" class="empty-note">还没有足够的数据画出走势</view>
 
