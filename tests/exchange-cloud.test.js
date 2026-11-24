@@ -13,7 +13,7 @@ process.env.RATE_LIMIT = 'off';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { schoolMemberKey } = require('../src/shared/utils/school');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 const handlers = require('../cloudfunctions/data/src/core/school-exchange-handlers');
@@ -146,9 +146,9 @@ test('云端入口：跨校边界与权限照样生效（外校不能替主办�
 
 test('客户端门面：云数据源不再直接拒绝进入邀请赛', async () => {
   // 门面按数据源选择：mock 走本地仓储，cloud 走协议 2 客户端；两者都不再抛「尚未开放云端」
-  const exchange = require('../miniprogram/services/exchange.js');
+  const exchange = require('../miniprogram/packageMember/services/exchange.js');
   const schoolSession = require('../miniprogram/services/school-session.js');
-  const schoolMock = require('../miniprogram/services/school-mock.js');
+  const schoolMock = require('../src/mock/school-mock.js');
   schoolSession.reset();
   schoolMock.reset();
   const client = exchange.forScope({ schoolId: 'muc', association: 'pkb' });

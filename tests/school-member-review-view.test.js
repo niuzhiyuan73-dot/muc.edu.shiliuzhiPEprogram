@@ -15,8 +15,8 @@ const assert = require('node:assert');
 
 const {
   PENDING_EMPTY, schoolApplicationRow, loadSchoolMemberReviewView,
-} = require('../miniprogram/services/school-member-review-view.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+} = require('../miniprogram/packageMember/services/school-member-review-view.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const identity = require('../miniprogram/services/school-identity.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };

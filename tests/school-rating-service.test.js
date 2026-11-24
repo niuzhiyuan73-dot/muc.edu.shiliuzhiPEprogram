@@ -11,7 +11,7 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const {
   decideSettlement, materializeRatings, computeSettlement, buildRatingDoc,
   displayRating, assertValidRatingDoc, buildExcludedSettlement,

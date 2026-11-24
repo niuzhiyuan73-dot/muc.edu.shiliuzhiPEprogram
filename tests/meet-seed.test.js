@@ -21,7 +21,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { runMeetDemo, createMeetDemoRecords } = require('../miniprogram/services/meet-seed.js');
+const { runMeetDemo, createMeetDemoRecords } = require('../src/mock/meet-seed.js');
 
 // 整届只跑一遍：所有用例共享同一结果（node:test 默认顺序执行）。
 const demo = runMeetDemo();

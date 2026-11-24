@@ -1,11 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createFootballAssociation } = require('../src/shared/utils/football-association');
-const { createFootballDemoContent } = require('../miniprogram/services/football-demo');
-const { createTeamDemoContent } = require('../miniprogram/services/team-demo');
+const { createFootballDemoContent } = require('../src/mock/football-demo.js');
+const { createTeamDemoContent } = require('../src/mock/team-demo.js');
 const { isKnownAssociation } = require('../src/shared/utils/associations');
 const { normalizeFootballRules } = require('../src/shared/utils/football-rules');
-const { MEMBER_SEED } = require('../miniprogram/services/seed');
+const { MEMBER_SEED } = require('../src/mock/seed.js');
 
 test('足球协会定义可供接入且不含篮球/Elo 配置，不提前修改当前注册表', () => {
   const registeredBefore = isKnownAssociation('fb');

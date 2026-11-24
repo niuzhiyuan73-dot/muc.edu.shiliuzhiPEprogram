@@ -23,7 +23,7 @@ const PREFIX = 'shilzi:team-stats-draft:v1:';
 /** 读取当前登录人；拿不到时用 anonymous，至少同设备同场次仍可恢复。 */
 function currentUserId() {
   try {
-    const dto = require('./app-session.js').get();
+    const dto = require('../../services/app-session.js').get();
     const userId = dto && dto.session && dto.session.user && dto.session.user.userId;
     if (userId) return userId;
   } catch (err) {

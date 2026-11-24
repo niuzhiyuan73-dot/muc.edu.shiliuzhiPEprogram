@@ -1,9 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const { listSchoolMatches } = require('../src/server/services/school-match-service');
 const { schoolLiveKey } = require('../src/shared/utils/school');

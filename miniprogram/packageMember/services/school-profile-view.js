@@ -24,10 +24,10 @@
  * ============================================================
  */
 
-const identity = require('./school-identity.js');
-const space = require('./association-space.js');
-const { GENDER_LABEL } = require('../shared/utils/constants.js');
-const { NICKNAME_MAX, resolveNameDisplay } = require('../shared/services/profile.js');
+const identity = require('../../services/school-identity.js');
+const space = require('../../services/association-space.js');
+const { GENDER_LABEL } = require('../../shared/utils/constants.js');
+const { NICKNAME_MAX, resolveNameDisplay } = require('../../shared/services/profile.js');
 
 /** 拿不到会话（没有账号）时的说法，与旧栈同一句 */
 const LOGIN_BLOCK = '请先登录后再修改资料';

@@ -16,6 +16,7 @@
  * ============================================================
  */
 
+require('./register-mock.js');
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const { MINI, pagePathOf } = require('./page-registry.js');

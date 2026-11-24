@@ -147,7 +147,7 @@ App({
     this.globalData.dataSource = target;
 
     if (target === DATA_SOURCE.MOCK) {
-      console.info('[app] 当前使用本地模拟数据模式，功能可完整预览');
+      console.warn('[app] 当前为 MOCK 模式：Mock 数据已在 G2b 剥离出包，真机需在 config.js 填入 CLOUD_ENV_ID 走云端（测试环境由注入提供 Mock）');
     }
   },
 

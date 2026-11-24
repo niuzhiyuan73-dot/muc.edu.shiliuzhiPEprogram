@@ -23,9 +23,9 @@
  * ============================================================
  */
 
-const { GENDER_LABEL } = require('../shared/utils/constants.js');
-const { formatDateTime } = require('../shared/utils/format.js');
-const identity = require('./school-identity.js');
+const { GENDER_LABEL } = require('../../shared/utils/constants.js');
+const { formatDateTime } = require('../../shared/utils/format.js');
+const identity = require('../../services/school-identity.js');
 
 /** 待审核台账的空态文案 */
 const PENDING_EMPTY = '没有待审核的入会申请';

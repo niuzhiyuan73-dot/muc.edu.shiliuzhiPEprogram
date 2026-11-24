@@ -17,9 +17,9 @@ process.env.RATE_LIMIT = 'off';
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 const {
   computeSettlement, materializeRatings, settleMatchInTransaction, buildRatingDoc,

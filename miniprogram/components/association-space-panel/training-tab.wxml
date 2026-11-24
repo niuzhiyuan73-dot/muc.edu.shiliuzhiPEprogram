@@ -1,0 +1,273 @@
+    <!-- ========== 训练（默认页签；P3） ========== -->
+    <view wx:if="{{mountedSub.training}}" hidden="{{activeSub !== 'training'}}">
+
+      <!-- 状态筛选：全部 / 可报名 / 进行中 / 已结束 / 已取消 -->
+      <view class="pool-tabs space-filters">
+        <view
+          wx:for="{{trainingFilters}}"
+          wx:key="key"
+          class="pool-tab {{trainingFilter === item.key ? 'is-active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onTrainingFilter"
+        >
+          <view class="pool-tab-label">{{item.label}}</view>
+        </view>
+      </view>
+
+      <button wx:if="{{canManage}}" class="btn btn-outline btn-block space-new" bindtap="onToggleTrainingCreate">
+        {{showTrainingCreate ? '取消发布' : '发布训练'}}
+      </button>
+
+      <!-- 发布表单 -->
+      <view wx:if="{{canManage && showTrainingCreate}}" class="card">
+        <view class="card-title">发布训练</view>
+        <view class="space-field">
+          <text class="space-label">标题</text>
+          <input class="search-input" value="{{trainingForm.title}}" maxlength="30" placeholder="2～30 个字"
+            data-field="title" bindinput="onTrainingField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">地点</text>
+          <input class="search-input" value="{{trainingForm.location}}" maxlength="100" placeholder="如：综合体育馆"
+            data-field="location" bindinput="onTrainingField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">开始时间</text>
+          <view class="space-datetime">
+            <picker mode="date" value="{{trainingForm.date}}" data-kind="start" bindchange="onPickTrainingDate">
+              <view class="space-picker-value">{{trainingForm.date || '选择日期'}}</view>
+            </picker>
+            <picker mode="time" value="{{trainingForm.time}}" data-kind="start" bindchange="onPickTrainingTime">
+              <view class="space-picker-value">{{trainingForm.time || '选择时间'}}</view>
+            </picker>
+          </view>
+        </view>
+        <view class="space-field">
+          <text class="space-label">结束时间</text>
+          <view class="space-datetime">
+            <picker mode="date" value="{{trainingForm.endDate}}" data-kind="end" bindchange="onPickTrainingDate">
+              <view class="space-picker-value">{{trainingForm.endDate || '选择日期'}}</view>
+            </picker>
+            <picker mode="time" value="{{trainingForm.endTime}}" data-kind="end" bindchange="onPickTrainingTime">
+              <view class="space-picker-value">{{trainingForm.endTime || '选择时间'}}</view>
+            </picker>
+          </view>
+        </view>
+        <view class="space-field">
+          <text class="space-label">人数上限（留空表示不限）</text>
+          <input class="search-input" type="number" value="{{trainingForm.capacity}}" maxlength="4"
+            placeholder="留空不限" data-field="capacity" bindinput="onTrainingField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">报名范围</text>
+          <view class="space-mode-row">
+            <view class="space-mode {{trainingForm.audienceMode === 'all' ? 'is-active' : ''}}"
+              data-mode="all" bindtap="onPickAudienceMode">不限小组</view>
+            <view class="space-mode {{trainingForm.audienceMode === 'groups' ? 'is-active' : ''}}"
+              data-mode="groups" bindtap="onPickAudienceMode">限指定小组</view>
+          </view>
+          <view wx:if="{{trainingForm.audienceMode === 'groups'}}" class="space-picker">
+            <view wx:if="{{audienceGroups.length === 0}}" class="space-picker-note">本协会还没有可用的小组</view>
+            <view
+              wx:for="{{audienceGroups}}"
+              wx:key="groupId"
+              wx:for-item="group"
+              class="space-pick-row {{group.picked ? 'is-picked' : ''}}"
+              data-groupid="{{group.groupId}}"
+              bindtap="onToggleAudienceGroup"
+            >
+              <text class="space-pick-name">{{group.name}}</text>
+              <text class="space-pick-check">{{group.picked ? '✓' : ''}}</text>
+            </view>
+          </view>
+        </view>
+        <view class="space-field">
+          <text class="space-label">说明（选填）</text>
+          <textarea class="space-textarea" value="{{trainingForm.description}}" maxlength="1000"
+            placeholder="训练内容、注意事项" data-field="description" bindinput="onTrainingField" />
+        </view>
+        <button class="btn btn-primary btn-block" bindtap="onCreateTraining" disabled="{{groupBusy}}">
+          {{groupBusy ? '处理中…' : '发布'}}
+        </button>
+      </view>
+
+      <view wx:if="{{trainingError}}" class="empty-state">
+        <view class="empty-state-icon">⚠️</view>
+        <view class="empty-state-text">{{trainingError}}</view>
+      </view>
+
+      <view wx:elif="{{trainings.length === 0 && !trainingLoading}}" class="empty-state">
+        <view class="empty-state-icon">🏸</view>
+        <view class="empty-state-text">暂无训练</view>
+      </view>
+
+      <block wx:else>
+        <view wx:for="{{trainings}}" wx:key="trainingId" wx:for-item="training" class="card space-group">
+          <view class="space-group-head">
+            <view class="space-group-name">{{training.title}}</view>
+            <view class="space-state is-{{training.state}}">{{training.stateLabel}}</view>
+          </view>
+          <view class="space-card-meta">{{training.startText}} ~ {{training.endText}} · {{training.location}}</view>
+          <view class="space-card-meta">{{training.audienceText}} · 已报名 {{training.signupCount}} / {{training.capacityText}}</view>
+
+          <view class="space-group-actions">
+            <button class="btn btn-outline space-mini" data-trainingid="{{training.trainingId}}"
+              bindtap="onToggleTrainingDetail">
+              {{openTrainingId === training.trainingId ? '收起详情' : '详情 / 报名'}}
+            </button>
+            <button wx:if="{{canManage && !training.canceled}}" class="btn btn-outline space-mini"
+              data-trainingid="{{training.trainingId}}" data-revision="{{training.revision}}"
+              bindtap="onToggleTrainingEdit" disabled="{{groupBusy}}">
+              {{editingTrainingId === training.trainingId ? '取消编辑' : '编辑'}}
+            </button>
+            <button wx:if="{{canManage && training.finishable}}" class="btn btn-outline space-mini"
+              data-trainingid="{{training.trainingId}}" bindtap="onFinishTraining"
+              disabled="{{groupBusy}}">标记结束</button>
+            <button wx:if="{{canManage && !training.canceled && !training.finishable}}"
+              class="btn btn-danger space-mini" data-trainingid="{{training.trainingId}}"
+              bindtap="onCancelTraining" disabled="{{groupBusy}}">取消训练</button>
+          </view>
+
+          <!-- 编辑表单：与发布同一套字段 -->
+          <view wx:if="{{canManage && editingTrainingId === training.trainingId}}" class="card space-edit">
+            <view class="space-field">
+              <text class="space-label">标题</text>
+              <input class="search-input" value="{{trainingForm.title}}" maxlength="30" placeholder="2～30 个字"
+                data-field="title" bindinput="onTrainingField" />
+            </view>
+            <view class="space-field">
+              <text class="space-label">地点</text>
+              <input class="search-input" value="{{trainingForm.location}}" maxlength="100" placeholder="如：综合体育馆"
+                data-field="location" bindinput="onTrainingField" />
+            </view>
+            <view class="space-field">
+              <text class="space-label">开始时间</text>
+              <view class="space-datetime">
+                <picker mode="date" value="{{trainingForm.date}}" data-kind="start" bindchange="onPickTrainingDate">
+                  <view class="space-picker-value">{{trainingForm.date || '选择日期'}}</view>
+                </picker>
+                <picker mode="time" value="{{trainingForm.time}}" data-kind="start" bindchange="onPickTrainingTime">
+                  <view class="space-picker-value">{{trainingForm.time || '选择时间'}}</view>
+                </picker>
+              </view>
+            </view>
+            <view class="space-field">
+              <text class="space-label">结束时间</text>
+              <view class="space-datetime">
+                <picker mode="date" value="{{trainingForm.endDate}}" data-kind="end" bindchange="onPickTrainingDate">
+                  <view class="space-picker-value">{{trainingForm.endDate || '选择日期'}}</view>
+                </picker>
+                <picker mode="time" value="{{trainingForm.endTime}}" data-kind="end" bindchange="onPickTrainingTime">
+                  <view class="space-picker-value">{{trainingForm.endTime || '选择时间'}}</view>
+                </picker>
+              </view>
+            </view>
+            <view class="space-field">
+              <text class="space-label">人数上限（留空表示不限）</text>
+              <input class="search-input" type="number" value="{{trainingForm.capacity}}" maxlength="4"
+                placeholder="留空不限" data-field="capacity" bindinput="onTrainingField" />
+            </view>
+            <view class="space-field">
+              <text class="space-label">报名范围</text>
+              <view class="space-mode-row">
+                <view class="space-mode {{trainingForm.audienceMode === 'all' ? 'is-active' : ''}}"
+                  data-mode="all" bindtap="onPickAudienceMode">不限小组</view>
+                <view class="space-mode {{trainingForm.audienceMode === 'groups' ? 'is-active' : ''}}"
+                  data-mode="groups" bindtap="onPickAudienceMode">限指定小组</view>
+              </view>
+              <view wx:if="{{trainingForm.audienceMode === 'groups'}}" class="space-picker">
+                <view wx:if="{{audienceGroups.length === 0}}" class="space-picker-note">本协会还没有可用的小组</view>
+                <view
+                  wx:for="{{audienceGroups}}"
+                  wx:key="groupId"
+                  wx:for-item="group"
+                  class="space-pick-row {{group.picked ? 'is-picked' : ''}}"
+                  data-groupid="{{group.groupId}}"
+                  bindtap="onToggleAudienceGroup"
+                >
+                  <text class="space-pick-name">{{group.name}}</text>
+                  <text class="space-pick-check">{{group.picked ? '✓' : ''}}</text>
+                </view>
+              </view>
+            </view>
+            <view class="space-field">
+              <text class="space-label">说明（选填）</text>
+              <textarea class="space-textarea" value="{{trainingForm.description}}" maxlength="1000"
+                placeholder="训练内容、注意事项" data-field="description" bindinput="onTrainingField" />
+            </view>
+            <button class="btn btn-primary btn-block" bindtap="onSaveTrainingEdit" disabled="{{groupBusy}}">
+              {{groupBusy ? '处理中…' : '保存修改'}}
+            </button>
+          </view>
+
+          <!-- 详情 + 报名（签到属于 P5，这里不出现任何签到入口） -->
+          <view wx:if="{{openTrainingId === training.trainingId}}" class="space-roster">
+            <view wx:if="{{trainingDetailLoading}}" class="space-roster-note">详情加载中…</view>
+            <view wx:elif="{{trainingDetailError}}" class="space-roster-note">{{trainingDetailError}}</view>
+            <block wx:elif="{{trainingDetail}}">
+              <view wx:if="{{trainingDetail.training.description}}" class="space-card-body">{{trainingDetail.training.description}}</view>
+
+              <view class="space-signup">
+                <text wx:if="{{trainingDetail.myRegistration && trainingDetail.myRegistration.signupStatus === 'registered'}}"
+                  class="space-signup-state">你已报名</text>
+                <button wx:if="{{trainingDetail.canRegister}}" class="btn btn-primary space-mini"
+                  bindtap="onRegisterTraining" disabled="{{groupBusy}}">报名</button>
+                <button wx:elif="{{trainingDetail.canCancel}}" class="btn btn-danger space-mini"
+                  bindtap="onCancelRegistration" disabled="{{groupBusy}}">取消报名</button>
+                <text wx:elif="{{trainingDetail.registerNote}}" class="space-signup-note">{{trainingDetail.registerNote}}</text>
+              </view>
+
+              <!-- 本人签到：只在窗口内、已报名、非待确认 / 已确认时出现；其余情况给一句说明 -->
+              <view wx:if="{{trainingDetail.canCheckIn}}" class="space-signup">
+                <text class="space-signup-note">签到后需负责人确认，确认成功计 1 分</text>
+                <button class="btn btn-primary space-mini" bindtap="onRequestCheckIn"
+                  disabled="{{groupBusy}}">我要签到</button>
+              </view>
+              <view wx:elif="{{trainingDetail.checkInNote}}" class="space-signup">
+                <text class="space-signup-note">{{trainingDetail.checkInNote}}</text>
+              </view>
+
+              <view class="space-roster-note">报名名单（{{trainingRoster.length}}）</view>
+              <view wx:if="{{trainingRoster.length === 0}}" class="space-roster-note">还没有人报名</view>
+              <view wx:else>
+                <view wx:for="{{trainingRoster}}" wx:key="userId" wx:for-item="player" class="space-roster-item">
+                  <view class="space-roster-row">
+                    <text class="space-roster-name">{{player.nickName}}
+                      <text wx:if="{{player.canceled}}" class="space-roster-meta">已取消</text>
+                      <text wx:elif="{{player.attendanceLabel}}" class="space-roster-meta">{{player.attendanceLabel}}</text></text>
+                    <text class="space-roster-meta">{{player.collegeName}}</text>
+                    <view class="space-roster-actions">
+                      <button wx:if="{{trainingDetail.canManage && player.canApprove}}" class="btn btn-primary space-mini"
+                        data-userid="{{player.userId}}" data-revision="{{player.revision}}"
+                        bindtap="onConfirmCheckIn" disabled="{{groupBusy}}">确认签到</button>
+                      <button wx:if="{{trainingDetail.canManage && player.canApprove}}" class="btn btn-outline space-mini"
+                        data-userid="{{player.userId}}" data-kind="reject"
+                        bindtap="onStartApproval" disabled="{{groupBusy}}">退回</button>
+                      <button wx:if="{{trainingDetail.canManage && player.canRevoke}}" class="btn btn-outline space-mini"
+                        data-userid="{{player.userId}}" data-kind="revoke"
+                        bindtap="onStartApproval" disabled="{{groupBusy}}">撤销确认</button>
+                      <button wx:if="{{trainingDetail.canManage && !player.canceled}}" class="btn btn-danger space-mini"
+                        data-userid="{{player.userId}}" bindtap="onRemoveRegistration" disabled="{{groupBusy}}">移出</button>
+                    </view>
+                  </view>
+                  <view wx:if="{{approvalAction && approvalAction.userId === player.userId}}" class="space-approval">
+                    <input class="search-input" value="{{approvalReason}}" maxlength="200"
+                      placeholder="{{approvalAction.kind === 'reject' ? '退回原因（必填）' : '撤销原因（必填）'}}"
+                      bindinput="onApprovalReason" />
+                    <view class="space-approval-actions">
+                      <button class="btn btn-primary space-mini" bindtap="onSubmitApproval" disabled="{{groupBusy}}">提交</button>
+                      <button class="btn btn-outline space-mini" bindtap="onCancelApproval" disabled="{{groupBusy}}">取消</button>
+                    </view>
+                  </view>
+                  <view wx:if="{{player.rejectionReason}}" class="space-roster-note">退回原因：{{player.rejectionReason}}</view>
+                </view>
+              </view>
+            </block>
+          </view>
+        </view>
+
+        <button wx:if="{{trainingHasMore}}" class="btn btn-outline btn-block" bindtap="onLoadMoreTrainings"
+          disabled="{{trainingLoading}}">{{trainingLoading ? '加载中…' : '加载更多'}}</button>
+      </block>
+    </view>
+

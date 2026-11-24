@@ -18,7 +18,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { MEET_COLLECTIONS } = require('../src/shared/utils/meet-scope.js');
 const { SCOPED_COLLECTIONS, SCHOOL_COLLECTIONS } = require('../cloudfunctions/data/src/school-repository.js');
 

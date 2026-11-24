@@ -29,14 +29,14 @@
  */
 
 const { createSchoolMemoryRepo } = require('./school-memory-repo.js');
-const { buildMeetContext } = require('../../src/server/services/meet-context.js');
-const meetService = require('../../src/server/services/meet-service.js');
-const leadService = require('../../src/server/services/meet-college-lead-service.js');
-const reg = require('../../src/server/services/meet-registration-service.js');
-const schedule = require('../../src/server/services/meet-schedule-service.js');
-const score = require('../../src/server/services/meet-score-service.js');
-const advance = require('../../src/server/services/meet-advance-service.js');
-const standing = require('../../src/server/services/meet-standing-service.js');
+const { buildMeetContext } = require('../server/services/meet-context.js');
+const meetService = require('../server/services/meet-service.js');
+const leadService = require('../server/services/meet-college-lead-service.js');
+const reg = require('../server/services/meet-registration-service.js');
+const schedule = require('../server/services/meet-schedule-service.js');
+const score = require('../server/services/meet-score-service.js');
+const advance = require('../server/services/meet-advance-service.js');
+const standing = require('../server/services/meet-standing-service.js');
 const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../shared/utils/school.js');
 const {
   MEET_COLLECTIONS, meetSessionKey,

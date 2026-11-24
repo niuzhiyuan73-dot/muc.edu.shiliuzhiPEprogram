@@ -12,7 +12,7 @@ const contextCache = require('../cloudfunctions/data/lib/server/services/context
 const { loadColleges } = require('../src/server/services/college-directory.js');
 const { isCalendarDate } = require('../src/server/services/meet-time.js');
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 
 const NOW = new Date('2026-10-13T12:00:00Z');

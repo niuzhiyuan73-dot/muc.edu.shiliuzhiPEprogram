@@ -1,0 +1,147 @@
+    <!-- ========== 分组 ========== -->
+    <view wx:if="{{mountedSub.group}}" hidden="{{activeSub !== 'group'}}">
+
+      <button wx:if="{{canManage}}" class="btn btn-outline btn-block space-new" bindtap="onToggleCreate">
+        {{showCreate ? '取消新建' : '新建小组'}}
+      </button>
+
+      <!-- 建组表单。成员多选只列本协会在册会员（后端已过滤），不提供自行加入 -->
+      <view wx:if="{{canManage && showCreate}}" class="card">
+        <view class="card-title">新建小组</view>
+        <view class="space-field">
+          <text class="space-label">小组名称</text>
+          <input class="search-input" value="{{groupForm.name}}" maxlength="30" placeholder="2～30 个字"
+            data-field="name" bindinput="onField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">说明（选填）</text>
+          <textarea class="space-textarea" value="{{groupForm.description}}" maxlength="300"
+            placeholder="这个小组是做什么的" data-field="description" bindinput="onField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">选入成员（已选 {{selectedMemberIds.length}} 人）</text>
+
+          <!-- 协会成员一多，从长名单里翻人不如直接搜。关键词交给服务端（昵称或真实姓名） -->
+          <view class="search-bar space-search">
+            <input
+              class="search-input"
+              type="text"
+              value="{{groupKeyword}}"
+              confirm-type="search"
+              placeholder="输入昵称或姓名找人"
+              bindinput="onInputGroupKeyword"
+            />
+            <view wx:if="{{groupKeyword}}" class="search-clear" catchtap="onClearGroupKeyword">✕</view>
+          </view>
+
+          <!-- 已选的人可能被搜索筛到结果之外：单列一行，点一下就取消，不必再搜回来 -->
+          <view wx:if="{{selectedMembers.length > 0}}" class="space-picked">
+            <view
+              wx:for="{{selectedMembers}}"
+              wx:key="userId"
+              wx:for-item="picked"
+              class="space-picked-chip"
+              data-userid="{{picked.userId}}"
+              bindtap="onTogglePick"
+            >
+              <text class="space-picked-name">{{picked.nickName}}</text>
+              <text class="space-picked-x">✕</text>
+            </view>
+          </view>
+
+          <view wx:if="{{groupLoading && roster.length === 0}}" class="space-picker-note">加载中…</view>
+          <view wx:elif="{{roster.length === 0}}" class="space-picker-note">{{groupEmptyNote}}</view>
+          <view wx:else class="space-picker">
+            <view
+              wx:for="{{roster}}"
+              wx:key="userId"
+              class="space-pick-row {{item.picked ? 'is-picked' : ''}}"
+              data-userid="{{item.userId}}"
+              bindtap="onTogglePick"
+            >
+              <text class="space-pick-name">{{item.nickName}}</text>
+              <text class="space-pick-check">{{item.picked ? '✓' : ''}}</text>
+            </view>
+          </view>
+
+          <!-- 只在还有下一页时出现；加载中不给再点（处理器也会挡一道） -->
+          <view wx:if="{{groupHasMore}}" class="space-picker-more" bindtap="onLoadMoreGroupRoster">
+            {{groupLoading ? '加载中…' : '加载更多…'}}
+          </view>
+        </view>
+        <button class="btn btn-primary btn-block" bindtap="onCreateGroup" disabled="{{groupBusy}}">
+          {{groupBusy ? '处理中…' : '创建小组'}}
+        </button>
+      </view>
+
+      <view wx:if="{{groups.length === 0}}" class="empty-state">
+        <view class="empty-state-icon">👥</view>
+        <view class="empty-state-text">本协会还没有小组</view>
+      </view>
+
+      <view
+        wx:for="{{groups}}"
+        wx:key="groupId"
+        wx:for-item="group"
+        class="card space-group {{group.archived ? 'is-archived' : ''}}"
+      >
+        <view wx:if="{{group.cleanupPending}}" class="error-message">小组已关闭，请继续完成成员清理</view>
+        <view class="space-group-head">
+          <view class="space-group-name">
+            {{group.name}}<text wx:if="{{group.joined}}" class="rank-me-tag">已加入</text>
+          </view>
+          <view class="space-group-count">{{group.memberCount}} 人</view>
+        </view>
+        <view wx:if="{{group.description}}" class="space-group-desc">{{group.description}}</view>
+
+        <view class="space-group-actions">
+          <button wx:if="{{group.canReadRoster}}" class="btn btn-outline space-mini" data-groupid="{{group.groupId}}" bindtap="onToggleGroupDetail">
+            {{openGroupId === group.groupId ? '收起名单' : '查看名单'}}
+          </button>
+          <button wx:if="{{group.joined && !group.archived && !group.cleanupPending}}" class="btn btn-danger space-mini"
+            data-groupid="{{group.groupId}}" bindtap="onLeaveGroup" disabled="{{groupBusy}}">退出</button>
+          <button wx:if="{{canManage && !group.archived && !group.cleanupPending}}" class="btn btn-outline space-mini"
+            data-groupid="{{group.groupId}}" data-revision="{{group.revision}}" bindtap="onToggleEdit"
+            disabled="{{groupBusy}}">{{editingId === group.groupId ? '取消编辑' : '编辑'}}</button>
+          <button wx:if="{{canManage && !group.archived}}" class="btn btn-outline space-mini"
+            data-groupid="{{group.groupId}}" data-revision="{{group.revision}}" bindtap="onArchiveGroup"
+            disabled="{{groupBusy}}">归档</button>
+          <!-- 删除不按 archived 过滤：归档的组也要能删掉，否则它永远占着组名与列表 -->
+          <button wx:if="{{canManage}}" class="btn btn-danger space-mini"
+            data-groupid="{{group.groupId}}" data-revision="{{group.revision}}" bindtap="onDeleteGroup"
+            disabled="{{groupBusy}}">{{group.cleanupPending ? '继续清理' : '删除'}}</button>
+        </view>
+
+        <!-- 编辑表单：管理者改组名 / 说明，提交带版本号 -->
+        <view wx:if="{{canManage && editingId === group.groupId}}" class="card space-edit">
+          <view class="space-field">
+            <text class="space-label">小组名称</text>
+            <input class="search-input" value="{{groupForm.name}}" maxlength="30" placeholder="2～30 个字"
+              data-field="name" bindinput="onField" />
+          </view>
+          <view class="space-field">
+            <text class="space-label">说明（选填）</text>
+            <textarea class="space-textarea" value="{{groupForm.description}}" maxlength="300"
+              placeholder="这个小组是做什么的" data-field="description" bindinput="onField" />
+          </view>
+          <button class="btn btn-primary btn-block" bindtap="onSaveEdit" disabled="{{groupBusy}}">
+            {{groupBusy ? '处理中…' : '保存修改'}}
+          </button>
+        </view>
+
+        <!-- 名册：仅管理者与组员可见（后端 canReadRoster 已把关） -->
+        <view wx:if="{{group.canReadRoster && openGroupId === group.groupId}}" class="space-roster">
+          <view wx:if="{{detailLoading}}" class="space-roster-note">名单加载中…</view>
+          <view wx:elif="{{detailMembers.length === 0}}" class="space-roster-note">暂无组员</view>
+          <view wx:else>
+            <view wx:for="{{detailMembers}}" wx:key="userId" wx:for-item="member" class="space-roster-row">
+              <text class="space-roster-name">{{member.nickName}}</text>
+              <text class="space-roster-meta">{{member.collegeName}}{{member.permissionLabel}}</text>
+              <button wx:if="{{canManage}}" class="btn btn-danger space-mini" data-groupid="{{group.groupId}}"
+                data-userid="{{member.userId}}" bindtap="onRemoveMember" disabled="{{groupBusy}}">移出</button>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+

@@ -24,7 +24,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 /** 结果对象自身的属性，不属于「集合」。 */

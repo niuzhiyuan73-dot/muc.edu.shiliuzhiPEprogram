@@ -20,7 +20,7 @@
  * ============================================================
  */
 
-const { loadCollegePlacementView } = require('../../services/school-college-view.js');
+const { loadCollegePlacementView } = require('../services/school-college-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');

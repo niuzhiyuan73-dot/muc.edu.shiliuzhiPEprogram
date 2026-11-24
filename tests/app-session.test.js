@@ -24,7 +24,7 @@ const runtime = require('../miniprogram/services/runtime-mode.js');
 const associationScope = require('../miniprogram/services/association-scope.js');
 const appSession = require('../miniprogram/services/app-session.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const { resolveAuthState } = require('../src/shared/services/auth.js');
 // 原常量住在 protocol-1 mock.js（P10 删）；演示身份编号约定不变
 const DEFAULT_CURRENT_USER_ID = 'u06';

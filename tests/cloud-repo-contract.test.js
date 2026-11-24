@@ -29,7 +29,7 @@ const path = require('node:path');
 
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { COLLECTIONS } = require('../cloudfunctions/data/src/repository');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 
 const SERVICE_DIR = path.join(__dirname, '..', 'cloudfunctions', 'data', 'lib', 'server', 'services');
 const CORE_DIR = path.join(__dirname, '..', 'cloudfunctions', 'data', 'src', 'core');

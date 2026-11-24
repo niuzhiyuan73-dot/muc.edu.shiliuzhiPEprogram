@@ -23,8 +23,8 @@ const assert = require('node:assert/strict');
 // 下的同一份文件，require 另一份（miniprogram/）会拿到不同对象，spy 就不生效。
 const contextCache = require('../cloudfunctions/data/lib/server/services/context-cache.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request.js');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo.js');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const NOW = new Date('2026-10-27T10:00:00Z');

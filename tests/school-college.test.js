@@ -17,8 +17,8 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const handlers = require('../src/server/services/school-college-service');
 const { collegeTieKey } = require('../src/shared/services/college-draw');
@@ -866,9 +866,9 @@ test('B6-b G08：名单里仅一人不在限定小组 → 整份提交失败；�
  * 链路整个跑通——跳转方 encodeURIComponent，接收方拿到的仍是 %3A 形式
  * （见 utils/route-query.js）。装载器必须把探测出的真实编号回传，页面才有东西可写。
  */
-const schoolMock = require('../miniprogram/services/school-mock');
+const schoolMock = require('../src/mock/school-mock.js');
 const associationSpace = require('../miniprogram/services/association-space');
-const collegeView = require('../miniprogram/services/school-college-view');
+const collegeView = require('../miniprogram/packageCollege/services/school-college-view.js');
 
 const MOCK_SCOPE = { schoolId: 'muc', association: 'pkb' };
 const MOCK_ADMIN = 'demo_muc_admin';

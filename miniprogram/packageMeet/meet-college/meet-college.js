@@ -18,8 +18,8 @@
  * ============================================================
  */
 
-const meet = require('../../services/meet.js');
-const { updateMeetPage } = require('../../utils/meet-ui.js');
+const meet = require('../services/meet.js');
+const { updateMeetPage } = require('../utils/meet-ui.js');
 const session = require('../../services/school-session.js');
 
 /** 人数不限时选人面板的硬上限，纯前端保护，避免一次勾几百人 */

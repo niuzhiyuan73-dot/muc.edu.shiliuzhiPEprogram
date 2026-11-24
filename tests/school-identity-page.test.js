@@ -1,7 +1,7 @@
 const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 const runtime = require('../miniprogram/services/runtime-mode');
-const mock = require('../miniprogram/services/school-mock');
+const mock = require('../src/mock/school-mock.js');
 const service = require('../miniprogram/services/school-identity');
 const scope = require('../miniprogram/services/association-scope');
 

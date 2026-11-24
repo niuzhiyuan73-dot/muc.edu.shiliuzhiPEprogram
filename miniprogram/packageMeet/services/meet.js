@@ -14,11 +14,11 @@
  * ============================================================
  */
 
-const identity = require('./school-identity.js');
-const cloud = require('./school-cloud.js');
+const identity = require('../../services/school-identity.js');
+const cloud = require('../../services/school-cloud.js');
 // 演示仓储惰性加载：数据源为 cloud 时用不上（见 school-mock-loader.js）
-const { loadSchoolMock } = require('./school-mock-loader.js');
-const { meetRequestScope } = require('../shared/utils/meet-scope.js');
+const { loadSchoolMock } = require('../../services/school-mock-loader.js');
+const { meetRequestScope } = require('../../shared/utils/meet-scope.js');
 
 /**
  * 取得绑定到某学校的运动会客户端。

@@ -16,7 +16,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const catalog = require('../src/shared/services/meet-event-catalog.js');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');
 const meetService = require('../src/server/services/meet-service.js');
 const leadService = require('../src/server/services/meet-college-lead-service.js');

@@ -32,7 +32,7 @@ const cloudMember = require('../cloudfunctions/data/src/core/school-member-handl
 const cloudSpace = require('../cloudfunctions/data/src/core/school-space-handlers');
 const cloudExchange = require('../cloudfunctions/data/src/core/school-exchange-handlers');
 const cloudMeet = require('../cloudfunctions/data/src/core/school-meet-handlers');
-const schoolMock = require('../miniprogram/services/school-mock');
+const schoolMock = require('../src/mock/school-mock.js');
 
 const ROOT = path.join(__dirname, '..');
 const SCOPE = { schoolId: 'muc', association: 'pkb' };

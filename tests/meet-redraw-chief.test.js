@@ -15,7 +15,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');

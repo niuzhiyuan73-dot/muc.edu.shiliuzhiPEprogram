@@ -136,7 +136,7 @@ global.wx = {
 const appSession = require('../miniprogram/services/app-session.js');
 const associationScope = require('../miniprogram/services/association-scope.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const schoolIdentity = require('../miniprogram/services/school-identity.js');
 
 const app = {
@@ -414,7 +414,7 @@ test('首页 —— 一场近期赛事都没有时照常出卡，由模板写空
   resetSession();
   loginAs();
   // 干净台账（不挂演示内容）：没有报名中 / 进行中的赛事
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const schoolSession = require('../miniprogram/services/school-session');
   schoolMock.reset({ withDemoContent: false });
   schoolSession.reset();
@@ -430,7 +430,7 @@ test('首页 —— 一场近期赛事都没有时照常出卡，由模板写空
 
 test('首页 —— 登录后近期赛事标出自己报没报', async () => {
   resetSession();
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const schoolSession = require('../miniprogram/services/school-session');
   const space = require('../miniprogram/services/association-space.js');
   schoolSession.reset();
@@ -526,7 +526,7 @@ test('首页 —— 下拉刷新会收起刷新动画', async () => {
 
 test('首页 —— 可切换浏览的学校，切到外校进入只读', async () => {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   schoolSession.reset();
   // 让模拟身份带本校学籍（民大），切走后才判得出「正在浏览外校」
   schoolMock.setDemoActor('demo_muc_member');
@@ -2191,7 +2191,7 @@ test('赛事详情 —— 手工种子面板可以清空重选、点遮罩关掉
  */
 function eventEditFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const scope = require('../miniprogram/services/association-scope.js');
   const space = require('../miniprogram/services/association-space.js');
   schoolSession.reset();
@@ -2550,7 +2550,7 @@ test('发布赛事 —— 小组赛+双败：2 组出线 2 人（共 4 人）正
 function eventPanelTest(name, fn) {
   test(name, async () => {
     const fx = schoolEventFixture();
-    require('../miniprogram/services/school-mock').reset();
+    require('../src/mock/school-mock.js').reset();
     try {
       await fx.publish({ title: '列表测试一' });
       await fx.publish({ title: '列表测试二' });
@@ -2568,7 +2568,7 @@ function eventPanelTest(name, fn) {
  */
 function schoolEventFixture(associationId = 'pkb') {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const assocScope = require('../miniprogram/services/association-scope.js');
   const space = require('../miniprogram/services/association-space.js');
   schoolSession.reset();
@@ -3907,7 +3907,7 @@ schoolMatchTest('录入页 —— 裁判本人与管理员仍可照常录入', a
  */
 function memberReviewFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const identity = require('../miniprogram/services/school-identity.js');
   const scope = require('../miniprogram/services/association-scope.js');
   schoolSession.reset();
@@ -4153,7 +4153,7 @@ test('首页 —— 点公告卡片跳到公告列表页', async () => {
  */
 function announcementFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const scope = require('../miniprogram/services/association-scope.js');
   const space = require('../miniprogram/services/association-space.js');
   schoolSession.reset();
@@ -4531,7 +4531,7 @@ test('发布公告页 —— 输入标题会把该项的旧错误清掉', async 
  */
 function schoolProfileFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const space = require('../miniprogram/services/association-space.js');
   const assoc = require('../miniprogram/services/association-scope.js');
   schoolSession.reset();
@@ -6000,7 +6000,7 @@ collegeTest('学院赛 S2 隔离 —— 跨校跨协会不可读写，本院负�
 
 collegeTest('学院赛 S2 访客 —— 无 actor 的视图不显示名单、排阵或管理入口', async () => {
   const { event, ties } = await startTestCollegeEvent();
-  const view = require('../miniprogram/services/school-college-view');
+  const view = require('../miniprogram/packageCollege/services/school-college-view.js');
   const options = { ...collegeFixture.scope, actorId: null, eventId: event._id };
   for (const result of [await view.loadCollegeEntryView(event._id, options),
     await view.loadCollegeEventDetailView(event._id, options),
@@ -6445,7 +6445,7 @@ test('协会页 —— 点某个协会：写全局协会并进它的工作台', 
 
 test('协会页 —— 切到北航列出它的演示协会，并标只读', async () => {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   schoolSession.reset();
   schoolMock.setDemoActor('demo_muc_member');
   try {
@@ -6575,7 +6575,7 @@ test('首页 —— 「看全部赛事」跳进工作台的赛事页签', async 
  */
 function spaceFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const scope = require('../miniprogram/services/association-scope.js');
   schoolSession.reset();
   schoolMock.reset();
@@ -6602,7 +6602,7 @@ function spaceFixture() {
  */
 function rankBoardFixture() {
   const schoolSession = require('../miniprogram/services/school-session');
-  const schoolMock = require('../miniprogram/services/school-mock');
+  const schoolMock = require('../src/mock/school-mock.js');
   const scope = require('../miniprogram/services/association-scope.js');
   const space = require('../miniprogram/services/association-space.js');
   schoolSession.reset();
@@ -6845,7 +6845,7 @@ test('协会空间 —— 建组选人可搜索：按昵称或姓名找人、换
     const fs = require('node:fs');
     const path = require('node:path');
     const wxml = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'components',
-      'association-space-panel', 'association-space-panel.wxml'), 'utf8');
+      'association-space-panel', 'group-tab.wxml'), 'utf8');
     assert.match(wxml, /bindinput="onInputGroupKeyword"/, '建组表单里要有搜索框');
     assert.match(wxml, /bindtap="onLoadMoreGroupRoster"/, '还有下一页时要有「加载更多」');
     assert.match(wxml, /placeholder="输入昵称或姓名找人"/, '搜索框要说清搜什么');
@@ -6955,7 +6955,7 @@ test('协会空间 —— 管理者可删除整个小组，删除后列表里不
     // Node 里没有模板渲染器，「按钮是否出现」只能落到模板门控上验：
     // 删除按钮必须由 canManage 管着，而且不能把归档的组排除在外（用户就是删不掉才来报的）。
     const wxml = require('node:fs').readFileSync(require('node:path').join(__dirname, '..',
-      'miniprogram', 'components', 'association-space-panel', 'association-space-panel.wxml'), 'utf8');
+      'miniprogram', 'components', 'association-space-panel', 'group-tab.wxml'), 'utf8');
     const at = wxml.indexOf('onDeleteGroup');
     assert.ok(at > 0, '模板里要有删除入口');
     const tag = wxml.slice(wxml.lastIndexOf('<button', at), wxml.indexOf('>', at) + 1);

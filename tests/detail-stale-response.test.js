@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const { loadPage, instantiate } = require('./helpers/page-harness.js');
 
 const viewModule = require('../miniprogram/services/school-event-view.js');
-const collegeViewModule = require('../miniprogram/services/school-college-view.js');
+const collegeViewModule = require('../miniprogram/packageCollege/services/school-college-view.js');
 const liveWatch = require('../miniprogram/services/live-watch.js');
 
 /** 假的订阅句柄：记录是否被调用、是否被 pause。 */

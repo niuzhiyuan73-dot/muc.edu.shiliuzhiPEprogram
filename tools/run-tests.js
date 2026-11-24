@@ -129,7 +129,10 @@ function runFile(file, options) {
     // 汇报，退出码不再代表「这个文件过没过」，失败会被当成通过。
     const env = { ...process.env };
     delete env.NODE_TEST_CONTEXT;
-    const child = spawn(process.execPath, ['--test', '--test-reporter=tap', file], {
+    const child = spawn(process.execPath, [
+      '--require', path.join(ROOT_DIR, 'tests', 'helpers', 'register-mock.js'),
+      '--test', '--test-reporter=tap', file,
+    ], {
       cwd: ROOT_DIR,
       env,
       stdio: ['ignore', 'pipe', 'pipe'],

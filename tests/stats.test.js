@@ -20,7 +20,7 @@ const {
   summarizeForm,
 } = require('../src/shared/utils/stats.js');
 
-const { generateSeed } = require('../miniprogram/services/seed.js');
+const { generateSeed } = require('../src/mock/seed.js');
 const { materializeRatings, computeSettlement, displayRating } = require('../src/server/services/school-rating-service.js');
 const { memberRatingKey } = require('../src/shared/utils/school.js');
 const { MATCH_TYPE, MATCH_STATUS, RATING_POOL } = require('../src/shared/utils/constants.js');

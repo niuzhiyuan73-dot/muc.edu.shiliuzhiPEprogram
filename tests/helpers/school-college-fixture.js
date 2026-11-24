@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const mock = require('../../miniprogram/services/school-mock');
+const mock = require('../../src/mock/school-mock.js');
 const session = require('../../miniprogram/services/school-session');
 const association = require('../../miniprogram/services/association-scope');
 const space = require('../../miniprogram/services/association-space');

@@ -22,7 +22,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
 const { matchCountsByAssociation, mostPlayedAssociation } = require('../miniprogram/services/association-usage.js');
 const { defaultAssociationId, activeAssociations } = require('../src/shared/utils/associations.js');

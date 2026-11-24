@@ -22,7 +22,7 @@ const { withDetailExperience } = require('../../templates/detail-experience');
 const space = require('../../services/association-space.js');
 const { resolveRouteId } = require('../../utils/route-query.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
-const statsDraft = require('../../services/stats-draft.js');
+const statsDraft = require('../services/stats-draft.js');
 
 /** 统计指标：顺序即页面上的列顺序，label 给人看，max 只作提示 */
 const STAT_FIELDS = [

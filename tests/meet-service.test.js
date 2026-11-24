@@ -16,7 +16,7 @@ process.env.RATE_LIMIT = 'off';
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');
 const meetService = require('../src/server/services/meet-service.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request.js');
@@ -350,7 +350,7 @@ test('云端发布面包含公开成绩和结束运动会动作',()=>{
 test('运动会门面将云写守卫失败重新抛给页面，避免假成功',async()=>{
   const identity=require('../miniprogram/services/school-identity.js');
   const cloud=require('../miniprogram/services/school-cloud.js');
-  const facade=require('../miniprogram/services/meet.js');
+  const facade=require('../miniprogram/packageMeet/services/meet.js');
   const oldMock=identity.isMockNow,oldMeet=cloud.forMeet;
   try {
     identity.isMockNow=()=>false;

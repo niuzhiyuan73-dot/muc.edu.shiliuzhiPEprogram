@@ -35,7 +35,7 @@ const { validateMatchScore } = require('../src/shared/utils/match-format.js');
 const { materializeRatings, computeSettlement, displayRating } = require('../src/server/services/school-rating-service.js');
 const { initialRatingFor } = require('../src/shared/utils/elo.js');
 const { memberRatingKey } = require('../src/shared/utils/school.js');
-const { generateSeed } = require('../miniprogram/services/seed.js');
+const { generateSeed } = require('../src/mock/seed.js');
 const {
   MATCH_STATUS,
   MATCH_TYPE,

@@ -8,7 +8,7 @@ const path = require('node:path');
 
 const { applyPatch, assertPatchScopeSafe, isPartialUpdateEnabled } = require('../src/server/services/patch-utils.js');
 const { isRetryableTxConflict, runTransactionWithRetry } = require('../src/server/services/tx-retry.js');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo.js');
 const { COLLECTIONS } = require('../cloudfunctions/data/src/repository.js');
 const {
@@ -143,7 +143,7 @@ describe('2. tx-retry 事务冲突分类与有界抖动退避重试', () => {
 
 describe('3. 统一内存仓储与云端适配器局部 update / 冲突重试', () => {
   test('school-memory-repo 直接复用 attachSchoolRepository', () => {
-    const src = fs.readFileSync(path.join(__dirname, '..', 'miniprogram', 'services', 'school-memory-repo.js'), 'utf8');
+    const src = fs.readFileSync(path.join(__dirname, '..', 'src', 'mock', 'school-memory-repo.js'), 'utf8');
     assert.match(src, /attachSchoolRepository/);
     assert.equal(src.includes('forMeet = '), false);
     assert.ok(src.split(/\r?\n/).length < 340, '合并内核后 school-memory-repo 应显著瘦身');

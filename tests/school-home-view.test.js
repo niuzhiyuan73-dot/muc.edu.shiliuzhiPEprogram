@@ -12,7 +12,7 @@ const { test, beforeEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const runtime = require('../miniprogram/services/runtime-mode.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
 const {
   loadSchoolHomeView, announcementRow, eventRow, isUpcomingEvent, sortUpcoming,
@@ -91,7 +91,7 @@ test('聚合 —— 民大首页：公告置顶在前、近期赛事、概况数
   // 会员数学校级一份（24 + 校管理员 + 会员 + 会员二 + 学院负责人）；比赛 / 赛事按协会汇总
   assert.strictEqual(view.summary.memberCount, 28);
   // 2026-10-20 起演示内容按 3 倍扩容，这里跟着走（球拍项目的赛事与流水都 ×3）
-  const seed = require('../miniprogram/services/school-seed').createSchoolDemoContent();
+  const seed = require('../src/mock/school-seed.js').createSchoolDemoContent();
   assert.strictEqual(view.summary.matchCount, seed.matches.filter(row => row.schoolId === 'muc').length
     + seed.teamMatches.filter(row => row.schoolId === 'muc').length);
   assert.strictEqual(view.summary.eventCount, seed.events.filter(row => row.schoolId === 'muc').length

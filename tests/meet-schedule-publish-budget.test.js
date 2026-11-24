@@ -21,7 +21,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');
 const schedule = require('../src/server/services/meet-schedule-service.js');
 const advance = require('../src/server/services/meet-advance-service.js');

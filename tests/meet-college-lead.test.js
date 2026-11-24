@@ -13,7 +13,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildMeetContext } = require('../src/server/services/meet-context.js');
 const {
   canManageMeet, canLeadCollegeMeet, isPlatformAdminCtx, isSchoolAdminCtx,

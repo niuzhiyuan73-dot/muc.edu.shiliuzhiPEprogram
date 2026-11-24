@@ -18,7 +18,7 @@ const {
   register,
 } = require('../src/shared/services/auth.js');
 const { ROLE, USER_STATUS, COLLEGES: COLLEGES_CONST } = require('../src/shared/utils/constants.js');
-const { MEMBER_SEED } = require('../miniprogram/services/seed.js');
+const { MEMBER_SEED } = require('../src/mock/seed.js');
 const fs = require('node:fs');
 const path = require('node:path');
 

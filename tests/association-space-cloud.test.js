@@ -4,7 +4,7 @@ process.env.RATE_LIMIT = 'off';
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 
 const NOW = new Date('2026-10-13T12:00:00Z');

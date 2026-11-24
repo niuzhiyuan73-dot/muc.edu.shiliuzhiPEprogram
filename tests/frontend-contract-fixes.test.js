@@ -3,14 +3,14 @@ const assert = require('node:assert/strict');
 const { readFileSync } = require('node:fs');
 const { loadPage, instantiate, withWx, withApi } = require('./helpers/page-harness');
 const { pageFileOf } = require('./helpers/page-registry');
-const mock = require('../miniprogram/services/school-mock');
+const mock = require('../src/mock/school-mock.js');
 const runtime = require('../miniprogram/services/runtime-mode');
 const session = require('../miniprogram/services/school-session');
 const association = require('../miniprogram/services/association-scope');
 const identity = require('../miniprogram/services/school-identity');
 const space = require('../miniprogram/services/association-space');
-const announcementView = require('../miniprogram/services/announcement-view');
-const meet = require('../miniprogram/services/meet');
+const announcementView = require('../miniprogram/packageMember/services/announcement-view.js');
+const meet = require('../miniprogram/packageMeet/services/meet.js');
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const input = value => ({ detail: { value } });
 const tap = dataset => ({ currentTarget: { dataset } });
@@ -155,8 +155,8 @@ test('跨校页面：主办校不能去除，超过八校拒绝；单校和非�
 });
 
 test('跨校三校表单实际写入服务端：主办校自动接受，两所受邀校待确认，配额保持独立', async () => {
-  const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-  const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+  const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
+  const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
   const { buildSchoolContext } = require('../src/server/services/school-context');
   const { schoolAssociationKey } = require('../src/shared/utils/school');
   const backend = require('../src/server/services/exchange-service');
@@ -297,7 +297,7 @@ test('首页团队赛事导航：使用团队详情路由，编号只编码一�
 }));
 
 test('审核待办：两处页面保留hasMore并显示本批提示，非模拟只读学校不标为演示', async () => {
-  const reviewView = require('../miniprogram/services/school-member-review-view');
+  const reviewView = require('../miniprogram/packageMember/services/school-member-review-view.js');
   await replace(identity, 'forSchoolIdentity', () => ({
     getSchoolIdentitySession: async () => ({ ok: true, canReview: true, user: { userId: 'admin' } }),
     getSchoolApplications: async () => ({ ok: true, applications: [], hasMore: true }),

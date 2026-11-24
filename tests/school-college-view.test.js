@@ -18,7 +18,7 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createCollegeFixture, ADMIN, MEMBER } = require('./helpers/school-college-fixture');
-const view = require('../miniprogram/services/school-college-view');
+const view = require('../miniprogram/packageCollege/services/school-college-view.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 

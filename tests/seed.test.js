@@ -15,7 +15,7 @@ const {
   generateMatchScore,
   winProbability,
   simulateBracket,
-} = require('../miniprogram/services/seed.js');
+} = require('../src/mock/seed.js');
 
 const { createSeededRandom } = require('../src/shared/utils/random.js');
 // 种子里的场号必须与这个分配函数算出来的完全一致，测试直接重算一遍比对

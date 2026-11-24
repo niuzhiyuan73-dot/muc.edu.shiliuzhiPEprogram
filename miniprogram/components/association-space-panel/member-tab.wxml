@@ -1,0 +1,52 @@
+    <!-- ========== 成员 ========== -->
+    <view wx:if="{{mountedSub.member}}" hidden="{{activeSub !== 'member'}}">
+
+      <view class="search-bar">
+        <input
+          class="search-input"
+          type="text"
+          value="{{keyword}}"
+          confirm-type="search"
+          placeholder="输入昵称或姓名找会员"
+          bindinput="onInputKeyword"
+        />
+        <view wx:if="{{keyword}}" class="search-clear" catchtap="onClearKeyword">✕</view>
+      </view>
+
+      <view wx:if="{{memberError}}" class="empty-state">
+        <view class="empty-state-icon">⚠️</view>
+        <view class="empty-state-text">{{memberError}}</view>
+      </view>
+
+      <view wx:elif="{{members.length === 0 && !memberLoading}}" class="empty-state">
+        <view class="empty-state-icon">🔍</view>
+        <view class="empty-state-text">{{memberEmptyNote}}</view>
+      </view>
+
+      <view wx:else class="card">
+        <view
+          wx:for="{{members}}"
+          wx:key="userId"
+          wx:for-item="member"
+          class="rank-row"
+          data-userid="{{member.userId}}"
+          bindtap="onOpenMember"
+        >
+          <view class="rank-avatar">
+            <image wx:if="{{member.avatarUrl}}" class="rank-avatar-img" src="{{member.avatarUrl}}" mode="aspectFill" />
+            <text wx:else>{{member.nickName}}</text>
+          </view>
+          <view class="rank-main">
+            <view class="rank-name">
+              {{member.nickName}}<text wx:if="{{member.realName && member.realName !== member.nickName}}"
+                class="space-roster-meta">{{member.realName}}</text>
+            </view>
+            <view class="rank-detail">{{member.collegeName}}{{member.permissionLabel}}</view>
+          </view>
+        </view>
+      </view>
+
+      <button wx:if="{{memberHasMore}}" class="btn btn-outline btn-block" bindtap="onLoadMore" disabled="{{memberLoading}}">
+        {{memberLoading ? '加载中…' : '加载更多'}}
+      </button>
+    </view>

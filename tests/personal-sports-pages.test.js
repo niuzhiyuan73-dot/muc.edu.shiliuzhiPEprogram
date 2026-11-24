@@ -7,7 +7,7 @@ const identity = require('../miniprogram/services/school-identity');
 const session = require('../miniprogram/services/school-session');
 const association = require('../miniprogram/services/association-scope');
 const runtime = require('../miniprogram/services/runtime-mode');
-const mock = require('../miniprogram/services/school-mock');
+const mock = require('../src/mock/school-mock.js');
 const { openSportsTarget } = require('../miniprogram/templates/personal-sports-client');
 const { loadSchoolMatchView } = require('../miniprogram/services/school-match-view');
 const tap = dataset => ({ currentTarget: { dataset } });
@@ -132,8 +132,8 @@ test('单场面板只取指定比赛，探测原编号后最多解码一次，�
 });
 
 test('单场展示接口仅补充本场最多5人昵称；默认详情不扩张响应字段', async () => {
-  const { createSchoolSeed } = require('../miniprogram/services/school-seed');
-  const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+  const { createSchoolSeed } = require('../src/mock/school-seed.js');
+  const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
   const { buildSchoolContext } = require('../src/server/services/school-context');
   const { getSchoolMatch } = require('../src/server/services/school-match-service');
   const { schoolMemberKey } = require('../src/shared/utils/school');

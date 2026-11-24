@@ -15,7 +15,7 @@
  */
 
 const { uploadAvatar } = require('../../services/avatar.js');
-const { loadSchoolProfileEditView, schoolProfilePatch } = require('../../services/school-profile-view.js');
+const { loadSchoolProfileEditView, schoolProfilePatch } = require('../services/school-profile-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');

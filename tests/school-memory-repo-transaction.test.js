@@ -18,7 +18,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 
 /** 造一个只有一条用户的小库 */
 async function freshRepo() {

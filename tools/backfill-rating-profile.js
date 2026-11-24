@@ -111,7 +111,7 @@ function cloudAdapter() {
  * 演示种子里的评级文档本来就没有这两个字段，正好是回填的典型输入。
  */
 function memoryAdapter() {
-  const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed.js');
+  const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
   const { createMemoryRepo } = require('../tests/helpers/memory-repo.js');
   const { schoolMemberKey, memberRatingKey } = require('../src/shared/utils/school.js');
   const { RATING_POOL } = require('../src/shared/utils/constants.js');

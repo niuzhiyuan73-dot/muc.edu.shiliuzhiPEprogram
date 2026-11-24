@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { loadPage, instantiate, withApi, withWx } = require('./helpers/page-harness');
 const associationScope = require('../miniprogram/services/association-scope');
 const { defaultRulesFor } = require('../src/shared/utils/football-rules');
-const { createReportForm, reportPayload } = require('../miniprogram/utils/football-report-form');
+const { createReportForm, reportPayload } = require('../miniprogram/packageTeam/utils/football-report-form.js');
 const { normalizeFootballReport } = require('../src/shared/utils/football-report');
 const base = () => ({ ok: true, sportFormat: 'football11', matchId: 'fm:1', eventId: 'fe:1', rules: defaultRulesFor(),
   format: 'round_robin', revision: 1, teamAName: '足球甲队', teamBName: '足球乙队', canEdit: true,

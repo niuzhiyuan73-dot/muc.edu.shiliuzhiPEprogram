@@ -1,9 +1,9 @@
 const { createSchoolDemoSeed, createSchoolDemoContent } = require('./school-seed.js');
 const { createSchoolMemoryRepo } = require('./school-memory-repo.js');
-const { createSchoolHandlers } = require('../../src/server/services/school-membership-service.js');
-const personalSportsService = require('../../src/server/services/personal-sports-service.js');
-const { buildSchoolContext } = require('../../src/server/services/school-context.js');
-const { buildMeetContext } = require('../../src/server/services/meet-context.js');
+const { createSchoolHandlers } = require('../server/services/school-membership-service.js');
+const personalSportsService = require('../server/services/personal-sports-service.js');
+const { buildSchoolContext } = require('../server/services/school-context.js');
+const { buildMeetContext } = require('../server/services/meet-context.js');
 const { meetRequestScope } = require('../shared/utils/meet-scope.js');
 const {
   LEGACY_SCHOOL_ID, schoolScope, schoolKey,
@@ -15,27 +15,27 @@ const {
   SCHOOL_MEET_ACTIONS, pickActions,
 } = require('../shared/utils/school-actions.js');
 const { MEMBER_SEED } = require('./seed.js');
-const exchange = require('../../src/server/services/exchange-service.js');
-const groupService = require('../../src/server/services/association-group-service.js');
-const memberService = require('../../src/server/services/association-member-service.js');
-const noticeService = require('../../src/server/services/association-notice-service.js');
-const trainingService = require('../../src/server/services/association-training-service.js');
-const eventService = require('../../src/server/services/school-event-service.js');
-const matchService = require('../../src/server/services/school-match-service.js');
-const liveService = require('../../src/server/services/school-live-service.js');
-const collegeService = require('../../src/server/services/school-college-service.js');
-const announcementService = require('../../src/server/services/school-announcement-service.js');
-const schoolMemberService = require('../../src/server/services/school-member-service.js');
-const rankService = require('../../src/server/services/school-rank-service.js');
-const teamService = require('../../src/server/services/team-service.js');
-const teamEventService = require('../../src/server/services/team-event-service.js');
-const meetService = require('../../src/server/services/meet-service.js');
-const meetLeadService = require('../../src/server/services/meet-college-lead-service.js');
-const meetRegistrationService = require('../../src/server/services/meet-registration-service.js');
-const meetScheduleService = require('../../src/server/services/meet-schedule-service.js');
-const meetScoreService = require('../../src/server/services/meet-score-service.js');
-const meetAdvanceService = require('../../src/server/services/meet-advance-service.js');
-const meetStandingService = require('../../src/server/services/meet-standing-service.js');
+const exchange = require('../server/services/exchange-service.js');
+const groupService = require('../server/services/association-group-service.js');
+const memberService = require('../server/services/association-member-service.js');
+const noticeService = require('../server/services/association-notice-service.js');
+const trainingService = require('../server/services/association-training-service.js');
+const eventService = require('../server/services/school-event-service.js');
+const matchService = require('../server/services/school-match-service.js');
+const liveService = require('../server/services/school-live-service.js');
+const collegeService = require('../server/services/school-college-service.js');
+const announcementService = require('../server/services/school-announcement-service.js');
+const schoolMemberService = require('../server/services/school-member-service.js');
+const rankService = require('../server/services/school-rank-service.js');
+const teamService = require('../server/services/team-service.js');
+const teamEventService = require('../server/services/team-event-service.js');
+const meetService = require('../server/services/meet-service.js');
+const meetLeadService = require('../server/services/meet-college-lead-service.js');
+const meetRegistrationService = require('../server/services/meet-registration-service.js');
+const meetScheduleService = require('../server/services/meet-schedule-service.js');
+const meetScoreService = require('../server/services/meet-score-service.js');
+const meetAdvanceService = require('../server/services/meet-advance-service.js');
+const meetStandingService = require('../server/services/meet-standing-service.js');
 const { createMeetDemoRecords } = require('./meet-seed.js');
 
 /**
@@ -322,3 +322,4 @@ function forMeet(input) {
   }])));
 }
 module.exports.forMeet = forMeet;
+require('../../miniprogram/services/school-mock-loader.js').registerMockProvider(() => module.exports);

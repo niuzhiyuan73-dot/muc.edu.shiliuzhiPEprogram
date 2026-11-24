@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createSchoolSeed } = require('../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolSeed } = require('../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { buildMeetContext } = require('../src/server/services/meet-context');
 const { getMySportsDashboard } = require('../src/server/services/personal-sports-service');

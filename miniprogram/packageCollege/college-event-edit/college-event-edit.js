@@ -45,7 +45,7 @@ const {
   LOCATION_MAX,
   LEG_PLAN_MAX,
 } = require('../../shared/services/college-event.js');
-const { canPublishCollegeEvent } = require('../../services/school-college-view.js');
+const { canPublishCollegeEvent } = require('../services/school-college-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');

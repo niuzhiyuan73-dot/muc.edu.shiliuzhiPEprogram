@@ -267,7 +267,7 @@ test('F2 云端赛程新增窗口由排期版本封住；失败不写半份时�
 });
 
 test('F2/F3 足球默认演示有公开统计，出场覆盖与替补纪律分开；未知名单不显示为确认缺席', async () => {
-  const schoolMock = require('../miniprogram/services/school-mock'); schoolMock.reset(); schoolMock.setDemoActor('u12');
+  const schoolMock = require('../src/mock/school-mock.js'); schoolMock.reset(); schoolMock.setDemoActor('u12');
   const client = schoolMock.forAssociationSpace({ schoolId: 'muc', association: 'fb' });
   const profile = await client.getMyTeamProfile({});
   assert.equal(profile.ok, true);

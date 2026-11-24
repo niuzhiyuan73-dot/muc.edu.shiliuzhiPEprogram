@@ -28,9 +28,9 @@
  * ============================================================
  */
 
-const meet = require('../../services/meet.js');
+const meet = require('../services/meet.js');
 const session = require('../../services/school-session.js');
-const { showError, showNotice, updateMeetPage } = require('../../utils/meet-ui.js');
+const { showError, showNotice, updateMeetPage } = require('../utils/meet-ui.js');
 
 const ROUND_LABEL = { final: '决赛', heat: '预赛', rr: '循环赛' };
 const ADVANCE_LABEL = { per_heat: '每组前 N', overall: '总成绩前 N', hybrid: '混合晋级' };

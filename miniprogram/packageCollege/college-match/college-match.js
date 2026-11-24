@@ -21,7 +21,7 @@
  * ============================================================
  */
 
-const { loadCollegeMatchView } = require('../../services/school-college-view.js');
+const { loadCollegeMatchView } = require('../services/school-college-view.js');
 const { winnerOf, toScoreRows } = require('../../services/match-entry-view.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');

@@ -24,8 +24,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolDemoContent } = require('../miniprogram/services/school-seed.js');
-const { createMeetDemoRecords } = require('../miniprogram/services/meet-seed.js');
+const { createSchoolDemoContent } = require('../src/mock/school-seed.js');
+const { createMeetDemoRecords } = require('../src/mock/meet-seed.js');
 const {
   EVENT_STATUS, TEAM_EVENT_STATUS, COLLEGE_EVENT_STATUS,
 } = require('../src/shared/utils/constants.js');

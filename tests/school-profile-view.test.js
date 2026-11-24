@@ -17,7 +17,7 @@ const identity = require('../miniprogram/services/school-identity.js');
 const space = require('../miniprogram/services/association-space.js');
 const {
   LOGIN_BLOCK, avatarTextOf, loadSchoolProfileEditView, schoolProfilePatch,
-} = require('../miniprogram/services/school-profile-view.js');
+} = require('../miniprogram/packageMember/services/school-profile-view.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 

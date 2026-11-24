@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
-const { generateSeed } = require('../../miniprogram/services/seed');
-const { createSchoolDemoSeed } = require('../../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../../miniprogram/services/school-memory-repo');
+const { generateSeed } = require('../../src/mock/seed.js');
+const { createSchoolDemoSeed } = require('../../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../../src/server/services/school-context');
 const { schoolMemberKey, schoolRoleKey } = require('../../src/shared/utils/school');
 const handlers = { ...require('../../src/server/services/school-match-service'),

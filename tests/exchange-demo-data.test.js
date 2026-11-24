@@ -19,8 +19,8 @@ const assert = require('node:assert/strict');
 
 const {
   createSchoolDemoContent, createSchoolDemoSeed, DEMO_ACCOUNTS,
-} = require('../miniprogram/services/school-seed.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+} = require('../src/mock/school-seed.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const { schoolKey, schoolMemberKey } = require('../src/shared/utils/school.js');
 const { EVENT_FORMAT } = require('../src/shared/utils/constants.js');
 

@@ -29,13 +29,13 @@
  * ============================================================
  */
 
-const { ANNOUNCEMENT_STATUS } = require('../shared/utils/constants.js');
-const { activeAssociations } = require('../shared/utils/associations.js');
-const { formatDateTime } = require('../shared/utils/format.js');
-const { DEFAULT_CATEGORY } = require('../shared/services/announcement.js');
-const { brandOf } = require('./branding.js');
-const scope = require('./association-scope.js');
-const space = require('./association-space.js');
+const { ANNOUNCEMENT_STATUS } = require('../../shared/utils/constants.js');
+const { activeAssociations } = require('../../shared/utils/associations.js');
+const { formatDateTime } = require('../../shared/utils/format.js');
+const { DEFAULT_CATEGORY } = require('../../shared/services/announcement.js');
+const { brandOf } = require('../../services/branding.js');
+const scope = require('../../services/association-scope.js');
+const space = require('../../services/association-space.js');
 
 /**
  * 学校维度公告摘要（school-announcement-service.announcementSummary）→ 页面行。

@@ -22,8 +22,8 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed, createSchoolDemoContent } = require('../miniprogram/services/school-seed');
-const { MEMBER_SEED } = require('../miniprogram/services/seed');
+const { createSchoolDemoSeed, createSchoolDemoContent } = require('../src/mock/school-seed.js');
+const { MEMBER_SEED } = require('../src/mock/seed.js');
 const { schoolMemberKey } = require('../src/shared/utils/school');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 

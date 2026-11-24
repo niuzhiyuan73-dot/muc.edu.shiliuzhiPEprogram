@@ -20,7 +20,7 @@ const { withDetailExperience } = require('../../templates/detail-experience');
  * ============================================================
  */
 
-const { loadCollegeEventDetailView, buildSeedRows } = require('../../services/school-college-view.js');
+const { loadCollegeEventDetailView, buildSeedRows } = require('../services/school-college-view.js');
 const { buildPickerRows, pickerEmptyText } = require('../../services/match-entry-view.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
 const { applyLiveTies } = require('../../services/live-view.js');

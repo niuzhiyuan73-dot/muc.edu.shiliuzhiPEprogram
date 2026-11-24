@@ -3,16 +3,16 @@
  * 写事务串行排队 + 冲突重试 + 可选严苛模式（CLOUD_STRICT_SIM=1）。
  */
 const { compareCode } = require('../shared/utils/text-order.js');
-const { SCHOOL_COLLECTIONS, attachSchoolRepository } = require('../../src/server/services/school-repository.js');
-const { EVENT_SCOPED, ALL_COLLECTIONS } = require('../../src/server/services/school-collections.js');
-const { applyPatch } = require('../../src/server/services/patch-utils.js');
-const { runTransactionWithRetry } = require('../../src/server/services/tx-retry.js');
-const { memoryMatchPage } = require('../../src/server/services/match-list-query');
-const { fieldValues } = require('../../src/server/services/scoped-team-reads.js');
-const { memoryDirectoryPage, memoryDirectoryCount } = require('../../src/server/services/account-directory.js');
-const { memoryPersonalPage } = require('../../src/server/services/personal-sports-query.js');
-const { memoryOverviewIO } = require('../../src/server/services/school-overview-reads.js');
-const { pageOfCollection } = require('../../src/server/services/event-list-page.js');
+const { SCHOOL_COLLECTIONS, attachSchoolRepository } = require('../server/services/school-repository.js');
+const { EVENT_SCOPED, ALL_COLLECTIONS } = require('../server/services/school-collections.js');
+const { applyPatch } = require('../server/services/patch-utils.js');
+const { runTransactionWithRetry } = require('../server/services/tx-retry.js');
+const { memoryMatchPage } = require('../server/services/match-list-query.js');
+const { fieldValues } = require('../server/services/scoped-team-reads.js');
+const { memoryDirectoryPage, memoryDirectoryCount } = require('../server/services/account-directory.js');
+const { memoryPersonalPage } = require('../server/services/personal-sports-query.js');
+const { memoryOverviewIO } = require('../server/services/school-overview-reads.js');
+const { pageOfCollection } = require('../server/services/event-list-page.js');
 
 const KEYS = ALL_COLLECTIONS;
 const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));

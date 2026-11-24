@@ -1,6 +1,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
 const { buildSchoolContext } = require('../src/server/services/school-context');
@@ -543,7 +543,7 @@ test('Batch A 安全与状态机止血：已结束学院赛锁小场、总裁判
   await f.repo.transaction(async (tx) => {
     assert.equal(tx.inTx, true);
   });
-  const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+  const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
   const memRepo = createSchoolMemoryRepo();
   assert.equal(memRepo.inTx, false);
   await memRepo.transaction(async (tx) => {

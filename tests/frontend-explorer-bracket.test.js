@@ -13,12 +13,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { loadPage, instantiate, withApi } = require('./helpers/page-harness');
 const { buildBracketLanes, describeMyBracket } = require('../miniprogram/services/events-view');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const eventHandlers = require('../src/server/services/school-event-service');
 const { EVENT_STATUS } = require('../src/shared/utils/constants');
-const { keyOf, save, load, clear, merge } = require('../miniprogram/services/stats-draft');
+const { keyOf, save, load, clear, merge } = require('../miniprogram/packageTeam/services/stats-draft.js');
 const {
   actionTextOf,
   withPersonalActions,

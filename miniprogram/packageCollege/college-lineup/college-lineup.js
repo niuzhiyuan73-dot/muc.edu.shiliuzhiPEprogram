@@ -21,7 +21,7 @@
  * ============================================================
  */
 
-const { loadCollegeLineupView } = require('../../services/school-college-view.js');
+const { loadCollegeLineupView } = require('../services/school-college-view.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');

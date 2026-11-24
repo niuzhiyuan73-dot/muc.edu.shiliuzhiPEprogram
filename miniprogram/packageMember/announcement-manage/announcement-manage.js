@@ -24,7 +24,7 @@ const { withNoticeExpansion } = require('../../templates/notice-experience');
  * ============================================================
  */
 
-const { loadSchoolAnnouncementManageView } = require('../../services/announcement-view.js');
+const { loadSchoolAnnouncementManageView } = require('../services/announcement-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');

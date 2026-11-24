@@ -9,8 +9,8 @@ const { withDetailExperience } = require('../../templates/detail-experience');
  * ============================================================
  */
 
-const meet = require('../../services/meet.js');
-const { updateMeetPage } = require('../../utils/meet-ui.js');
+const meet = require('../services/meet.js');
+const { updateMeetPage } = require('../utils/meet-ui.js');
 const session = require('../../services/school-session.js');
 
 Page(withDetailExperience({

@@ -12,11 +12,11 @@
  * 仍要提醒的是：邀请赛的任何动作都不写校内 events / matches，也不产生校内等级分
  * 与积分（服务端强制 eventScope=inter_school、ratingPolicy=unrated）。
  */
-const identity = require('./school-identity.js');
-const cloud = require('./school-cloud.js');
+const identity = require('../../services/school-identity.js');
+const cloud = require('../../services/school-cloud.js');
 // 演示仓储惰性加载（数据源为 cloud 时用不上）：见 school-mock-loader.js 与
 // 2026-10-16 只读审计 H7。
-const { loadSchoolMock } = require('./school-mock-loader.js');
+const { loadSchoolMock } = require('../../services/school-mock-loader.js');
 
 /**
  * 取得绑定到某学校某协会的邀请赛客户端。

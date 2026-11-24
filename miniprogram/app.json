@@ -116,21 +116,20 @@
   ],
   "preloadRule": {
     "pages/index/index": {
-      "network": "all",
+      "network": "wifi",
       "packages": [
-        "packageEvent",
-        "packageMeet"
+        "packageEvent"
       ]
     },
     "pages/association/association": {
-      "network": "all",
+      "network": "wifi",
       "packages": [
         "packageTeam",
         "packageCollege"
       ]
     },
     "pages/profile/profile": {
-      "network": "all",
+      "network": "wifi",
       "packages": [
         "packageMember"
       ]

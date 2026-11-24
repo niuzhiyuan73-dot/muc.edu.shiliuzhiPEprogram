@@ -17,7 +17,7 @@ const assert = require('node:assert/strict');
 const runtime = require('../miniprogram/services/runtime-mode.js');
 const appSession = require('../miniprogram/services/app-session.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const schoolIdentity = require('../miniprogram/services/school-identity.js');
 const { STORAGE_KEY, ROLE, USER_STATUS } = require('../src/shared/utils/constants.js');
 

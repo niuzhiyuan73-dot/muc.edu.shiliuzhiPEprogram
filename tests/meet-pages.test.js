@@ -146,7 +146,7 @@ test('详情页与向导页的关键动作存在', () => {
 
 
 test('底部操作报错弹出可见提示，选择状态可供 WXML 直接索引', () => {
-  const {updateMeetPage}=require('../miniprogram/utils/meet-ui.js');
+  const {updateMeetPage}=require('../miniprogram/packageMeet/utils/meet-ui.js');
   const previous=global.wx, messages=[];
   global.wx={showModal:opts=>messages.push(opts.content)};
   const page={data:{},setData(values){Object.assign(this.data,values);}};
@@ -260,7 +260,7 @@ test('meet-detail 发布报名与开放补报窗口的提交格式与服务端�
   const detail = instantiate(loadPage('meet-detail'));
   const meetService = require('../src/server/services/meet-service');
   const regService = require('../src/server/services/meet-registration-service');
-  const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+  const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
   const { buildMeetContext } = require('../src/server/services/meet-context');
 
   const repo = createSchoolMemoryRepo({

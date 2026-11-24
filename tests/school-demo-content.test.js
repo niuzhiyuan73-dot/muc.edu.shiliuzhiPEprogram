@@ -17,14 +17,14 @@ const assert = require('node:assert/strict');
 
 const {
   createSchoolDemoContent, DEMO_CONTENT_SPECS, DEMO_ACCOUNTS,
-} = require('../miniprogram/services/school-seed.js');
-const { MEMBER_SEED } = require('../miniprogram/services/seed.js');
+} = require('../src/mock/school-seed.js');
+const { MEMBER_SEED } = require('../src/mock/seed.js');
 const { isAnnouncementDoc } = require('../src/server/services/school-announcement-service.js');
 const { isEventDoc } = require('../src/server/services/school-event-service.js');
 const {
   loadSchoolEventDetailView, loadSchoolEventPlacementView,
 } = require('../miniprogram/services/school-event-view.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const { schoolEventSignupKey } = require('../src/shared/utils/school.js');
 const {
   MATCH_STATUS, MATCH_OUTCOME, MATCH_COMPETITION, RANK_PROJECT,

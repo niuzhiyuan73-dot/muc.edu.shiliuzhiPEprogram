@@ -2,8 +2,8 @@
 // 连续路由等），属于压测式调用而非真实交互，故跑测试时关掉（生产默认开启）。
 process.env.RATE_LIMIT = 'off';
 const assert = require('node:assert/strict');
-const { createSchoolDemoSeed } = require('../../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../../miniprogram/services/school-memory-repo');
+const { createSchoolDemoSeed } = require('../../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../../src/server/services/school-context');
 const service = require('../../src/server/services/team-event-service');
 const { schoolMemberKey, schoolMembershipKey, teamMemberKey, schoolKey } = require('../../src/shared/utils/school');

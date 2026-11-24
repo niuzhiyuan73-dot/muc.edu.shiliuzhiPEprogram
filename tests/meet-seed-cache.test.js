@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 // 执行真实缓存实现，仅替换昂贵的底层生成器，精确控制首次初始化完成的时刻。
 function cacheFixture(runMeetDemo) {
-  const source = fs.readFileSync(require.resolve('../miniprogram/services/meet-seed'), 'utf8');
+  const source = fs.readFileSync(require.resolve('../src/mock/meet-seed'), 'utf8');
   const start = source.indexOf('let meetRecordsSnapshotJson = null;');
   assert.ok(start > 0);
   const context = { module: { exports: {} }, JSON, runMeetDemo,

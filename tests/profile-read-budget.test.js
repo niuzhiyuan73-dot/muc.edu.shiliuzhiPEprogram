@@ -14,7 +14,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const rank = require('../src/server/services/school-rank-service');
 const {

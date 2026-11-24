@@ -3,8 +3,8 @@
  * 发现不满足安全/一致性预期的行为时退出码 1；修复后应全部 PASS。
  */
 const assert = require('node:assert/strict');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
+const { createSchoolMemoryRepo } = require('../src/mock/school-memory-repo.js');
 const { buildSchoolContext } = require('../src/server/services/school-context');
 const matches = require('../src/server/services/school-match-service');
 const events = require('../src/server/services/school-event-service');

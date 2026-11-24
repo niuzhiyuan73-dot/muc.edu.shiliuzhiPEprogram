@@ -17,7 +17,7 @@ const { test, describe, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
+const { createSchoolDemoSeed } = require('../src/mock/school-seed.js');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 // 【为什么 require 云端镜像那份】handleSchoolRequest 走的是 cloudfunctions/data/lib/
 // 下的副本，而源文件在 miniprogram/services/。两份模块各自持有自己的 Map 与 TTL——

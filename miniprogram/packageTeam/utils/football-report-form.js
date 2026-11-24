@@ -1,4 +1,4 @@
-const { FIELDS } = require('../shared/utils/football-report');
+const { FIELDS } = require('../../shared/utils/football-report.js');
 const coverageKeys = ['none', 'partial', 'full', 'not_applicable'];
 const coverageLabels = ['未记录', '部分记录', '已完整记录', '本场不统计'];
 const subKeys = ['regulationCount', 'regulationOpportunities', 'halfTimeCount', 'extraTimeCount', 'extraTimeOpportunities', 'extraBreakCount'];

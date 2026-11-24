@@ -11,7 +11,7 @@
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { createTeamDemoContent } = require('../miniprogram/services/team-demo.js');
+const { createTeamDemoContent } = require('../src/mock/team-demo.js');
 const { teamMemberKey } = require('../src/shared/utils/school.js');
 const {
   TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS, TEAM_MATCH_STATUS,

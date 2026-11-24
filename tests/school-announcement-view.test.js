@@ -20,8 +20,8 @@ const assert = require('node:assert');
 const {
   loadSchoolAnnouncementListView,
   loadSchoolAnnouncementManageView,
-} = require('../miniprogram/services/announcement-view.js');
-const schoolMock = require('../miniprogram/services/school-mock.js');
+} = require('../miniprogram/packageMember/services/announcement-view.js');
+const schoolMock = require('../src/mock/school-mock.js');
 const space = require('../miniprogram/services/association-space.js');
 const scope = require('../miniprogram/services/association-scope.js');
 

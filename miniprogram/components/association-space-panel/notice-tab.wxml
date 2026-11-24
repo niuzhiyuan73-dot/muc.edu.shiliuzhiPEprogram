@@ -1,0 +1,101 @@
+    <!-- ========== 通知（P2） ========== -->
+    <view wx:if="{{mountedSub.notice}}" hidden="{{activeSub !== 'notice'}}">
+
+      <button wx:if="{{canManage}}" class="btn btn-outline btn-block space-new" bindtap="onToggleNoticeCreate">
+        {{showNoticeCreate ? '取消发布' : '发布通知'}}
+      </button>
+
+      <!-- 发布表单：正文与分类复用全局公告的校验口径（announcement.validateAnnouncement） -->
+      <view wx:if="{{canManage && showNoticeCreate}}" class="card">
+        <view class="card-title">发布通知</view>
+        <view class="space-field">
+          <text class="space-label">标题</text>
+          <input class="search-input" value="{{noticeForm.title}}" maxlength="30" placeholder="2～30 个字"
+            data-field="title" bindinput="onNoticeField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">正文</text>
+          <textarea class="space-textarea" value="{{noticeForm.content}}" maxlength="500"
+            placeholder="不超过 500 个字" data-field="content" bindinput="onNoticeField" />
+        </view>
+        <view class="space-field">
+          <text class="space-label">分类</text>
+          <picker mode="selector" range="{{noticeCategories}}" value="{{noticeCategoryIndex}}"
+            bindchange="onPickNoticeCategory">
+            <view class="space-picker-value">{{noticeForm.category}}</view>
+          </picker>
+        </view>
+        <view class="space-field space-switch-row">
+          <text class="space-label">置顶</text>
+          <switch checked="{{noticeForm.pinned}}" bindchange="onToggleNoticePinned" />
+        </view>
+        <button class="btn btn-primary btn-block" bindtap="onCreateNotice" disabled="{{groupBusy}}">
+          {{groupBusy ? '处理中…' : '发布'}}
+        </button>
+      </view>
+
+      <view wx:if="{{noticeError}}" class="empty-state">
+        <view class="empty-state-icon">⚠️</view>
+        <view class="empty-state-text">{{noticeError}}</view>
+      </view>
+
+      <view wx:elif="{{notices.length === 0 && !noticeLoading}}" class="empty-state">
+        <view class="empty-state-icon">📣</view>
+        <view class="empty-state-text">暂无空间通知</view>
+      </view>
+
+      <block wx:else>
+        <view wx:for="{{notices}}" wx:key="noticeId" wx:for-item="notice" class="card space-card">
+          <view class="space-card-head">
+            <view class="space-card-title">{{notice.title}}</view>
+            <text wx:if="{{notice.pinned}}" class="rank-me-tag">置顶</text>
+            <text wx:if="{{notice.withdrawn}}" class="space-status">已撤回</text>
+          </view>
+          <view class="space-card-meta">{{notice.category}} · {{notice.publisherName}} · {{notice.publishText}}</view>
+          <view class="space-card-body">{{notice.content}}</view>
+
+          <view wx:if="{{notice.canEdit || notice.canWithdraw}}" class="space-group-actions">
+            <button wx:if="{{notice.canEdit}}" class="btn btn-outline space-mini"
+              data-noticeid="{{notice.noticeId}}" data-revision="{{notice.revision}}"
+              bindtap="onToggleNoticeEdit" disabled="{{groupBusy}}">
+              {{editingNoticeId === notice.noticeId ? '取消编辑' : '编辑'}}
+            </button>
+            <button wx:if="{{notice.canWithdraw}}" class="btn btn-danger space-mini"
+              data-noticeid="{{notice.noticeId}}" data-revision="{{notice.revision}}"
+              bindtap="onWithdrawNotice" disabled="{{groupBusy}}">撤回</button>
+          </view>
+
+          <!-- 编辑表单 -->
+          <view wx:if="{{notice.canEdit && editingNoticeId === notice.noticeId}}" class="card space-edit">
+            <view class="space-field">
+              <text class="space-label">标题</text>
+              <input class="search-input" value="{{noticeForm.title}}" maxlength="30" placeholder="2～30 个字"
+                data-field="title" bindinput="onNoticeField" />
+            </view>
+            <view class="space-field">
+              <text class="space-label">正文</text>
+              <textarea class="space-textarea" value="{{noticeForm.content}}" maxlength="500"
+                placeholder="不超过 500 个字" data-field="content" bindinput="onNoticeField" />
+            </view>
+            <view class="space-field">
+              <text class="space-label">分类</text>
+              <picker mode="selector" range="{{noticeCategories}}" value="{{noticeCategoryIndex}}"
+                bindchange="onPickNoticeCategory">
+                <view class="space-picker-value">{{noticeForm.category}}</view>
+              </picker>
+            </view>
+            <view class="space-field space-switch-row">
+              <text class="space-label">置顶</text>
+              <switch checked="{{noticeForm.pinned}}" bindchange="onToggleNoticePinned" />
+            </view>
+            <button class="btn btn-primary btn-block" bindtap="onSaveNoticeEdit" disabled="{{groupBusy}}">
+              {{groupBusy ? '处理中…' : '保存修改'}}
+            </button>
+          </view>
+        </view>
+
+        <button wx:if="{{noticeHasMore}}" class="btn btn-outline btn-block" bindtap="onLoadMoreNotices"
+          disabled="{{noticeLoading}}">{{noticeLoading ? '加载中…' : '加载更多'}}</button>
+      </block>
+    </view>
+

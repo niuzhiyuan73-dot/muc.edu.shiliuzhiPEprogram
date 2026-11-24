@@ -22,8 +22,8 @@
  * ============================================================
  */
 
-const meet = require('../../services/meet.js');
-const { updateMeetPage } = require('../../utils/meet-ui.js');
+const meet = require('../services/meet.js');
+const { updateMeetPage } = require('../utils/meet-ui.js');
 const session = require('../../services/school-session.js');
 const { meetEventKey } = require('../../shared/utils/meet-scope.js');
 

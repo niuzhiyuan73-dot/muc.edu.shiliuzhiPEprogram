@@ -5,7 +5,7 @@ const schoolSession = require('../../services/school-session');
 const { currentThemeClass } = require('../../services/branding');
 const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school');
 const { resolveRouteId } = require('../../utils/route-query');
-const { createReportForm, reportPayload, coverageLabels } = require('../../utils/football-report-form');
+const { createReportForm, reportPayload, coverageLabels } = require('../utils/football-report-form.js');
 const { normalizeFootballReport, normalizeSide, scoreText } = require('../../shared/utils/football-report');
 const { reportDifferences } = require('../../utils/interface-view');
 const requestId = () => `fb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
