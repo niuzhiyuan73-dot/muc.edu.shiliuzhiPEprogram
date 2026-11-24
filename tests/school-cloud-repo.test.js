@@ -67,6 +67,14 @@ function database(seed = {}) {
           doc: id => ({
             get: async () => ({ data: table.get(id) || null }),
             set: async ({ data }) => { assert.equal(data._id, undefined); table.set(id, { ...data, _id: id }); },
+            update: async ({ data }) => {
+              assert.equal(data._id, undefined);
+              queries.push({ name, op: 'doc.update', id, data });
+              const cur = table.get(id);
+              if (!cur) throw new Error('document does not exist');
+              const { applyPatch } = require('../src/server/services/patch-utils');
+              table.set(id, { ...applyPatch(cur, data), _id: id });
+            },
           }),
         };
       },
@@ -156,6 +164,11 @@ test('cloud scoped write checks existing ownership inside transaction and rollba
     throw new Error('injected failure');
   }), /injected/);
   assert.equal((await a.events.getById('a')).value, 1);
+  await a.events.update('a', { value: 3, 'meta.tag': 'v2' });
+  const updated = await a.events.getById('a');
+  assert.equal(updated.value, 3);
+  assert.equal(updated.meta.tag, 'v2');
+  assert.ok(db.queries.some(q => q.op === 'doc.update' && q.id === 'a'), 'update 应走原生 doc().update');
   await assert.rejects(a.transaction(tx => tx.events.list()), /事务内/);
 });
 

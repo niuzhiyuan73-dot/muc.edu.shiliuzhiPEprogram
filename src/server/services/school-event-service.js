@@ -1014,10 +1014,13 @@ async function advanceSchoolEvent(ctx, eventId) {
   if (drafts.length === 0) return { ok: true, inserted: 0 };
 
   await ctx.repo.transaction(async tx => {
+    const existingById = new Map();
+    for (const draft of drafts) {
+      existingById.set(draft._id, await tx.matches.getById(draft._id));
+    }
     for (const draft of drafts) {
       // 并发下两次确认可能同时推进：已有编号就不再写。
-      const existing = await tx.matches.getById(draft._id);
-      if (existing) continue;
+      if (existingById.get(draft._id)) continue;
       await tx.matches.set(draft._id, draft);
     }
   });

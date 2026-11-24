@@ -523,10 +523,11 @@ async function deleteAssociationGroup(payload = {}, ctx) {
     if (group.status === GROUP_STATUS.DELETED) return { ok: true, deleted: false, group };
     if (group.revision !== payload.expectedRevision) return refused('小组已修改，请刷新后重试');
     const now = fresh.now;
+    const claimId = associationGroupNameKey(group.name, fresh);
+    const claim = await tx.associationGroups.getById(claimId);
     const next = { ...group, status: GROUP_STATUS.DELETED, memberCount: 0, cleanupPending: true,
       deletedAt: now, deletedBy: fresh.actorId, revision: group.revision + 1, updatedAt: now };
     await tx.associationGroups.set(group._id, next);
-    const claimId = associationGroupNameKey(group.name, fresh), claim = await tx.associationGroups.getById(claimId);
     if (claim && claim.groupId === group._id) await tx.associationGroups.set(claimId, { ...claim, groupId: '', releasedAt: now });
     // 名单资格快照要能感知分批清理期间的删除；配置行已由 freshContext 点读。
     await tx.schoolAssociations.set(schoolAssociationKey(fresh), { ...fresh.schoolAssociation,
@@ -548,9 +549,12 @@ async function deleteAssociationGroup(payload = {}, ctx) {
         if (!canManageAssociationSpace(fresh)) return refused('当前已无删除权限');
         const current = await tx.associationGroups.getById(group._id);
         if (!current || current.status !== GROUP_STATUS.DELETED || current.revision !== group.revision) return refused('小组状态已变化');
+        const relations = [];
         for (const row of page.rows) {
-          const relation = await tx.associationGroupMembers.getById(row._id);
-          if (relation && relation.status === GROUP_MEMBER_STATUS.ACTIVE) await tx.associationGroupMembers.set(row._id,
+          relations.push({ id: row._id, relation: await tx.associationGroupMembers.getById(row._id) });
+        }
+        for (const { id, relation } of relations) {
+          if (relation && relation.status === GROUP_MEMBER_STATUS.ACTIVE) await tx.associationGroupMembers.set(id,
             { ...relation, status: GROUP_MEMBER_STATUS.REMOVED, removedAt: fresh.now, removedBy: fresh.actorId });
         }
         if (!page.hasMore) await tx.associationGroups.set(group._id, { ...current, cleanupPending: false });

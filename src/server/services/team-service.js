@@ -826,10 +826,13 @@ async function addCollegeTeamMembers(payload = {}, ctx) {
     if (!canManageTeam(fresh, current, fresh.actorId)) return refused('当前已无挑选队员的权限');
 
     const now = fresh.now;
-    let added = 0;
+    const rowsByUser = [];
     for (const userId of wanted) {
       const key = teamMemberKey(current._id, userId);
-      const row = await tx.teamMembers.getById(key);
+      rowsByUser.push({ userId, key, row: await tx.teamMembers.getById(key) });
+    }
+    let added = 0;
+    for (const { userId, key, row } of rowsByUser) {
       if (isActiveMember(row)) continue;
       await tx.teamMembers.set(key, {
         ...(row || {}),

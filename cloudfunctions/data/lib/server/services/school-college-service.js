@@ -703,9 +703,13 @@ async function startCollegeEvent(payload = {}, ctx) {
     // 事务内复查权限：撤权之后不能再开赛（F2 同类）
     if (!canStartCollegeEvent(current, actor)) return refused('只有管理员可以开始赛事');
 
+    const existingById = new Map();
+    for (const tie of ties) {
+      existingById.set(tie._id, await tx.ties.getById(tie._id));
+    }
     const stored = [];
     for (const tie of ties) {
-      const existing = await tx.ties.getById(tie._id);
+      const existing = existingById.get(tie._id);
       if (existing) { stored.push(existing); continue; }
       const doc = { ...tie, schoolId: ctx.schoolId, association: ctx.association,
         revision: 1, updatedAt: nowIso };
@@ -863,8 +867,12 @@ async function startCollegeTie(payload = {}, ctx) {
     if (!canStartTie(current, actor)) return refused('只有管理员可以开始大场');
     if (await collegeEventFinished(tx, current.eventId)) return refused('学院赛已结束，不能再开大场');
 
+    const existingById = new Map();
     for (const draft of built.drafts) {
-      const existing = await tx.matches.getById(draft._id);
+      existingById.set(draft._id, await tx.matches.getById(draft._id));
+    }
+    for (const draft of built.drafts) {
+      const existing = existingById.get(draft._id);
       // 重开同一大场：编号相同，只补不覆盖，免得冲掉已录的比分。
       if (existing) continue;
       await tx.matches.set(draft._id, { ...draft, _id: draft._id, schoolId: ctx.schoolId,
@@ -911,8 +919,11 @@ async function assignCollegeTieReferee(payload = {}, ctx) {
 
     const patch = buildRefereePatch(refereeId, { actorId: ctx.actorId, now: ctx.now });
     // 一次指派 = 写大场 + 写它下面所有能改派的小场（权限判定只读小场自己的 referee）。
+    const legs = [];
     for (const legId of legMatchIdsOf(current)) {
-      const leg = await tx.matches.getById(legId);
+      legs.push({ legId, leg: await tx.matches.getById(legId) });
+    }
+    for (const { legId, leg } of legs) {
       if (!leg || !canAssignReferee(leg)) continue;
       await tx.matches.set(legId, { ...leg, ...patch,
         revision: Number(leg.revision || 1) + 1, updatedAt: nowIso });

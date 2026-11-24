@@ -25,6 +25,9 @@ const { attachSchoolRepository } = require('../school-repository.js');
 const { readPersonalSportsPage } = require('./personal-sports-page.js');
 const { readMemberPage, readMemberCount } = require('./member-page.js');
 const { matchListWhere } = require('../../lib/server/services/match-list-query.js');
+const { applyPatch } = require('../../lib/server/services/patch-utils.js');
+const { runTransactionWithRetry } = require('../../lib/server/services/tx-retry.js');
+const { recordTxMetrics } = require('../core/observability.js');
 const { MATCH_STATUS } = require('../../lib/shared/utils/constants.js');
 
 /** 单页条数，取云开发云函数端的查询上限 */
@@ -666,6 +669,14 @@ function buildCollections(scope, inTx, cmd) {
     },
     read: (key, id) => readDoc(scope, COLLECTIONS[key], id),
     set: (key, id, doc) => col(key).doc(id).set({ data: withoutId(doc) }),
+    update: (key, id, patch, fallbackFullDoc) => {
+      const ref = col(key).doc(id);
+      if (typeof ref.update === 'function') {
+        return ref.update({ data: withoutId(patch) });
+      }
+      const full = fallbackFullDoc || patch;
+      return ref.set({ data: withoutId(full) });
+    },
     // 物理删除：只给「可丢弃的草稿」用（个人赛重抽清旧签表）。
     // 事务内走 instrumentTransaction 的 remove，计入写预算。
     remove: (key, id) => col(key).doc(id).remove(),
@@ -801,7 +812,9 @@ function instrumentTransaction(transaction) {
   const reads = new Map();
   const budgetGuard = () => {
     if (stats.reads + stats.writes > TX_OPERATION_BUDGET || stats.writes > TX_WRITE_BUDGET) {
-      throw new Error(`事务读写总操作预算不足（读 ${stats.reads} / 写 ${stats.writes}，上限 ${TX_OPERATION_BUDGET}）：请缩小本次处理范围`);
+      const err = new Error(`事务读写总操作预算不足（读 ${stats.reads} / 写 ${stats.writes}，上限 ${TX_OPERATION_BUDGET}）：请缩小本次处理范围`);
+      err.code = 'TX_BUDGET_EXCEEDED';
+      throw err;
     }
   };
   const wrapCollection = (name, collection) => ({
@@ -823,10 +836,23 @@ function instrumentTransaction(transaction) {
           reads.set(key, Promise.resolve({ data: { ...stripForStorage(arg.data), _id: id } }));
           return result;
         },
-        update: async (arg) => {
-          stats.writes += 1; budgetGuard();
-          const result = await ref.update(arg); reads.delete(key); return result;
-        },
+        ...(typeof ref.update === 'function' ? {
+          update: async (arg) => {
+            stats.writes += 1; budgetGuard();
+            const result = await ref.update(arg);
+            if (reads.has(key)) {
+              const prev = await reads.get(key);
+              const prevDoc = prev && prev.data ? prev.data : null;
+              if (prevDoc) {
+                const merged = applyPatch(prevDoc, stripForStorage((arg && arg.data) || {}));
+                reads.set(key, Promise.resolve({ data: { ...merged, _id: id } }));
+              } else {
+                reads.delete(key);
+              }
+            }
+            return result;
+          },
+        } : {}),
         remove: async () => {
           stats.writes += 1; budgetGuard();
           const result = await ref.remove(); reads.set(key, Promise.resolve({ data: null })); return result;
@@ -857,21 +883,28 @@ function instrumentTransaction(transaction) {
 function createRepo(db) {
   const repo = buildCollections(db, false, db.command);
 
-  repo.transaction = (fn) =>
-    db.runTransaction(async (transaction) => {
-      const instrumented = instrumentTransaction(transaction);
-      try {
-        return await fn(buildCollections(instrumented.transaction, true, db.command));
-      } finally {
-        // 观测层：接近临界的事务留痕，供真机验收核对云端真实上限（审计 C4）。
-        if (instrumented.stats.writes >= TX_WARN_WRITES) {
-          console.warn(
-            `[data] 事务操作数告警：写 ${instrumented.stats.writes} 次 / 读 ${instrumented.stats.reads} 次`
-            + `（总操作预算 ${TX_OPERATION_BUDGET}）。`,
-          );
+  repo.transaction = async (fn, txOptions = {}) => {
+    let lastStats = { reads: 0, writes: 0 };
+    const { result, retries } = await runTransactionWithRetry(
+      () => db.runTransaction(async (transaction) => {
+        const instrumented = instrumentTransaction(transaction);
+        lastStats = instrumented.stats;
+        try {
+          return await fn(buildCollections(instrumented.transaction, true, db.command));
+        } finally {
+          if (instrumented.stats.writes >= TX_WARN_WRITES) {
+            console.warn(
+              `[data] 事务操作数告警：写 ${instrumented.stats.writes} 次 / 读 ${instrumented.stats.reads} 次`
+              + `（总操作预算 ${TX_OPERATION_BUDGET}）。`,
+            );
+          }
         }
-      }
-    });
+      }),
+      txOptions,
+    );
+    recordTxMetrics({ reads: lastStats.reads, writes: lastStats.writes, retries });
+    return result;
+  };
 
   return repo;
 }

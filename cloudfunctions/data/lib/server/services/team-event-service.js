@@ -704,10 +704,13 @@ async function ensureCollegeRosterMembers(ctx, team, roster) {
     const tx = root.forScope(fresh);
     const current = await tx.teams.getById(team._id);
     if (!current || current.type !== TEAM_TYPE.COLLEGE) return { ok: false, message: '学院代表队不存在' };
-    let added = 0;
+    const rowsByUser = [];
     for (const row of roster) {
       const key = teamMemberKey(team._id, row.userId);
-      const member = await tx.teamMembers.getById(key);
+      rowsByUser.push({ row, key, member: await tx.teamMembers.getById(key) });
+    }
+    let added = 0;
+    for (const { row, key, member } of rowsByUser) {
       if (member && member.status === TEAM_MEMBER_STATUS.ACTIVE) continue;
       await tx.teamMembers.set(key, {
         ...(member || {}),

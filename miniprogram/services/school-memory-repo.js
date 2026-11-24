@@ -1,453 +1,334 @@
-/** 学校身份演示仓储。写事务排队，草稿提交/回滚，读写均复制对象。 */
-const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../shared/utils/school.js');
-const { MEET_COLLECTIONS, meetScope } = require('../shared/utils/meet-scope.js');
-const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
+/**
+ * 学校身份演示仓储（复用统一仓储内核 + 严苛云端仿真器）。
+ * 写事务串行排队 + 冲突重试 + 可选严苛模式（CLOUD_STRICT_SIM=1）。
+ */
+const { compareCode } = require('../shared/utils/text-order.js');
+const { SCHOOL_COLLECTIONS, attachSchoolRepository } = require('../../src/server/services/school-repository.js');
+const { EVENT_SCOPED, ALL_COLLECTIONS } = require('../../src/server/services/school-collections.js');
+const { applyPatch } = require('../../src/server/services/patch-utils.js');
+const { runTransactionWithRetry } = require('../../src/server/services/tx-retry.js');
 const { memoryMatchPage } = require('../../src/server/services/match-list-query');
-const { attachTeamReads, fieldValues } = require('../../src/server/services/scoped-team-reads.js');
+const { fieldValues } = require('../../src/server/services/scoped-team-reads.js');
 const { memoryDirectoryPage, memoryDirectoryCount } = require('../../src/server/services/account-directory.js');
 const { memoryPersonalPage } = require('../../src/server/services/personal-sports-query.js');
-const { attachOverviewReads, memoryOverviewIO } = require('../../src/server/services/school-overview-reads.js');
+const { memoryOverviewIO } = require('../../src/server/services/school-overview-reads.js');
 const { pageOfCollection } = require('../../src/server/services/event-list-page.js');
-const { compareCode } = require('../shared/utils/text-order.js');
-// 集合清单与云端共用一份（services/school-collections.js），不再各写各的。
-const {
-  EVENT_SCOPED, SCOPED_COLLECTIONS, SCHOOL_ONLY, ALL_COLLECTIONS,
-} = require('../../src/server/services/school-collections.js');
-const KEYS = ALL_COLLECTIONS;
 
-function createSchoolMemoryRepo(seed = {}) {
-  let state = Object.fromEntries(KEYS.map(key => [key, new Map((seed[key] || []).map(doc => [doc._id, clone(doc)]))]));
-  let queue = Promise.resolve();
-  const build = (getState, inTx) => {
+const KEYS = ALL_COLLECTIONS;
+const clone = (value) => (value === undefined ? undefined : JSON.parse(JSON.stringify(value)));
+
+function envFlag(name) {
+  if (typeof process === 'undefined' || !process) return '';
+  const env = process['env'];
+  return env ? String(env[name] || '') : '';
+}
+
+const CMD = Symbol('db.command');
+const command = {
+  gte: (value) => ({ [CMD]: 'gte', value }),
+  lte: (value) => ({ [CMD]: 'lte', value }),
+  lt: (value) => ({ [CMD]: 'lt', value }),
+  neq: (value) => ({ [CMD]: 'neq', value }),
+  or: (value) => ({ [CMD]: 'or', value }),
+  exists: (value) => ({ [CMD]: 'exists', value }),
+  gt: (value) => ({ [CMD]: 'gt', value }),
+  in: (value) => ({ [CMD]: 'in', value }),
+  and: (value) => ({ [CMD]: 'and', value }),
+};
+const isCommand = (value) => Boolean(value && value[CMD]);
+
+const toTime = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const ms = new Date(value).getTime();
+  return Number.isNaN(ms) ? null : ms;
+};
+
+const compare = (left, right) => {
+  const a = toTime(left);
+  const b = toTime(right);
+  if (a !== null && b !== null) return a - b;
+  return compareCode(left, right);
+};
+
+function matchWhere(doc, where) {
+  if (!where) return true;
+  if (isCommand(where)) {
+    if (where[CMD] === 'and') return where.value.every((part) => matchWhere(doc, part));
+    if (where[CMD] === 'or') return where.value.some((part) => matchWhere(doc, part));
+    return false;
+  }
+  return Object.keys(where).every((field) => {
+    const cond = where[field];
+    if (!isCommand(cond)) return fieldValues(doc, field).includes(cond);
+    if (cond[CMD] === 'and') return cond.value.every((part) => matchWhere(doc, part));
+    if (cond[CMD] === 'in') return Array.isArray(cond.value) && fieldValues(doc, field).some((v) => cond.value.includes(v));
+    if (cond[CMD] === 'gte') return compare(doc[field], cond.value) >= 0;
+    if (cond[CMD] === 'lte') return compare(doc[field], cond.value) <= 0;
+    if (cond[CMD] === 'lt') return compare(doc[field], cond.value) < 0;
+    if (cond[CMD] === 'neq') return doc[field] !== cond.value;
+    if (cond[CMD] === 'gt') return compare(doc[field], cond.value) > 0;
+    if (cond[CMD] === 'exists') return (doc[field] !== undefined) === Boolean(cond.value);
+    return false;
+  });
+}
+
+const WRITE_METHODS = new Set(['set', 'insert', 'update', 'remove']);
+
+function withWriteHook(ops, key, onWrite) {
+  const out = {};
+  for (const [name, fn] of Object.entries(ops)) {
+    out[name] = WRITE_METHODS.has(name) && typeof fn === 'function'
+      ? (...args) => { onWrite(key); return fn(...args); }
+      : fn;
+  }
+  return out;
+}
+
+function createSchoolMemoryRepo(seed = {}, options = {}) {
+  let state = Object.fromEntries(KEYS.map((key) => [key, new Map((seed[key] || []).map((doc) => [doc._id, clone(doc)]))]));
+  const versions = new Map();
+  const bump = (key) => versions.set(key, (versions.get(key) || 0) + 1);
+
+  const strict = options.strict !== undefined ? Boolean(options.strict) : envFlag('CLOUD_STRICT_SIM') === '1';
+  const rawBudget = Number(options.txBudget || envFlag('TX_OPERATION_BUDGET'));
+  const txBudget = Number.isFinite(rawBudget) && rawBudget > 0 ? Math.min(100, Math.floor(rawBudget)) : 100;
+  const enforceReadBeforeWrite = options.enforceReadBeforeWrite !== undefined
+    ? Boolean(options.enforceReadBeforeWrite) : strict;
+
+  const build = (getState, inTx, onWrite, txTracker) => {
+    const recordRead = (key, id) => {
+      if (!inTx || !txTracker) return clone(getState()[key].get(id) || null);
+      const cacheKey = `${key}\0${id}`;
+      if (!txTracker.reads.has(cacheKey)) {
+        if (enforceReadBeforeWrite && txTracker.writtenCollections.has(key)) {
+          const err = new Error(`事务内同集合写后读违例（${key}:${id}）：请将同集合读取提前到该集合首次写入之前`);
+          err.code = 'TX_READ_AFTER_WRITE';
+          throw err;
+        }
+        txTracker.stats.reads += 1;
+        txTracker.guardBudget();
+        txTracker.reads.set(cacheKey, clone(getState()[key].get(id) || null));
+      }
+      return clone(txTracker.reads.get(cacheKey));
+    };
+
+    const recordWrite = (key, id, nextDoc) => {
+      if (onWrite) onWrite(key);
+      if (!inTx || !txTracker) return;
+      txTracker.writtenCollections.add(key);
+      txTracker.stats.writes += 1;
+      txTracker.guardBudget();
+      const cacheKey = `${key}\0${id}`;
+      txTracker.reads.set(cacheKey, nextDoc ? clone(nextDoc) : null);
+    };
+
+    const read = async (key, id) => recordRead(key, id);
+
+    const list = (key) => {
+      if (inTx) throw new Error(`事务内不允许整表读取（${key}），请改用 getById`);
+      return [...getState()[key].values()].map(clone);
+    };
+
     const repo = { inTx: Boolean(inTx) };
-    repo.personalSports = { readPage: async (source, auth, query) => {
-      if (inTx) throw new Error('事务内不允许个人体育查询');
-      return memoryPersonalPage(key => [...getState()[key].values()].map(clone), source, auth, query);
-    } };
     for (const key of KEYS) {
       repo[key] = {
-        getById: async id => clone(getState()[key].get(id) || null),
-        set: async (id, doc) => { getState()[key].set(id, clone({ ...doc, _id: id })); },
-        // 物理删除只用于「尚未产生任何结果的草稿」：个人赛重抽时清掉旧签表场次。
-        // 与云端 `doc(id).remove()` 同语义；归属校验由受范围层负责。
-        remove: async id => { getState()[key].delete(id); },
-        list: async () => {
-          if (inTx) throw new Error('事务内不可查询集合');
-          return [...getState()[key].values()].map(clone);
+        getById: (id) => read(key, id),
+        set: async (id, doc) => {
+          const next = clone({ ...doc, _id: id });
+          recordWrite(key, id, next);
+          getState()[key].set(id, next);
         },
+        remove: async (id) => {
+          recordWrite(key, id, null);
+          getState()[key].delete(id);
+        },
+        list: async () => list(key),
       };
     }
+
     repo.memberships.get = repo.memberships.getById;
-    // 赛季文档的局部更新（与云端同口径）：积分物化只写 `pointsSettledVersion`，
-    // 不整份覆盖——整份 set 会把读到的旧 version 写回去。
     repo.seasons.update = async (id, patch) => {
-      const cur = getState().seasons.get(id);
+      const cur = clone(getState().seasons.get(id) || null);
       if (!cur) throw new Error('记录不存在或不属于当前范围');
-      getState().seasons.set(id, clone({ ...cur, ...patch, _id: id }));
+      const next = clone({ ...applyPatch(cur, patch), _id: id });
+      recordWrite('seasons', id, next);
+      getState().seasons.set(id, next);
     };
-    // 会员行的局部更新（与云端 cloud-repo 的 schoolMembers.update 同口径）：
-    // 赛季积分物化只写补丁字段，不整行覆盖学籍与学院
-    // （2026-10-29 第十三轮，见 services/season-points.js）。
     repo.schoolMembers.update = async (id, patch) => {
-      const cur = getState().schoolMembers.get(id);
+      const cur = clone(getState().schoolMembers.get(id) || null);
       if (!cur) throw new Error('记录不存在或不属于当前范围');
-      getState().schoolMembers.set(id, clone({ ...cur, ...patch, _id: id }));
+      const next = clone({ ...applyPatch(cur, patch), _id: id });
+      recordWrite('schoolMembers', id, next);
+      getState().schoolMembers.set(id, next);
     };
-    // 按一批 userId 取账号：与云端 listByIds 同口径（云端非事务走 `_.in` 批查、
-    // 事务内退化为逐条点读；这里两者都是点取）。业务用它替掉「读全平台 users
-    // 再建 Map」——users 是平台级集合，全表读会随别校用户增长而变慢
-    // （2026-10-21 审查 P0-1）。
-    repo.users.listByIds = async ids => {
-      const uniq = [...new Set((Array.isArray(ids) ? ids : []).filter(id => typeof id === 'string' && id))];
-      return uniq
-        .map(id => getState().users.get(id))
-        .filter(Boolean)
-        .map(clone);
+    repo.users.listByIds = async (ids) => {
+      const uniq = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string' && id))];
+      const out = [];
+      for (const id of uniq) {
+        const doc = await read('users', id);
+        if (doc) out.push(doc);
+      }
+      return out;
     };
-    // 同一 OpenID 可能留下两条账号（旧协议 `u_…` 与协议 2 `acc:…`）。这里与
-    // 云端适配器同口径：按 _id 升序取定，让「解析到哪一条」确定、可复现
-    // （见 2026-10-16 只读审计 H5 / P1）。
-    repo.users.getByOpenId = async openId => (await repo.users.list())
-      .filter(user => user.openId === openId)
-      .sort((a, b) => (a._id < b._id ? -1 : a._id > b._id ? 1 : 0))[0] || null;
-    repo.audit = { append: async entry => {
-      if (!entry._id) throw new Error('审计记录缺少 ID');
-      await repo.auditLogs.set(entry._id, entry);
-    } };
-    // 受范围限制的集合：与云端 attachSchoolRepository 共用同一份清单。
-    const SCOPED = SCOPED_COLLECTIONS;
-    const SCHOOL_SCOPED = SCHOOL_ONLY;
-    // 按赛事取子集用 listByEvent（清单见文件顶部的 EVENT_SCOPED）
-    repo.forScope = input => {
-      const scope = schoolScope(input);
-      const result = { scope };
-      for (const key of SCOPED) {
-        const expected = SCHOOL_SCOPED.includes(key)
-          ? { schoolId: scope.schoolId }
-          : { schoolId: scope.schoolId, association: scope.association };
-        const owns = doc => Boolean(doc) && Object.keys(expected).every(field => doc[field] === expected[field]);
-        const checked = doc => {
-          for (const field of Object.keys(expected)) {
-            if (doc[field] !== undefined && doc[field] !== expected[field]) {
-              throw new Error('不能写入其他学校或协会的数据');
-            }
+    repo.users.getByOpenId = async (openId) => (await repo.users.list())
+      .filter((user) => user.openId === openId)
+      .sort((a, b) => compareCode(a._id, b._id))[0] || null;
+    repo.audit = {
+      append: async (entry) => {
+        if (!entry._id) throw new Error('审计记录缺少 ID');
+        await repo.auditLogs.set(entry._id, entry);
+      },
+    };
+
+    const overview = memoryOverviewIO((key) => [...getState()[key].values()].map(clone));
+    const built = attachSchoolRepository(repo, {
+      cmd: command,
+      memberPage: async (scope, opts) => memoryDirectoryPage(list('schoolMembers'), list('users'), scope, opts),
+      memberCount: async (scope, opts) => memoryDirectoryCount(list('schoolMembers'), list('users'), scope, opts),
+      personalPage: async (source, auth, query) => memoryPersonalPage(list, source, auth, query),
+      matchPage: async (scope, opts) => memoryMatchPage(list('matches'), scope, opts),
+      read,
+      set: async (key, id, doc) => {
+        const next = clone({ ...doc, _id: id });
+        recordWrite(key, id, next);
+        getState()[key].set(id, next);
+      },
+      update: async (key, id, patch) => {
+        const cur = getState()[key].get(id);
+        if (!cur) throw new Error('记录不存在或不属于当前范围');
+        const next = clone({ ...applyPatch(cur, patch), _id: id });
+        recordWrite(key, id, next);
+        getState()[key].set(id, next);
+      },
+      remove: async (key, id) => {
+        recordWrite(key, id, null);
+        getState()[key].delete(id);
+      },
+      query: async (key, where) => {
+        const isScopeOnlyQuery = where && !Array.isArray(where) && typeof where === 'object'
+          && !where.$and
+          && Object.keys(where).every((k) => k === 'schoolId' || k === 'association' || k === 'meetId');
+        const rows = (!inTx && isScopeOnlyQuery && repo[key] && typeof repo[key].list === 'function')
+          ? await repo[key].list()
+          : list(key);
+        return rows.filter((doc) => matchWhere(doc, where));
+      },
+      byIds: async (key, ids, scopeFields = {}) => {
+        if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
+        const uniq = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string' && id))];
+        return uniq
+          .map((id) => getState()[key].get(id))
+          .filter((doc) => doc && Object.entries(scopeFields).every(([field, value]) => doc[field] === value))
+          .map(clone);
+      },
+      top: async (key, where, order, limit, offset = 0) => {
+        const rows = list(key).filter((doc) => matchWhere(doc, where));
+        rows.sort((a, b) => {
+          for (const rule of (order || [])) {
+            const diff = compare(a[rule.field], b[rule.field]);
+            if (diff !== 0) return rule.direction === 'desc' ? -diff : diff;
           }
-          return { ...doc, ...expected };
-        };
-        const write = async (id, doc, mode) => {
-          if (!id || typeof id !== 'string') throw new Error('缺少记录 ID');
-          if (doc._id !== undefined && doc._id !== id) throw new Error('记录 ID 不一致');
-          const patch = checked(doc);
-          const current = await repo[key].getById(id);
-          if (current && !owns(current)) throw new Error('记录不存在或不属于当前范围');
-          if (current && mode === 'insert') throw new Error('记录已存在');
-          if (!current && mode === 'update') throw new Error('记录不存在或不属于当前范围');
-          const next = { ...(mode === 'update' ? current : {}), ...patch, _id: id };
-          await repo[key].set(id, next);
-          return next;
-        };
-        result[key] = {
-          list: async () => (await repo[key].list()).filter(owns),
-          getById: async id => {
-            const doc = await repo[key].getById(id);
-            return owns(doc) ? doc : null;
-          },
-          set: (id, doc) => write(id, doc, 'set'),
-          insert: doc => write(doc._id, doc, 'insert'),
-          update: (id, patch) => write(id, patch, 'update'),
-          // 归属校验必须在删除前做：否则调用方给一个别校的 _id 就能删掉别人的草稿。
-          remove: async id => {
-            const current = await repo[key].getById(id);
-            if (!owns(current)) throw new Error('记录不存在或不属于当前范围');
-            await repo[key].remove(id);
-          },
-        };
-        // 按赛事取子集：与云端 listByEvent 同口径（WHERE eventId = ?）。
-        // 云端若不用条件查询，就是整表翻页后内存过滤——比赛一多，打开一次详情
-        // 要读十几页 RPC，叠上每日读配额会撑不住（见 docs/数据库索引清单.md）。
-        if (EVENT_SCOPED.includes(key)) {
-          result[key].listByEvent = async eventId => (await repo[key].list())
-            .filter(doc => owns(doc) && doc.eventId === eventId);
-        }
-        // 批量点取（与云端 listByIds 同口径）：赛事列表标「我报名了没」、
-        // 名录页给每一行算权限标签，都可以一页只发一次调用（2026-10-22 H-3／H-5）。
-        // `owns` 校验是这条路径的安全底线：主键可能来自调用方。
-        if (EVENT_SCOPED.includes(key) || key === 'schoolRoles' || key === 'memberships'
-          || key === 'schoolMembers' || key === 'memberRatings' || key === 'liveScores') {
-          result[key].listByIds = async ids => {
-            if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
-            if (key === 'liveScores' && typeof repo.liveScores.listByIds === 'function') {
-              return (await repo.liveScores.listByIds(ids)).filter(owns);
+          return 0;
+        });
+        const skip = Math.max(0, Number(offset) || 0);
+        return rows.slice(skip, skip + Math.max(1, Number(limit) || 1));
+      },
+      count: async (key, where) => list(key).filter((doc) => matchWhere(doc, where)).length,
+    }, inTx);
+
+    // 还原各集合基础 list()，避免 io.query -> built[key].list 递归，同时保留测试对 repo[key].list 的拦截钩子
+    for (const key of SCHOOL_COLLECTIONS) {
+      if (built[key]) built[key].list = async () => list(key);
+    }
+
+    // 补充顶层快捷查询（与旧模拟端保持 100% 接口一致）
+    built.liveScores.listByIds = async (ids) => {
+      const uniq = [...new Set((Array.isArray(ids) ? ids : []).filter((id) => typeof id === 'string' && id))];
+      const out = [];
+      for (const id of uniq) {
+        const doc = await read('liveScores', id);
+        if (doc) out.push(doc);
+      }
+      return out;
+    };
+    built.memberships.listByUser = async (userId) => {
+      if (typeof userId !== 'string' || !userId) return [];
+      return (await built.memberships.list()).filter((doc) => doc.userId === userId);
+    };
+    for (const key of EVENT_SCOPED) {
+      built[key].listByEvent = async (eventId) => {
+        if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
+        return (await built[key].list()).filter((doc) => doc.eventId === eventId);
+      };
+    }
+    // 兼容 forScope 概览直挂方法（由 attachOverviewReads / pageOfCollection 在受范围面提供）
+    void overview;
+    void pageOfCollection;
+
+    if (onWrite) {
+      for (const [key, ops] of Object.entries(built)) {
+        if (SCHOOL_COLLECTIONS.includes(key) || !ops || typeof ops !== 'object') continue;
+        built[key] = withWriteHook(ops, key, onWrite);
+      }
+    }
+    return built;
+  };
+
+  const repo = build(() => state, false, bump, null);
+
+  let queue = Promise.resolve();
+  repo.transaction = (fn, txOptions = {}) => {
+    const task = queue.then(async () => {
+      const retryOpts = {
+        maxRetries: txOptions.maxRetries !== undefined ? txOptions.maxRetries
+          : (options.maxRetries !== undefined ? options.maxRetries : 3),
+        baseDelayMs: txOptions.baseDelayMs !== undefined ? txOptions.baseDelayMs : 0,
+      };
+      const injector = txOptions.conflictInjector || options.conflictInjector;
+
+      const { result } = await runTransactionWithRetry(async (attempt) => {
+        const scratch = Object.fromEntries(KEYS.map((key) => [key, new Map(state[key])]));
+        const startVersions = new Map(versions);
+        const written = new Set();
+        const txTracker = {
+          reads: new Map(),
+          stats: { reads: 0, writes: 0 },
+          writtenCollections: new Set(),
+          guardBudget: () => {
+            if (!strict) return;
+            if (txTracker.stats.reads + txTracker.stats.writes > txBudget) {
+              const err = new Error(`事务读写总操作预算不足（读 ${txTracker.stats.reads} / 写 ${txTracker.stats.writes}，上限 ${txBudget}）：请缩小本次处理范围`);
+              err.code = 'TX_BUDGET_EXCEEDED';
+              throw err;
             }
-            const uniq = [...new Set((Array.isArray(ids) ? ids : [])
-              .filter(id => typeof id === 'string' && id))];
-            const out = [];
-            for (const id of uniq) {
-              const doc = await repo[key].getById(id);
-              if (owns(doc)) out.push(doc);
-            }
-            return out;
-          };
-        }
-        // 名册分页 / 按状态计数 / 按学号取（2026-10-26 第四轮审查 P-2 / P-3 / P-7）：
-        // 与云端同一套语义（`_id` 游标 + 多取一条判 hasMore），两端口径分叉会让
-        // 「本地能翻页、云端翻不动」变成只在真机出现的毛病。
-        if (key === 'schoolMembers') {
-          result[key].listByStatus = async (status, options = {}) => {
-            if (inTx) throw new Error('事务内不允许条件读取（schoolMembers），请改用 getById');
-            if (typeof status !== 'string' || !status) return { rows: [], hasMore: false };
-            const limit = Math.max(1, Math.min(Number(options.limit) || 50, 200));
-            const afterId = typeof options.afterId === 'string' ? options.afterId : '';
-            const rows = (await repo[key].list())
-              .filter(doc => owns(doc) && doc.status === status
-                && (!options.collegeId || doc.collegeId === options.collegeId)
-                && (!afterId || String(doc._id) > afterId))
-              .sort((a, b) => compareCode(a._id, b._id));
-            return { rows: rows.slice(0, limit).map(clone), hasMore: rows.length > limit };
-          };
-          result[key].countByStatus = async status => (await repo[key].list())
-            .filter(doc => owns(doc) && doc.status === String(status || '')).length;
-          result[key].listByStudentId = async studentId => {
-            if (inTx) throw new Error('事务内不允许条件读取（schoolMembers），请改用 getById');
-            if (typeof studentId !== 'string' || !studentId) return [];
-            return (await repo[key].list())
-              .filter(doc => owns(doc) && doc.studentId === studentId).map(clone);
-          };
+          },
+        };
+
+        const out = await fn(build(() => scratch, true, (key) => written.add(key), txTracker));
+
+        if (typeof injector === 'function') {
+          await injector({ attempt, written, state, versions, bump });
         }
 
-        // 本赛季的比赛（`matchTime >= sinceIso`）：与云端 listSince 同口径。
-        // 模拟端在内存里按 ISO 串比较——与云端字符串范围比较等价。
-        if (key === 'matches') {
-          result[key].listPage = async options => {
-            if (inTx) throw new Error('事务内不允许条件读取（matches），请改用 getById');
-            const page = memoryMatchPage([...getState().matches.values()], scope, options);
-            return { ...page, rows: page.rows.map(clone) };
-          };
-          result[key].listSince = async sinceIso => (await repo[key].list())
-            .filter(doc => owns(doc) && (!sinceIso || String(doc.matchTime || '') >= sinceIso));
-          // 「我的比赛（本赛季）」：与云端 listMineSince 同口径（2026-10-23 第三轮 X-7）。
-          // 云端是「teamA / teamB 两支等值查询 + 按 _id 去重」（数组字段不能一条查完）；
-          // 内存里一次过滤即等价——等值对数组字段就是「包含」。
-          result[key].listMineSince = async (userId, sinceIso) => {
-            if (inTx) throw new Error('事务内不允许条件读取（matches），请改用 getById');
-            if (typeof userId !== 'string' || !userId) return [];
-            return (await repo[key].list()).filter(doc => owns(doc)
-              && (!sinceIso || String(doc.matchTime || '') >= sinceIso)
-              && ((doc.teamA || []).includes(userId) || (doc.teamB || []).includes(userId)));
-          };
-        }
-        // 按人反查：与云端 listByUser 同口径（缺 userId 时返回空数组，
-        // 不退化成整表读）。训练报名见 H-2，小组成员见 H-3，评级见方案 A 第 2 步
-        // （个人主页要「我在这几个池里的评级」，不必读全范围）。
-        if (key === 'trainingRegistrations' || key === 'associationGroupMembers' || key === 'memberRatings') {
-          result[key].listByUser = async userId => {
-            if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
-            if (typeof userId !== 'string' || !userId) return [];
-            return (await repo[key].list()).filter(doc => owns(doc) && doc.userId === userId);
-          };
-        }
-        // 按训练取报名：与云端 listByTraining 同口径（缺 trainingId 返回空数组）。
-        if (key === 'trainingRegistrations') {
-          result[key].listByTraining = async trainingId => {
-            if (inTx) throw new Error('事务内不允许条件读取（trainingRegistrations），请改用 getById');
-            if (typeof trainingId !== 'string' || !trainingId) return [];
-            return (await repo[key].list()).filter(doc => owns(doc) && doc.trainingId === trainingId);
-          };
-        }
-        // 评级表的下推读（2026-10-23 方案 A 第 2 步）：与云端
-        // memberRatings.listTop / countRanked 同口径。
-        //
-        // 【为什么门槛是 matchCount > 0】榜单只展示上过场的人（buildRows 同口径）。
-        // 【为什么排序只到 elo + wins】名次由调用方用同一个比较器重算（胜率是派生
-        // 字段，不进索引）。这里保持与数据库排序一致，免得「取哪一批」在两端分叉。
-        if (key === 'memberRatings') {
-          const matchesRanked = ({ pool, gender = null, memberStatus = SCHOOL_MEMBER_STATUS.ACTIVE, minElo = null, missingProfile = false }) => doc =>
-            owns(doc)
-            && (!pool || doc.pool === pool)
-            && Number(doc.matchCount || 0) > 0
-            && (missingProfile
-              ? doc.memberStatus === undefined
-              : (!memberStatus || doc.memberStatus === memberStatus)
-                && (!gender || doc.gender === gender)
-                && (minElo === null || minElo === undefined || Number(doc.elo) > Number(minElo)));
-          result[key].listTop = async (options = {}) => {
-            if (inTx) throw new Error('事务内不允许条件读取（memberRatings），请改用 getById');
-            const limit = Math.max(1, Math.min(Number(options.limit) || 10, 100));
-            const hit = matchesRanked(options);
-            return (await repo[key].list())
-              .filter(hit)
-              .sort((a, b) => Number(b.elo) - Number(a.elo)
-                || Number(b.wins || 0) - Number(a.wins || 0)
-                || compareCode(a._id, b._id))
-              .slice(0, limit);
-          };
-          result[key].countRanked = async (options = {}) => {
-            if (inTx) throw new Error('事务内不允许条件读取（memberRatings），请改用 getById');
-            const hit = matchesRanked(options);
-            return (await repo[key].list()).filter(hit).length;
-          };
-        }
-      }
-      attachTeamReads(result, {
-        inTx, command: { in: values => ({ values }), and: parts => ({ parts }),
-          gte: low => ({ low }), lte: high => ({ high }) },
-        query: async (key, where) => [...getState()[key].values()]
-          .filter(doc => (where.parts || [where]).every(part => Object.entries(part).every(([field, value]) =>
-            fieldValues(doc, field).some(item => value && value.values ? value.values.includes(item)
-              : value && value.low !== undefined ? item >= value.low
-                : value && value.high !== undefined ? item <= value.high : item === value))))
-          .map(clone),
-        byIds: async (key, ids, fields) => [...new Set(ids)].map(id => getState()[key].get(id))
-          .filter(doc => doc && Object.entries(fields).every(([field, value]) => doc[field] === value)).map(clone),
-      });
-      result.memberships.listCollegeMembers = async collegeId => {
-        if (inTx) throw new Error('事务内不允许学院候选查询');
-        if (typeof collegeId !== 'string' || !collegeId) return [];
-        return (await repo.memberships.list()).filter(row => row.schoolId === scope.schoolId
-          && row.association === scope.association && row.collegeId === collegeId && row.status === 'active');
-      };
-      const overview = memoryOverviewIO(key => [...getState()[key].values()].map(clone));
-      attachOverviewReads(result, { inTx, ...overview });
-      // 赛事 / 学院赛列表：与云端同一份下推实现（2026-10-29 第十二轮审计）。
-      for (const listKey of ['events', 'collegeEvents']) {
-        if (!result[listKey]) continue;
-        result[listKey].listPage = options => {
-          if (inTx) throw new Error(`事务内不允许分页读取（${listKey}），请改用 getById`);
-          return pageOfCollection(overview, scope, listKey, options);
-        };
-      }
-      result.schoolMembers.listDirectoryPage = async options => {
-        if (inTx) throw new Error('事务内不允许查询会员目录');
-        return memoryDirectoryPage([...getState().schoolMembers.values()], [...getState().users.values()], scope, options);
-      };
-      // 与 listDirectoryPage 同一套过滤的计数（2026-10-29 第十一轮审计 P2-9）。
-      result.schoolMembers.countDirectory = async options => {
-        if (inTx) throw new Error('事务内不允许查询会员目录');
-        return memoryDirectoryCount([...getState().schoolMembers.values()], [...getState().users.values()], scope, options);
-      };
-      if (!inTx) result.transaction = fn => repo.transaction(tx => fn(tx.forScope(scope)));
-      return result;
-    };
-    // 运动会范围：{schoolId, meetId}，**不含 association**。与云端 forMeet 同口径，
-    // 由 tests/meet-repo-contract.test.js 逐集合/逐方法守护两端一致。
-    repo.forMeet = input => {
-      const scope = meetScope(input);
-      const expected = { schoolId: scope.schoolId, meetId: scope.meetId };
-      const result = { scope };
-      for (const key of MEET_COLLECTIONS) {
-        const owns = doc => Boolean(doc) && Object.keys(expected).every(field => doc[field] === expected[field]);
-        const checked = doc => {
-          for (const field of Object.keys(expected)) {
-            if (doc[field] !== undefined && doc[field] !== expected[field]) {
-              throw new Error('不能写入其他学校或其他运动会的数据');
-            }
+        for (const key of written) {
+          if ((versions.get(key) || 0) !== (startVersions.get(key) || 0)) {
+            const err = new Error('WriteConflict: concurrent modification');
+            err.code = 'WRITE_CONFLICT';
+            throw err;
           }
-          return { ...doc, ...expected };
-        };
-        const write = async (id, doc, mode) => {
-          if (!id || typeof id !== 'string') throw new Error('缺少记录 ID');
-          if (doc._id !== undefined && doc._id !== id) throw new Error('记录 ID 不一致');
-          const patch = checked(doc);
-          const current = await repo[key].getById(id);
-          if (current && !owns(current)) throw new Error('记录不存在或不属于当前范围');
-          if (current && mode === 'insert') throw new Error('记录已存在');
-          if (!current && mode === 'update') throw new Error('记录不存在或不属于当前范围');
-          const next = { ...(mode === 'update' ? current : {}), ...patch, _id: id };
-          await repo[key].set(id, next);
-          return next;
-        };
-        result[key] = {
-          list: async () => (await repo[key].list()).filter(owns),
-          getById: async id => {
-            const doc = await repo[key].getById(id);
-            return owns(doc) ? doc : null;
-          },
-          set: (id, doc) => write(id, doc, 'set'),
-          insert: doc => write(doc._id, doc, 'insert'),
-          update: (id, patch) => write(id, patch, 'update'),
-          remove: async id => {
-            const current = await repo[key].getById(id);
-            if (!owns(current)) throw new Error('记录不存在或不属于当前范围');
-            await repo[key].remove(id);
-          },
-        };
-        // 运动会录分页的两个下推（与云端 forMeet 同口径，2026-10-23 H-9）：
-        // 本场次的报名按编号批读、成绩按 sessionKey 取，不再读一届全部。
-        // 报名 / 场次 / 意向 / 成绩 / 发布快照 / 指派 / 结果行按「本项目」取：
-        // 与云端 listByProject 同口径（第五轮 B 把七项统一）。
-        if (key === 'sportsMeetEntries' || key === 'sportsMeetSessions' || key === 'sportsMeetInterests'
-          || key === 'sportsMeetScores' || key === 'sportsMeetPublications'
-          || key === 'sportsMeetJudgeAssignments' || key === 'sportsMeetResultRows') {
-          result[key].listByProject = async projectKey => {
-            if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
-            if (typeof projectKey !== 'string' || !projectKey) return [];
-            return (await repo[key].list()).filter(doc => owns(doc) && doc.eventKey === projectKey);
-          };
         }
-        // 我的荣誉按参赛者下推：与云端 `{'rows.userIds': userId}` 同口径
-        //（第二十二轮 P3：荣誉改读发布快照后，不能整届读回来再摊平）。
-        if (key === 'sportsMeetPublications') {
-          result[key].listByParticipant = async userId => {
-            if (inTx) throw new Error('事务内不允许条件读取（sportsMeetPublications），请改用 getById');
-            if (typeof userId !== 'string' || !userId) return [];
-            return (await repo[key].list()).filter(doc => owns(doc)
-              && Array.isArray(doc.rows)
-              && doc.rows.some(row => Array.isArray(row.userIds) && row.userIds.includes(userId)));
-          };
-        }
-        if (key === 'sportsMeetScores' || key === 'sportsMeetJudgeAssignments') {
-          result[key].listBySession = async sessionKey => {
-            if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
-            if (typeof sessionKey !== 'string' || !sessionKey) return [];
-            return (await repo[key].list()).filter(doc => owns(doc) && doc.sessionKey === sessionKey);
-          };
-        }
-        if (key === 'sportsMeetJudgeAssignments') {
-          result[key].listByJudge = async judgeId => {
-            if (inTx) throw new Error('事务内不允许条件读取（sportsMeetJudgeAssignments），请改用 getById');
-            if (typeof judgeId !== 'string' || !judgeId) return [];
-            return (await repo[key].list()).filter(doc => owns(doc) && doc.judgeId === judgeId);
-          };
-        }
-        // 按人反查（2026-10-23 第三轮 X-9）：与云端 forMeet 同口径。
-        // 意向按 `userId`、名单按 `userIds`（数组），缺参返回空数组不退化成整表读。
-        if (key === 'sportsMeetInterests' || key === 'sportsMeetEntries') {
-          const actorField = key === 'sportsMeetEntries' ? 'userIds' : 'userId';
-          result[key].listByUser = async userId => {
-            if (inTx) throw new Error(`事务内不允许条件读取（${key}），请改用 getById`);
-            if (typeof userId !== 'string' || !userId) return [];
-            return (await repo[key].list()).filter((doc) => {
-              if (!owns(doc)) return false;
-              const value = doc[actorField];
-              return Array.isArray(value) ? value.includes(userId) : value === userId;
-            });
-          };
-        }
-      }
-      if (!inTx) result.transaction = fn => repo.transaction(tx => fn(tx.forMeet(scope)));
-      return result;
-    };
-    // 运动会集合的按校列举（列本届清单用；与云端同口径）
-    for (const key of MEET_COLLECTIONS) {
-      repo[key].listBySchool = async schoolId => (await repo[key].list())
-        .filter(doc => doc.schoolId === schoolId);
-    }
-    // 学校级集合的按校列举（与云端 attachSchoolRepository 的 listBySchool 对齐）
-    for (const key of SCHOOL_SCOPED) {
-      repo[key].listBySchool = async schoolId => (await repo[key].list())
-        .filter(doc => doc.schoolId === schoolId);
-    }
-    // 实时比分：一场一条，_id = 'ls_' + matchId。轮询按编号批量读
-    // （与云端 liveScores.listByIds 同口径；逐条点读在轮询里要几十个 RTT）。
-    repo.liveScores.listByIds = async ids => {
-      const uniq = [...new Set((Array.isArray(ids) ? ids : []).filter(id => typeof id === 'string' && id))];
-      return uniq.map(id => getState().liveScores.get(id)).filter(Boolean).map(clone);
-    };
-    repo.exchangeSignups.listByEvent = async eventId => (await repo.exchangeSignups.list()).filter(doc => doc.eventId === eventId);
-    repo.exchangeMatches.listByEvent = async eventId => (await repo.exchangeMatches.list()).filter(doc => doc.eventId === eventId);
-    // 按人反查会籍：契约写在 repository.js（`memberships.listByUser`），云端一直有实现，
-    // 模拟端此前只在 tests/helpers/memory-repo.js 里有——学校维度用的是本文件，
-    // 于是「服务调它」会在本地 TypeError（第十八轮审查 P3）。补上，两端口径一致。
-    // userId 只应是会话里的本人编号，不作为跨校浏览入口。
-    repo.memberships.listByUser = async userId => {
-      if (typeof userId !== 'string' || !userId) return [];
-      return (await repo.memberships.list()).filter(doc => doc.userId === userId);
-    };
-    // 顶层同样按赛事取子集：业务里既有 ctx.repo.forScope(...).matches.listByEvent，
-    // 也有直接 ctx.repo.matches.listByEvent 的写法，两处都要有（与云端同口径）。
-    for (const key of EVENT_SCOPED) {
-      repo[key].listByEvent = async eventId => (await repo[key].list()).filter(doc => doc.eventId === eventId);
-    }
-    repo.exchangeInvitations.listByScope = input => repo.forScope(input).exchangeInvitations.list();
-    return repo;
-  };
-  const repo = build(() => state, false);
-  repo.transaction = fn => {
-    const task = queue.then(async () => {
-      // 【为什么只浅拷贝 Map，不再深拷贝整个库（2026-10-20 性能修正）】
-      // 这里原先是 `new Map([...state[key]].map(([id, doc]) => [id, clone(doc)]))`
-      // ——每个事务先把 52 个集合、约两千条文档整份深拷贝一遍。而 build() 的
-      // 三个读写入口**本来就各自克隆**：getById 交出去的是副本、set 落进去的是
-      // 副本、list 返回的也是副本。也就是说，事务只需要隔离「写」；「读」的
-      // 隔离已经由那三处保证了，深拷贝这一层是重复劳动。
-      //
-      // 实测代价：page.test.js 的 292 条用例共耗 267s CPU，其中 clone 一项占
-      // 47.5%（127s），加上它触发的 GC 后内存仓储占 67.7%。成因是库里 61%
-      // 是从不被这些用例触碰的运动会演示数据（1202 条），每次都陪着一块儿拷。
-      //
-      // 浅拷贝为什么等价：doc 一旦从 Map 取出就已是对副本的再克隆，调用方怎么
-      // 改都碰不到库里的原件；任何写入都必须经过 set()，而 set() 存的是
-      // `clone({...doc, _id: id})`，只会写进 scratch 这张新 Map。所以回滚
-      // （丢掉 scratch）依然完整，提交（state = scratch）依然是整批替换。
-      // 前提是没有任何代码绕过 set 直接改 Map —— 本文件与全仓都没有这种写法。
-      const scratch = Object.fromEntries(KEYS.map(key => [key, new Map(state[key])]));
-      const result = await fn(build(() => scratch, true));
-      state = scratch;
+
+        state = scratch;
+        for (const key of written) versions.set(key, (startVersions.get(key) || 0) + 1);
+        return out;
+      }, retryOpts);
+
       return result;
     });
     queue = task.catch(() => {});
     return task;
   };
+
   return repo;
 }
 

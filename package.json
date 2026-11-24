@@ -14,7 +14,10 @@
     "sync:cloud": "node tools/sync-cloud-lib.js",
     "check:cloud-sync": "node tools/sync-cloud-lib.js --check",
     "hooks:install": "git config core.hooksPath .githooks",
-    "check:secrets": "node tools/pre-commit-check.cjs --all"
+    "check:secrets": "node tools/pre-commit-check.cjs --all",
+    "check:indexes": "node tools/check-db-indexes.js",
+    "sync:indexes": "node tools/check-db-indexes.js --write-doc",
+    "deploy:check": "node tools/deploy-check.cjs"
   },
   "engines": {
     "node": ">=18"

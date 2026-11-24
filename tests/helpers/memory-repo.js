@@ -24,6 +24,7 @@
 
 /** 浅拷贝一条文档。null / 原始值原样返回。 */
 const { SCHOOL_COLLECTIONS, attachSchoolRepository } = require('../../cloudfunctions/data/src/school-repository.js');
+const { applyPatch } = require('../../src/server/services/patch-utils.js');
 const { memoryMatchPage } = require('../../src/server/services/match-list-query');
 const { fieldValues } = require('../../src/server/services/scoped-team-reads');
 const { memoryDirectoryPage, memoryDirectoryCount } = require('../../src/server/services/account-directory');
@@ -402,6 +403,16 @@ function createMemoryRepo(seed = {}) {
       set: async (key, id, doc) => {
         if (onWrite) onWrite(key);
         target[key].set(id, { ...doc, _id: id });
+      },
+      update: async (key, id, patch) => {
+        if (onWrite) onWrite(key);
+        const cur = target[key].get(id);
+        if (!cur) throw new Error('记录不存在或不属于当前范围');
+        target[key].set(id, { ...applyPatch(cur, patch), _id: id });
+      },
+      remove: async (key, id) => {
+        if (onWrite) onWrite(key);
+        target[key].delete(id);
       },
       query: (key, where) => list(key).filter((doc) => matchWhere(doc, where)),
       // 按一批 _id 取（云端走 `_.in` 并按 PAGE_SIZE 切片）。**必须一起套范围条件**：

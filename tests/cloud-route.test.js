@@ -45,7 +45,7 @@ test('旧协议请求（两个字段都不带）仍走旧分支', () => {
 });
 
 test('index.js 确实使用该判据，且没有把 schoolId 条件写回去', () => {
-  assert.match(INDEX_SRC, /isSchoolRequest\(event\)/,
+  assert.match(INDEX_SRC, /isSchoolRequest\((?:safeEvent|event)\)/,
     'index.js 应当用 isSchoolRequest(event) 路由，而不是内联判据');
   assert.doesNotMatch(INDEX_SRC, /event\.schoolId\s*!==\s*undefined/,
     'index.js 里不该再出现「顶层 schoolId」这个条件（见 H6）');

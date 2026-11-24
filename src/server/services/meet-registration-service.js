@@ -269,11 +269,15 @@ async function markInterestsSelected(ctx, eventKey, userIds, entryKey, nowIso) {
   for (let i = 0; i < userIds.length; i += CHUNK) {
     const chunk = userIds.slice(i, i + CHUNK);
     await ctx.repo.transaction(async (tx) => {
+      const pending = [];
       for (const userId of chunk) {
         const key = meetInterestKey(ctx.meetId, eventKey, userId);
         const interest = await tx.sportsMeetInterests.getById(key);
         if (!interest) continue;
         if (interest.status === MEET_INTEREST_STATUS.SELECTED && interest.entryKey === entryKey) continue;
+        pending.push({ key, interest });
+      }
+      for (const { key, interest } of pending) {
         await tx.sportsMeetInterests.set(key, {
           ...interest, status: MEET_INTEREST_STATUS.SELECTED, entryKey, updatedAt: nowIso,
         });
@@ -302,11 +306,15 @@ async function markInterestsPending(ctx, eventKey, userIds, nowIso) {
   for (let i = 0; i < userIds.length; i += CHUNK) {
     const chunk = userIds.slice(i, i + CHUNK);
     await ctx.repo.transaction(async (tx) => {
+      const pending = [];
       for (const userId of chunk) {
         const key = meetInterestKey(ctx.meetId, eventKey, userId);
         const interest = await tx.sportsMeetInterests.getById(key);
         if (!interest) continue;
         if (interest.status === MEET_INTEREST_STATUS.PENDING && !interest.entryKey) continue;
+        pending.push({ key, interest });
+      }
+      for (const { key, interest } of pending) {
         // 驳回/撤回落回「待选拔」，该院该项目的意向入口随之重新打开（B5）
         await tx.sportsMeetInterests.set(key, {
           ...interest, status: MEET_INTEREST_STATUS.PENDING, entryKey: '', updatedAt: nowIso,

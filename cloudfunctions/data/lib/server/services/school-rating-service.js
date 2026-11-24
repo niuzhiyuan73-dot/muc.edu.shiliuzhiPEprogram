@@ -589,6 +589,7 @@ async function syncRatingProfileInTransaction(tx, {
   const changed = [];
   let scanned = 0;
   let missing = 0;
+  const pending = [];
   for (const association of list) {
     const scope = { schoolId, association };
     for (const pool of ALL_RATING_POOLS) {
@@ -599,11 +600,14 @@ async function syncRatingProfileInTransaction(tx, {
       if (!doc) { missing += 1; continue; }
       const nextGender = gender === undefined ? (doc.gender || '') : String(gender || '');
       if (doc.gender === nextGender && doc.memberStatus === memberStatus) continue;
-      await tx.memberRatings.set(id, {
-        ...doc, gender: nextGender, memberStatus, profileSyncedAt: syncedAt,
-      });
-      changed.push(id);
+      pending.push({ id, doc, nextGender });
     }
+  }
+  for (const { id, doc, nextGender } of pending) {
+    await tx.memberRatings.set(id, {
+      ...doc, gender: nextGender, memberStatus, profileSyncedAt: syncedAt,
+    });
+    changed.push(id);
   }
   return { scanned, updated: changed.length, missing, changed };
 }

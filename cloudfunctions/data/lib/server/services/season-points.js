@@ -259,12 +259,15 @@ async function refreshAssociationPoints(ctx, options = {}) {
         const scoped = tx.forScope(ctx);
         const currentSeason = await tx.seasons.getById(scopeKey(ctx));
         if (seasonVersionOf(currentSeason) !== version) throw new Error('积分事实已变化，请重算');
-        let count = 0;
+        const rows = [];
         for (const item of batch) {
           const key = schoolMemberKey(item.userId, ctx.schoolId);
           const current = await scoped.schoolMembers.getById(key);
           // 行被并发删掉（转出）：没有可写的对象，也不算失败——他本来就不在榜上
-          if (!current) continue;
+          if (current) rows.push({ key, item, current });
+        }
+        let count = 0;
+        for (const { key, item, current } of rows) {
           await scoped.schoolMembers.update(key, patchFor(current, item.points));
           count += 1;
         }

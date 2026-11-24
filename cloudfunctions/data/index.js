@@ -43,10 +43,12 @@ if (!process.env.TZ) process.env.TZ = 'Asia/Shanghai';
 const cloud = require('wx-server-sdk');
 const crypto = require('crypto');
 
-const { fail } = require('./src/envelope.js');
 const { createRepo } = require('./src/adapters/cloud-repo.js');
 const { handleSchoolRequest } = require('./src/core/school-request.js');
 const { isSchoolRequest } = require('./src/core/route.js');
+const {
+  createTraceId, runWithTrace, mapErrorToFail, shouldEmitStructuredLog, buildStructuredLog,
+} = require('./src/core/observability.js');
 
 cloud.init({ env: cloud.DYNAMIC_CURRENT_ENV });
 
@@ -100,34 +102,40 @@ function getRepo() {
 exports.main = async (event = {}) => {
   // 供 catch 里写日志用：openId 只在协议 2 分支取得，旧协议请求本就是空的。
   let openId = '';
-  try {
-    // 只认 protocolVersion（见 src/core/route.js 的说明）。
-    if (isSchoolRequest(event)) {
-      const { OPENID, CLIENTIP } = cloud.getWXContext();
-      openId = OPENID || '';
-      // CLIENTIP 只给匿名限流分桶用（见 core/rate-limit.js 的 ANON_LIMITS）。
-      return await handleSchoolRequest(event, { repo: getRepo(), openId, clientIp: CLIENTIP || '' });
-    }
+  const safeEvent = event && typeof event === 'object' ? event : {};
+  const traceId = createTraceId();
+  return runWithTrace({
+    traceId,
+    action: safeEvent.action,
+    schoolId: safeEvent.schoolId,
+    association: safeEvent.association,
+  }, async (traceStore) => {
+    try {
+      // 只认 protocolVersion（见 src/core/route.js 的说明）。
+      if (isSchoolRequest(safeEvent)) {
+        const { OPENID, CLIENTIP } = cloud.getWXContext();
+        openId = OPENID || '';
+        traceStore.openIdHash = maskOpenId(openId) || '';
+        // CLIENTIP 只给匿名限流分桶用（见 core/rate-limit.js 的 ANON_LIMITS）。
+        const res = await handleSchoolRequest(safeEvent, { repo: getRepo(), openId, clientIp: CLIENTIP || '' });
+        if (shouldEmitStructuredLog(traceStore, false)) {
+          console.log(JSON.stringify(buildStructuredLog(traceStore, { level: 'info', event: 'cloud_request' })));
+        }
+        return res;
+      }
 
-    // 协议 1 已下线：不带 protocolVersion 的请求不做任何业务。
-    return fail('请升级客户端后再使用（需要协议版本 2）');
-  } catch (err) {
-    // 到这里说明是没预料到的故障（数据库连不上、代码有 bug）。
-    // 原始错误写进日志便于排查，回给前端的是不泄露内部细节的一句中文。
-    // 日志必须带 scope 与 openId：否则「学校不存在或已停用」这类业务 throw
-    // 与「数据库连不上」在云端日志里长得一模一样，无从判断是哪所学校
-    // 哪个协会出的问题（2026-10-17 只读审计 C7）。
-    console.error('[data] 处理失败', {
-      action: event && event.action,
-      schoolId: event && event.schoolId,
-      association: event && event.association,
-      // 只记哈希，不记明文 OpenID（见 maskOpenId 的说明）
-      openIdHash: maskOpenId(openId),
-      // 读上限越界等「配置性问题」带 code，便于在日志里与真实数据库故障区分
-      // （2026-10-27 第八轮审查 P2-7）。
-      code: err && err.code,
-      error: err && (err.stack || err.message || err),
-    });
-    return fail('服务异常，请稍后再试');
-  }
+      // 协议 1 已下线：不带 protocolVersion 的请求不做任何业务。
+      return fail('请升级客户端后再使用（需要协议版本 2）');
+    } catch (err) {
+      traceStore.openIdHash = traceStore.openIdHash || maskOpenId(openId) || '';
+      const payload = buildStructuredLog(traceStore, {
+        level: 'error',
+        event: 'cloud_request_error',
+        code: err && err.code,
+        error: err && (err.stack || err.message || String(err)),
+      });
+      console.error(JSON.stringify(payload));
+      return mapErrorToFail(err);
+    }
+  });
 };
