@@ -3,8 +3,8 @@ const {
   COLLEGES, MATCH_TYPE, MATCH_STATUS, MATCH_COMPETITION, MATCH_OUTCOME,
   EVENT_STATUS, EVENT_LEVEL, ANNOUNCEMENT_STATUS, ANNOUNCEMENT_CATEGORIES, SIGNUP_STATUS,
   EVENT_FORMAT, EVENT_BRONZE_MODE, EVENT_PLACEMENT_MODE, DEFAULT_GF_RESET,
-} = require('../utils/constants.js');
-const { allAssociations } = require('../utils/associations.js');
+} = require('../shared/utils/constants.js');
+const { allAssociations } = require('../shared/utils/associations.js');
 const { createTeamDemoContent } = require('./team-demo.js');
 const { createFootballDemoContent } = require('./football-demo.js');
 const { createCollegeCupContent } = require('./college-cup-seed.js');
@@ -12,19 +12,19 @@ const {
   schoolAssociationKey, collegeKey, schoolMemberKey, schoolRoleKey,
   schoolMembershipKey, schoolEventKey, schoolEventSignupKey, schoolMatchKey,
   schoolAnnouncementKey, schoolKey, memberRatingKey,
-} = require('../utils/school.js');
+} = require('../shared/utils/school.js');
 // 演示比赛的评级与结算快照由**同一个纯结算内核**产出（Elo 逐场结算改造）：
 // 与线上确认路径同一份纯函数，演示数据与真实数据从此不可能分叉。
-const { materializeRatings, computeSettlement } = require('./school-rating-service.js');
+const { materializeRatings, computeSettlement } = require('../../src/server/services/school-rating-service.js');
 // 记录组装复用旧栈纯规则模块（同一把尺子）——演示内容里的事件 / 比赛 / 公告
 // 因此与页面点出来的形状一字不差，不会各写一份、慢慢分叉。
-const { buildAnnouncementRecord } = require('./announcement.js');
-const { buildEventRecord } = require('./event.js');
-const { buildMatchRecord } = require('./match-record.js');
-const { buildSchoolApplication } = require('./school-member.js');
+const { buildAnnouncementRecord } = require('../shared/services/announcement.js');
+const { buildEventRecord } = require('../shared/services/event.js');
+const { buildMatchRecord } = require('../shared/services/match-record.js');
+const { buildSchoolApplication } = require('../../src/server/services/school-member.js');
 // 演示邀请赛的签表由**赛制引擎现算**（两个都是纯函数），与 drawExchangeEvent
 // 走同一段代码；手写签表迟早与引擎分叉，演示数据一旦分叉就会误导人。
-const { planExchangeDraw, planExchangeMatches } = require('./exchange-plan.js');
+const { planExchangeDraw, planExchangeMatches } = require('../../src/server/services/exchange-plan.js');
 // 演示数据的时间锚点：四个种子文件共用同一份，见 demo-clock.js
 const { DAY_MS, demoToday } = require('./demo-clock.js');
 // 旧版演示会员（u01–u24）：演示比赛的参赛者绝大多数是他们，性别要从这里取。

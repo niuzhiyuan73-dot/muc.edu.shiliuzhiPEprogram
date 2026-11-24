@@ -258,10 +258,10 @@ test('三个运动会页面只注册一次卸载处理，并取消待发请求�
 
 test('meet-detail 发布报名与开放补报窗口的提交格式与服务端校验一致', async () => {
   const detail = instantiate(loadPage('meet-detail'));
-  const meetService = require('../miniprogram/services/meet-service');
-  const regService = require('../miniprogram/services/meet-registration-service');
+  const meetService = require('../src/server/services/meet-service');
+  const regService = require('../src/server/services/meet-registration-service');
   const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-  const { buildMeetContext } = require('../miniprogram/services/meet-context');
+  const { buildMeetContext } = require('../src/server/services/meet-context');
 
   const repo = createSchoolMemoryRepo({
     schools: [{ _id: 'muc', schoolId: 'muc', name: '中央民族大学', status: 'active' }],

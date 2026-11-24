@@ -19,7 +19,7 @@ const appSession = require('../miniprogram/services/app-session.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
 const schoolMock = require('../miniprogram/services/school-mock.js');
 const schoolIdentity = require('../miniprogram/services/school-identity.js');
-const { STORAGE_KEY, ROLE, USER_STATUS } = require('../miniprogram/utils/constants.js');
+const { STORAGE_KEY, ROLE, USER_STATUS } = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 最小运行环境：真实 app.js + 登录页，同一个小程序内存

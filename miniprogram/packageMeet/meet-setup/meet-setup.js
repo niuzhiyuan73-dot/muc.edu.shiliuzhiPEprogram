@@ -25,7 +25,7 @@
 const meet = require('../../services/meet.js');
 const { updateMeetPage } = require('../../utils/meet-ui.js');
 const session = require('../../services/school-session.js');
-const { meetEventKey } = require('../../utils/meet-scope.js');
+const { meetEventKey } = require('../../shared/utils/meet-scope.js');
 
 const GROUP_LABEL = { male: '男子', female: '女子', mixed: '混合' };
 const GROUP_ORDER = ['male', 'female', 'mixed'];

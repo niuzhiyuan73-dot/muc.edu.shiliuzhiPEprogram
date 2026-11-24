@@ -7,7 +7,7 @@ const initial = () => ({ revision: 0, scoreA: 0, scoreB: 0, period: 1, regulatio
   periodLabel: '第 1 节', periods: [{ label: '第 1 节', scoreA: 0, scoreB: 0 }], canUndo: false, submitted: false });
 const opened = live => ({ ok: true, actorId: 'scorer', matchId: 'm:1', teamAName: '甲队', teamBName: '乙队', live });
 const scoreEvent = (side, points) => ({ currentTarget: { dataset: { side, points } } });
-const { createBasketballLive, applyBasketballOperation, basketballLiveView } = require('../miniprogram/utils/basketball-live');
+const { createBasketballLive, applyBasketballOperation, basketballLiveView } = require('../src/shared/utils/basketball-live');
 const rosters = [{ side: 'A', players: [{ userId: 'p1', name: '小明', no: 7 }, { userId: 'p2', name: '小林', no: 8 }] },
   { side: 'B', players: [{ userId: 'p3', name: '小王', no: 0 }] }];
 

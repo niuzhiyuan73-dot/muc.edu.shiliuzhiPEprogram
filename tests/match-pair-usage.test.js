@@ -18,11 +18,11 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-match-service');
-const { schoolMemberKey, schoolMatchKey, schoolKey } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, MATCH_STATUS } = require('../miniprogram/utils/constants');
-const { RATED_PAIR_LIMIT } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-match-service');
+const { schoolMemberKey, schoolMatchKey, schoolKey } = require('../src/shared/utils/school');
+const { MATCH_TYPE, MATCH_STATUS } = require('../src/shared/utils/constants');
+const { RATED_PAIR_LIMIT } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -108,7 +108,7 @@ test('计数文档缺失时回落到本赛季台账，且赛季分界点被下�
   const { repo, reads } = fixture();
   // 赛季分界点：两天前重置
   const resetTime = at(-2 * DAY);
-  const { scopeKey } = require('../miniprogram/utils/school');
+  const { scopeKey } = require('../src/shared/utils/school');
   await repo.seasons.set(scopeKey(SCOPE), {
     _id: scopeKey(SCOPE), schoolId: SCOPE.schoolId, association: SCOPE.association,
     anchorTime: at(-10 * DAY), resetTime, seasonNumber: 2, version: 1,
@@ -149,7 +149,7 @@ test('名额上限仍然生效：打满后提交被拒', async () => {
 
 /* ---------------- B-3：计数文档是权威，不是台账的复算结果 ---------------- */
 
-const { pairCountKey } = require('../miniprogram/utils/school');
+const { pairCountKey } = require('../src/shared/utils/school');
 const scopeFor = SCOPE;
 
 test('首次提交会把计数文档预置出来（初值 0，占位由事务内递增）', async () => {
@@ -204,8 +204,8 @@ test('并发录两场：两场都记上，计数不多不少', async () => {
 //   2. 同一人出现在两队时去重成一条（否则名额被算大）；
 //   3. 缩范围**不改口径**——与「整赛季台账 + 内存筛」的结果逐字相同。
 
-const { seasonPairCounts } = require('../miniprogram/services/rating-cap');
-const { scopeKey } = require('../miniprogram/utils/school');
+const { seasonPairCounts } = require('../src/server/services/rating-cap');
+const { scopeKey } = require('../src/shared/utils/school');
 
 test('别人的比赛不进结果：只取「我在任一侧」的场次', async () => {
   const { repo } = fixture();
@@ -264,7 +264,7 @@ test('缩范围不改口径：pairInfo 与「整赛季台账 + 内存筛」逐�
 
 test('跨赛季驳回：按比赛落库时的赛季戳还名额，不减新赛季', async () => {
   const { repo } = fixture();
-  const { scopeKey, pairCountKey } = require('../miniprogram/utils/school');
+  const { scopeKey, pairCountKey } = require('../src/shared/utils/school');
   const resetTime = at(-2 * DAY);
   await repo.seasons.set(scopeKey(SCOPE), {
     _id: scopeKey(SCOPE), schoolId: SCOPE.schoolId, association: SCOPE.association,

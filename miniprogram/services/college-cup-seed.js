@@ -27,17 +27,17 @@
 const { MEMBER_SEED } = require('./seed.js');
 const {
   collegeEventKey, collegeEntryKey, collegeTeamKey, teamMemberKey, schoolKey,
-} = require('../utils/school.js');
-const { collegeTieKey } = require('./college-draw.js');
+} = require('../shared/utils/school.js');
+const { collegeTieKey } = require('../shared/services/college-draw.js');
 const {
   COLLEGES,
   COLLEGE_EVENT_STATUS, TIE_STATUS, LEG_DISCIPLINE, BRACKET_STAGE,
   TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_TYPE, TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS,
   TEAM_MATCH_STATUS, CUP_MODE, MATCH_OUTCOME, EVENT_FORMAT,
-} = require('../utils/constants.js');
-const { normalizeBasketballRules } = require('../utils/basketball-rules.js');
-const { normalizeFootballRules, DEFAULT_PRESET_KEY } = require('../utils/football-rules.js');
-const { normalizeFootballReport, FIELDS } = require('../utils/football-report.js');
+} = require('../shared/utils/constants.js');
+const { normalizeBasketballRules } = require('../shared/utils/basketball-rules.js');
+const { normalizeFootballRules, DEFAULT_PRESET_KEY } = require('../shared/utils/football-rules.js');
+const { normalizeFootballReport, FIELDS } = require('../shared/utils/football-report.js');
 // 届次的年份与「进行中」那一届的时间线都跟着锚点滚，见 demo-clock.js
 const { demoIso, demoAt, demoYear } = require('./demo-clock.js');
 

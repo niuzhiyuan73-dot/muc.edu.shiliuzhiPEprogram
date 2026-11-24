@@ -26,12 +26,12 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-match-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-match-service');
 const { loadSchoolMatchView } = require('../miniprogram/services/school-match-view');
 const { TAB, TAB_LABEL, TAB_EMPTY, DEFAULT_LIMIT } = require('../miniprogram/services/match-view');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, MATCH_STATUS } = require('../miniprogram/utils/constants');
+const { schoolMemberKey } = require('../src/shared/utils/school');
+const { MATCH_TYPE, MATCH_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const HOUR = 60 * 60 * 1000;

@@ -12,12 +12,12 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createTeamDemoContent } = require('../miniprogram/services/team-demo.js');
-const { teamMemberKey } = require('../miniprogram/utils/school.js');
+const { teamMemberKey } = require('../src/shared/utils/school.js');
 const {
   TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS, TEAM_MATCH_STATUS,
-} = require('../miniprogram/utils/constants.js');
-const { computeTeamTable, computeTeamPlacements } = require('../miniprogram/utils/team-standings.js');
-const teamEvent = require('../miniprogram/services/team-event-service');
+} = require('../src/shared/utils/constants.js');
+const { computeTeamTable, computeTeamPlacements } = require('../src/shared/utils/team-standings.js');
+const teamEvent = require('../src/server/services/team-event-service');
 
 const content = createTeamDemoContent();
 const finished = content.teamEvents.find(event => event.status === TEAM_EVENT_STATUS.FINISHED);

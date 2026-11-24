@@ -1,1 +1,1 @@
-module.exports = require('../../lib/services/school-context.js');
+module.exports = require('../../lib/server/services/school-context.js');

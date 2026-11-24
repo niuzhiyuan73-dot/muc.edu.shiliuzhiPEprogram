@@ -14,13 +14,13 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
-const meetService = require('../miniprogram/services/meet-service.js');
-const leadService = require('../miniprogram/services/meet-college-lead-service.js');
-const reg = require('../miniprogram/services/meet-registration-service.js');
-const advance = require('../miniprogram/services/meet-advance-service.js');
-const { meetEventKey } = require('../miniprogram/utils/meet-scope.js');
-const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const meetService = require('../src/server/services/meet-service.js');
+const leadService = require('../src/server/services/meet-college-lead-service.js');
+const reg = require('../src/server/services/meet-registration-service.js');
+const advance = require('../src/server/services/meet-advance-service.js');
+const { meetEventKey } = require('../src/shared/utils/meet-scope.js');
+const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 
 const SCHOOL = 'muc';
 const LEAD = 'u_lead';

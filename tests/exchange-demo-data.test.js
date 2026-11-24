@@ -21,8 +21,8 @@ const {
   createSchoolDemoContent, createSchoolDemoSeed, DEMO_ACCOUNTS,
 } = require('../miniprogram/services/school-seed.js');
 const schoolMock = require('../miniprogram/services/school-mock.js');
-const { schoolKey, schoolMemberKey } = require('../miniprogram/utils/school.js');
-const { EVENT_FORMAT } = require('../miniprogram/utils/constants.js');
+const { schoolKey, schoolMemberKey } = require('../src/shared/utils/school.js');
+const { EVENT_FORMAT } = require('../src/shared/utils/constants.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 /** 演示内容锚点（DEMO_CONTENT_NOW = 2026-03-01）之后，用来确认开赛时间没被写回过去 */

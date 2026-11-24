@@ -8,14 +8,14 @@
  * 注册面同样是显式白名单（SCHOOL_MEET_ACTIONS），由
  * tests/school-action-surface.test.js 与客户端门面双向守护。
  */
-const { SCHOOL_MEET_ACTIONS, pickActions } = require('../../lib/utils/school-actions.js');
-const meetService = require('../../lib/services/meet-service.js');
-const leadService = require('../../lib/services/meet-college-lead-service.js');
-const registrationService = require('../../lib/services/meet-registration-service.js');
-const scheduleService = require('../../lib/services/meet-schedule-service.js');
-const scoreService = require('../../lib/services/meet-score-service.js');
-const advanceService = require('../../lib/services/meet-advance-service.js');
-const standingService = require('../../lib/services/meet-standing-service.js');
+const { SCHOOL_MEET_ACTIONS, pickActions } = require('../../lib/shared/utils/school-actions.js');
+const meetService = require('../../lib/server/services/meet-service.js');
+const leadService = require('../../lib/server/services/meet-college-lead-service.js');
+const registrationService = require('../../lib/server/services/meet-registration-service.js');
+const scheduleService = require('../../lib/server/services/meet-schedule-service.js');
+const scoreService = require('../../lib/server/services/meet-score-service.js');
+const advanceService = require('../../lib/server/services/meet-advance-service.js');
+const standingService = require('../../lib/server/services/meet-standing-service.js');
 
 module.exports = Object.freeze(
   pickActions([

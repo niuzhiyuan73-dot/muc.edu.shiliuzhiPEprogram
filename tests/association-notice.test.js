@@ -4,9 +4,9 @@ const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 // 用云函数形状的内存仓储（含 announcements 等旧集合），才能验证空间通知
 // 不落全局公告集合；其余断言只依赖学校仓储接口，两种实现等价。
 const { createMemoryRepo } = require('./helpers/memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/association-notice-service');
-const { schoolMembershipKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/association-notice-service');
+const { schoolMembershipKey } = require('../src/shared/utils/school');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 

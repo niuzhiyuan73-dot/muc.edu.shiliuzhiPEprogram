@@ -19,13 +19,13 @@
 const { loadSchoolEventListView } = require('../../services/school-event-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { EVENT_STATUS } = require('../../utils/constants.js');
+const { EVENT_STATUS } = require('../../shared/utils/constants.js');
 const appSession = require('../../services/app-session.js');
 // 赛事读取与置顶走同一 S2 范围。
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 const PAGE_SIZE = 20;
 /** 输入停顿多久才发请求：连打多个字时只取最后一次条件 */

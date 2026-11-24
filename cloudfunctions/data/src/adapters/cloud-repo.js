@@ -24,8 +24,8 @@ const { COLLECTIONS } = require('../repository.js');
 const { attachSchoolRepository } = require('../school-repository.js');
 const { readPersonalSportsPage } = require('./personal-sports-page.js');
 const { readMemberPage, readMemberCount } = require('./member-page.js');
-const { matchListWhere } = require('../../lib/services/match-list-query.js');
-const { MATCH_STATUS } = require('../../lib/utils/constants.js');
+const { matchListWhere } = require('../../lib/server/services/match-list-query.js');
+const { MATCH_STATUS } = require('../../lib/shared/utils/constants.js');
 
 /** 单页条数，取云开发云函数端的查询上限 */
 const PAGE_SIZE = 100;

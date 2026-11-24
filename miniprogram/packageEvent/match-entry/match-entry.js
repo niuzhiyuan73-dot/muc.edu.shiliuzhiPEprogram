@@ -41,7 +41,7 @@ const {
   pickerEmptyText,
 } = require('../../services/match-entry-view.js');
 
-const { MATCH_STATUS } = require('../../utils/constants');
+const { MATCH_STATUS } = require('../../shared/utils/constants');
 const { currentThemeClass } = require('../../services/branding.js');
 
 /** 把 Date 变成 picker 要的 2026-05-01 */

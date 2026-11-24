@@ -23,8 +23,8 @@
  * ============================================================
  */
 
-const { ALL_RANK_PROJECTS, RANK_PROJECT_LABEL } = require('../utils/constants.js');
-const { getAssociation } = require('../utils/associations.js');
+const { ALL_RANK_PROJECTS, RANK_PROJECT_LABEL } = require('../shared/utils/constants.js');
+const { getAssociation } = require('../shared/utils/associations.js');
 
 /** 榜单标题里的名字，与 rank-view 保持一致 */
 const BOARD_LABEL = '等级分榜';

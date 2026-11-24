@@ -1,6 +1,6 @@
 /** S2 身份接口客户端，明确范围，不改变旧业务门面的行为。 */
-const { schoolScope } = require('../utils/school.js');
-const { meetRequestScope } = require('../utils/meet-scope.js');
+const { schoolScope } = require('../shared/utils/school.js');
+const { meetRequestScope } = require('../shared/utils/meet-scope.js');
 const { guardWrite, isSchoolWriteAction } = require('../utils/write.js');
 const { pacer } = require('./request-pace.js');
 

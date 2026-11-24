@@ -1,6 +1,6 @@
 const { COLLECTIONS } = require('../repository.js');
-const { normalizeKeyword, decodeCursor, encodeCursor, sortKey } = require('../../lib/services/association-member.js');
-const { directorySortText } = require('../../lib/services/account-directory.js');
+const { normalizeKeyword, decodeCursor, encodeCursor, sortKey } = require('../../lib/server/services/association-member.js');
+const { directorySortText } = require('../../lib/server/services/account-directory.js');
 
 /**
  * 「本校在册会员 + 账号」的聚合查询骨架，分页与计数共用。

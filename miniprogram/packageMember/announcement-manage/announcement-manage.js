@@ -31,7 +31,7 @@ const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 下架前的二次确认文案 */
 const ARCHIVE_CONFIRM = '下架后这条公告不再对会员显示，但仍会留在台账里，确定下架吗？';

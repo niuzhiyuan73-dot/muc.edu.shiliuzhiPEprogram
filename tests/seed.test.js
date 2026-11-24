@@ -17,9 +17,9 @@ const {
   simulateBracket,
 } = require('../miniprogram/services/seed.js');
 
-const { createSeededRandom } = require('../miniprogram/utils/random.js');
+const { createSeededRandom } = require('../src/shared/utils/random.js');
 // 种子里的场号必须与这个分配函数算出来的完全一致，测试直接重算一遍比对
-const { planCourts } = require('../miniprogram/services/court.js');
+const { planCourts } = require('../src/shared/services/court.js');
 const {
   MATCH_TYPE,
   MATCH_STATUS,
@@ -27,14 +27,14 @@ const {
   EVENT_STATUS,
   SIGNUP_STATUS,
   COURT_LIMITS,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 const {
   GAME_POINTS_OPTIONS,
   BEST_OF_OPTIONS,
   BEST_OF_LABEL,
   gamesToWin,
   validateMatchScore,
-} = require('../miniprogram/utils/match-format.js');
+} = require('../src/shared/utils/match-format.js');
 
 /** 生成一份较小规模的数据，加快测试速度 */
 const smallSeed = (options = {}) => generateSeed({ weeks: 4, casualPerWeek: 6, ...options });

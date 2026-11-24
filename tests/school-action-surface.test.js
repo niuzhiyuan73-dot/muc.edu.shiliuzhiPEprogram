@@ -27,7 +27,7 @@ const path = require('node:path');
 const {
   SCHOOL_IDENTITY_ACTIONS, SCHOOL_SPACE_ACTIONS, SCHOOL_EXCHANGE_ACTIONS,
   SCHOOL_MEET_ACTIONS,
-} = require('../miniprogram/utils/school-actions');
+} = require('../src/shared/utils/school-actions');
 const cloudMember = require('../cloudfunctions/data/src/core/school-member-handlers');
 const cloudSpace = require('../cloudfunctions/data/src/core/school-space-handlers');
 const cloudExchange = require('../cloudfunctions/data/src/core/school-exchange-handlers');
@@ -139,12 +139,17 @@ test('27 个内部辅助函数一个都没被注册（H1 的点名回归）', ()
 
   // 反向自查：名单本身要对得上现实——这些名字在实现里确实存在于某个 service 的导出中，
   // 否则「一个都没注册」就成了一句空话（说明我们列的是一批不存在的名字）。
-  const serviceDir = path.join(ROOT, 'cloudfunctions', 'data', 'lib', 'services');
+  const serviceDirs = [
+    path.join(ROOT, 'cloudfunctions', 'data', 'lib', 'server', 'services'),
+    path.join(ROOT, 'cloudfunctions', 'data', 'lib', 'shared', 'services'),
+  ];
   const exported = new Set();
-  for (const file of fs.readdirSync(serviceDir).filter(name => name.endsWith('.js'))) {
-    const mod = require(path.join(serviceDir, file));
-    for (const [name, value] of Object.entries(mod)) {
-      if (typeof value === 'function') exported.add(name);
+  for (const serviceDir of serviceDirs) {
+    for (const file of fs.readdirSync(serviceDir).filter(name => name.endsWith('.js'))) {
+      const mod = require(path.join(serviceDir, file));
+      for (const [name, value] of Object.entries(mod)) {
+        if (typeof value === 'function') exported.add(name);
+      }
     }
   }
   const unknown = INTERNAL_HELPERS.filter(name => !exported.has(name));

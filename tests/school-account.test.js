@@ -16,9 +16,9 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { createSchoolHandlers } = require('../miniprogram/services/school-membership-service');
-const { schoolAccountKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { createSchoolHandlers } = require('../src/server/services/school-membership-service');
+const { schoolAccountKey } = require('../src/shared/utils/school');
 
 const NOW = new Date('2026-10-14T10:00:00Z');
 const SCOPE = { schoolId: 'muc', association: 'pkb' };

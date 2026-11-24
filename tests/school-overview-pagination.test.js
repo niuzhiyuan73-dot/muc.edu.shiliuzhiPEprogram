@@ -4,9 +4,9 @@ const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const announcements = require('../miniprogram/services/school-announcement-service');
-const teams = require('../miniprogram/services/team-event-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const announcements = require('../src/server/services/school-announcement-service');
+const teams = require('../src/server/services/team-event-service');
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 
 function fixture(cloud) {
@@ -113,7 +113,7 @@ for (const cloud of [false, true]) {
 }
 
 test('概览查询计划：公告一页最多51条+计数，团队首页最多6条+两次计数，所有读取内置范围', async () => {
-  const { attachOverviewReads } = require('../miniprogram/services/school-overview-reads');
+  const { attachOverviewReads } = require('../src/server/services/school-overview-reads');
   const reads = [];
   const surface = { scope: SCOPE, announcements: {}, teamEvents: {} };
   attachOverviewReads(surface, { inTx: false,

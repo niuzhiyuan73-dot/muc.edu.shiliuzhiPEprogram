@@ -13,13 +13,13 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const groupHandlers = require('../miniprogram/services/association-group-service');
-const trainingHandlers = require('../miniprogram/services/association-training-service');
-const rankHandlers = require('../miniprogram/services/school-rank-service');
-const { buildTrainingPointFacts } = require('../miniprogram/services/training-points');
-const { trainingRegistrationKey } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, EVENT_STATUS, USER_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const groupHandlers = require('../src/server/services/association-group-service');
+const trainingHandlers = require('../src/server/services/association-training-service');
+const rankHandlers = require('../src/server/services/school-rank-service');
+const { buildTrainingPointFacts } = require('../src/server/services/training-points');
+const { trainingRegistrationKey } = require('../src/shared/utils/school');
+const { MATCH_TYPE, EVENT_STATUS, USER_STATUS } = require('../src/shared/utils/constants');
 
 const HANDLERS = { ...groupHandlers, ...trainingHandlers, ...rankHandlers };
 
@@ -73,7 +73,7 @@ const memberStats = async (repo, opts) => {
  * 直接把「已结束赛事」塞进仓储，就必须自己补这一步——否则读到的是旧物化值。
  */
 async function bumpPointsVersion(repo) {
-  const { bumpSeasonVersion } = require('../miniprogram/services/season-points.js');
+  const { bumpSeasonVersion } = require('../src/server/services/season-points.js');
   await repo.transaction(tx => bumpSeasonVersion(tx, { schoolId: 'muc', association: 'pkb' }, NOW));
 }
 

@@ -14,7 +14,7 @@
  * ============================================================
  */
 
-const { MATCH_TYPE } = require('../utils/constants.js');
+const { MATCH_TYPE } = require('../shared/utils/constants.js');
 const {
   GAME_POINTS_OPTIONS,
   BEST_OF_OPTIONS,
@@ -25,10 +25,10 @@ const {
   formatFieldPatch,
   formatMatchFormat,
   validateMatchScore,
-} = require('../utils/match-format.js');
-const { getAssociation } = require('../utils/associations.js');
-const { normalizeScores } = require('./match-record.js');
-const { toDate } = require('../utils/format.js');
+} = require('../shared/utils/match-format.js');
+const { getAssociation } = require('../shared/utils/associations.js');
+const { normalizeScores } = require('../shared/services/match-record.js');
+const { toDate } = require('../shared/utils/format.js');
 
 /** 项目选项。顺序固定：单打在先，与全站默认口径一致 */
 const MATCH_TYPE_OPTIONS = [

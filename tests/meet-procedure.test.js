@@ -12,15 +12,15 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
-const meetService = require('../miniprogram/services/meet-service.js');
-const leadService = require('../miniprogram/services/meet-college-lead-service.js');
-const reg = require('../miniprogram/services/meet-registration-service.js');
-const schedule = require('../miniprogram/services/meet-schedule-service.js');
-const score = require('../miniprogram/services/meet-score-service.js');
-const advance = require('../miniprogram/services/meet-advance-service.js');
-const { meetEventKey, meetSessionKey } = require('../miniprogram/utils/meet-scope.js');
-const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const meetService = require('../src/server/services/meet-service.js');
+const leadService = require('../src/server/services/meet-college-lead-service.js');
+const reg = require('../src/server/services/meet-registration-service.js');
+const schedule = require('../src/server/services/meet-schedule-service.js');
+const score = require('../src/server/services/meet-score-service.js');
+const advance = require('../src/server/services/meet-advance-service.js');
+const { meetEventKey, meetSessionKey } = require('../src/shared/utils/meet-scope.js');
+const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 
 const SCHOOL = 'muc';
 const T0 = new Date('2026-10-24T08:00:00Z');

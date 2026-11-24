@@ -27,7 +27,7 @@ const {
   defaultLineupEntries,
   buildLineupRow,
   lineupKey,
-} = require('../miniprogram/services/college-lineup.js');
+} = require('../src/shared/services/college-lineup.js');
 const {
   ROLE,
   USER_STATUS,
@@ -35,7 +35,7 @@ const {
   COLLEGE_ENTRY_STATUS,
   TIE_STATUS,
   LEG_DISCIPLINE,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 管理员 */
 const ADMIN = { _id: 'u01', nickName: '巴特尔', role: ROLE.ADMIN, status: USER_STATUS.ACTIVE };

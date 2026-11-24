@@ -4,10 +4,10 @@ const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memor
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { listSchoolMatches } = require('../miniprogram/services/school-match-service');
-const { schoolLiveKey } = require('../miniprogram/utils/school');
-const { MATCH_STATUS, MATCH_TYPE } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { listSchoolMatches } = require('../src/server/services/school-match-service');
+const { schoolLiveKey } = require('../src/shared/utils/school');
+const { MATCH_STATUS, MATCH_TYPE } = require('../src/shared/utils/constants');
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const TIME = '2026-10-22T10:00:00.000Z';
 const match = (id, extra = {}) => ({ _id: id, ...SCOPE, teamA: ['a'], teamB: ['b'],

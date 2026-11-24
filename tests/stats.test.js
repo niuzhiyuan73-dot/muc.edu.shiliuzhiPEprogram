@@ -18,12 +18,12 @@ const {
   buildEventRecord,
   summarizeEvents,
   summarizeForm,
-} = require('../miniprogram/utils/stats.js');
+} = require('../src/shared/utils/stats.js');
 
 const { generateSeed } = require('../miniprogram/services/seed.js');
-const { materializeRatings, computeSettlement, displayRating } = require('../miniprogram/services/school-rating-service.js');
-const { memberRatingKey } = require('../miniprogram/utils/school.js');
-const { MATCH_TYPE, MATCH_STATUS, RATING_POOL } = require('../miniprogram/utils/constants.js');
+const { materializeRatings, computeSettlement, displayRating } = require('../src/server/services/school-rating-service.js');
+const { memberRatingKey } = require('../src/shared/utils/school.js');
+const { MATCH_TYPE, MATCH_STATUS, RATING_POOL } = require('../src/shared/utils/constants.js');
 
 const day = (n) => new Date(`2026-05-${String(n).padStart(2, '0')}T18:00:00`);
 

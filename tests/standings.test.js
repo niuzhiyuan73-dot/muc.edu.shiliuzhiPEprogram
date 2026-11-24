@@ -19,8 +19,8 @@ const {
   roundRobinRounds,
   computeStandings,
   allDecided,
-} = require('../miniprogram/utils/standings.js');
-const { MATCH_STATUS } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/standings.js');
+const { MATCH_STATUS } = require('../src/shared/utils/constants.js');
 
 /** 一场已生效、判明了胜负的单打比赛 */
 function played(idA, idB, { scoreA, scoreB, winner = 'A', status = MATCH_STATUS.ACTIVE } = {}) {

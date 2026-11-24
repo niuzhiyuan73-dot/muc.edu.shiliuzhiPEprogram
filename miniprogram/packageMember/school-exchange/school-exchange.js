@@ -1,7 +1,7 @@
 const identity = require('../../services/school-identity.js');
 const { fingerprintOf } = require('../../utils/fingerprint.js');
 const exchange = require('../../services/exchange.js');
-const constants = require('../../utils/constants.js');
+const constants = require('../../shared/utils/constants.js');
 const STATE = { signup: '报名中', ready: '名单已锁定', drawn: '已抽签', finished: '名次已确认', canceled: '已取消' };
 const INVITATION = { pending: '待确认', accepted: '已接受', declined: '已婉拒', withdrawn: '已撤回' };
 const MATCH_STATUS = { pending: '待比赛', active: '已确认' };

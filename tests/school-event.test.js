@@ -10,12 +10,12 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-event-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-event-service');
 const {
   schoolMemberKey, schoolEventKey, schoolEventSignupKey,
-} = require('../miniprogram/utils/school');
-const { MATCH_TYPE, MATCH_STATUS, EVENT_STATUS, SIGNUP_STATUS } = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/school');
+const { MATCH_TYPE, MATCH_STATUS, EVENT_STATUS, SIGNUP_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -361,7 +361,7 @@ test('写路径：请求期间账号被停用，开赛 / 抽签 / 录名次都�
   // 开赛与录名次共用同一道闸：管理员角色在事务前被撤，两个动作都不该生效
   const transaction = repo.transaction;
   repo.transaction = async fn => {
-    const key = require('../miniprogram/utils/school').schoolRoleKey('demo_muc_admin', 'muc');
+    const key = require('../src/shared/utils/school').schoolRoleKey('demo_muc_admin', 'muc');
     const role = await repo.schoolRoles.getById(key);
     await repo.schoolRoles.set(key, { ...role, status: 'disabled' });
     return transaction(fn);
@@ -422,7 +422,7 @@ test('主记录带范围：schoolId + association，键含范围', async () => {
   const stored = await repo.events.getById(event.eventId);
   assert.equal(stored.schoolId, 'muc');
   assert.equal(stored.association, 'pkb');
-  assert.equal(event.eventId, schoolEventKey(require('../miniprogram/utils/school')
+  assert.equal(event.eventId, schoolEventKey(require('../src/shared/utils/school')
     .schoolKey('e', 'demo_muc_admin', 'r1'), { schoolId: 'muc', association: 'pkb' }));
 });
 
@@ -466,7 +466,7 @@ test('报名截止后不能再报；抽签冻结报名', async () => {
 
 /* ------------------------------------------------------------------ 小组限制（B6） */
 
-const groupHandlers = require('../miniprogram/services/association-group-service');
+const groupHandlers = require('../src/server/services/association-group-service');
 
 async function callGroup(repo, action, payload = {}, opts = {}) {
   const { actor = 'demo_muc_admin', schoolId = 'muc', association = 'pkb', now = NOW } = opts;

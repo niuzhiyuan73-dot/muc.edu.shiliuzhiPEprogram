@@ -38,13 +38,13 @@ const {
   ROSTER_LIMITS,
   DEFAULT_ALLOW_MULTI_ENTRY,
   COURT_LIMITS,
-} = require('../../utils/constants.js');
+} = require('../../shared/utils/constants.js');
 const {
   TITLE_MAX,
   DESCRIPTION_MAX,
   LOCATION_MAX,
   LEG_PLAN_MAX,
-} = require('../../services/college-event.js');
+} = require('../../shared/services/college-event.js');
 const { canPublishCollegeEvent } = require('../../services/school-college-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
@@ -52,8 +52,8 @@ const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { getAssociation } = require('../../utils/associations.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { getAssociation } = require('../../shared/utils/associations.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 生成一次提交的请求编号：时间戳 + 随机后缀，满足服务端的编号字符集要求 */
 function nextRequestId() {

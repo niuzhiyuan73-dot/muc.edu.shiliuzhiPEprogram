@@ -17,8 +17,8 @@
  * ============================================================
  */
 
-const { ROLE, USER_STATUS } = require('../utils/constants.js');
-const { PLATFORM_STATUS } = require('../utils/school.js');
+const { ROLE, USER_STATUS } = require('../shared/utils/constants.js');
+const { PLATFORM_STATUS } = require('../shared/utils/school.js');
 
 /**
  * 学校身份状态 → 旧栈数字状态（仅用于兼容展示）。

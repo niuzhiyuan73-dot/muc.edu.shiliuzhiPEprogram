@@ -29,19 +29,19 @@ const path = require('node:path');
 // （实测：TZ=UTC 重跑全量套件，本条转红）。钉在这里，契约才有确定含义。
 process.env.TZ = 'Asia/Shanghai';
 
-const { buildMatchRecord } = require('../miniprogram/services/match-record.js');
+const { buildMatchRecord } = require('../src/shared/services/match-record.js');
 const { matchNaturalKey } = require('../cloudfunctions/data/src/core/idempotency.js');
-const { validateMatchScore } = require('../miniprogram/utils/match-format.js');
-const { materializeRatings, computeSettlement, displayRating } = require('../miniprogram/services/school-rating-service.js');
-const { initialRatingFor } = require('../miniprogram/utils/elo.js');
-const { memberRatingKey } = require('../miniprogram/utils/school.js');
+const { validateMatchScore } = require('../src/shared/utils/match-format.js');
+const { materializeRatings, computeSettlement, displayRating } = require('../src/server/services/school-rating-service.js');
+const { initialRatingFor } = require('../src/shared/utils/elo.js');
+const { memberRatingKey } = require('../src/shared/utils/school.js');
 const { generateSeed } = require('../miniprogram/services/seed.js');
 const {
   MATCH_STATUS,
   MATCH_TYPE,
   MATCH_TYPE_TO_POOL,
   RATING_POOL,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 const FIXTURE = path.join(__dirname, '..', 'tools', 'fixtures', 'import-sample.json');
 const documents = JSON.parse(fs.readFileSync(FIXTURE, 'utf8'));

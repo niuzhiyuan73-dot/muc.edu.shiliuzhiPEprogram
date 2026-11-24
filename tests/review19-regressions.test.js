@@ -2,10 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { buildMeetContext } = require('../miniprogram/services/meet-context');
-const points = require('../miniprogram/services/season-points');
-const { schoolMemberKey, scopeKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { buildMeetContext } = require('../src/server/services/meet-context');
+const points = require('../src/server/services/season-points');
+const { schoolMemberKey, scopeKey } = require('../src/shared/utils/school');
 const handlers = require('../cloudfunctions/data/src/core/school-member-handlers');
 const scope = { schoolId: 'muc', association: 'pkb' };
 const now = new Date('2026-11-14T00:00:00Z');
@@ -125,7 +125,7 @@ test('11队循环赛在事务开始前拒绝容量超限', async () => {
   });
   const ctx = await buildMeetContext({ repo, actorId: 'admin', scope: { schoolId: 'muc', meetId: 'meet' }, now });
   repo.transaction = async () => { throw new Error('不应进入超限事务'); };
-  const result = await require('../miniprogram/services/meet-advance-service').drawMeetBracket({ eventKey: 'event' }, ctx);
+  const result = await require('../src/server/services/meet-advance-service').drawMeetBracket({ eventKey: 'event' }, ctx);
   assert.equal(result.ok, false);
   assert.match(result.message, /容量/);
 });
@@ -143,7 +143,7 @@ test('荣誉读取正式发布快照，派生索引旧值不影响更正结果',
       version: 1, userIds: ['admin'], rank: 1, points: 9 }],
   });
   const ctx = await buildMeetContext({ repo, actorId: 'admin', scope: { schoolId: 'muc', meetId: 'meet' }, now });
-  const result = await require('../miniprogram/services/meet-standing-service').getMyMeetHonors({}, ctx);
+  const result = await require('../src/server/services/meet-standing-service').getMyMeetHonors({}, ctx);
   assert.equal(result.data.items[0].rank, 2);
   assert.equal(result.data.summary.gold, 0);
 });

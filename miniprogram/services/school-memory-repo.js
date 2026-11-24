@@ -1,18 +1,18 @@
 /** 学校身份演示仓储。写事务排队，草稿提交/回滚，读写均复制对象。 */
-const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../utils/school.js');
-const { MEET_COLLECTIONS, meetScope } = require('../utils/meet-scope.js');
+const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../shared/utils/school.js');
+const { MEET_COLLECTIONS, meetScope } = require('../shared/utils/meet-scope.js');
 const clone = value => value === undefined ? undefined : JSON.parse(JSON.stringify(value));
-const { memoryMatchPage } = require('./match-list-query');
-const { attachTeamReads, fieldValues } = require('./scoped-team-reads.js');
-const { memoryDirectoryPage, memoryDirectoryCount } = require('./account-directory.js');
-const { memoryPersonalPage } = require('./personal-sports-query.js');
-const { attachOverviewReads, memoryOverviewIO } = require('./school-overview-reads.js');
-const { pageOfCollection } = require('./event-list-page.js');
-const { compareCode } = require('../utils/text-order.js');
+const { memoryMatchPage } = require('../../src/server/services/match-list-query');
+const { attachTeamReads, fieldValues } = require('../../src/server/services/scoped-team-reads.js');
+const { memoryDirectoryPage, memoryDirectoryCount } = require('../../src/server/services/account-directory.js');
+const { memoryPersonalPage } = require('../../src/server/services/personal-sports-query.js');
+const { attachOverviewReads, memoryOverviewIO } = require('../../src/server/services/school-overview-reads.js');
+const { pageOfCollection } = require('../../src/server/services/event-list-page.js');
+const { compareCode } = require('../shared/utils/text-order.js');
 // 集合清单与云端共用一份（services/school-collections.js），不再各写各的。
 const {
   EVENT_SCOPED, SCOPED_COLLECTIONS, SCHOOL_ONLY, ALL_COLLECTIONS,
-} = require('./school-collections.js');
+} = require('../../src/server/services/school-collections.js');
 const KEYS = ALL_COLLECTIONS;
 
 function createSchoolMemoryRepo(seed = {}) {

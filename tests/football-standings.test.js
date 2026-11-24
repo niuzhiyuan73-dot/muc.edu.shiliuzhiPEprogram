@@ -1,7 +1,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { computeFootballTable: table } = require('../miniprogram/utils/football-standings');
-const { defaultRulesFor, RANKING_POLICY } = require('../miniprogram/utils/football-rules');
+const { computeFootballTable: table } = require('../src/shared/utils/football-standings');
+const { defaultRulesFor, RANKING_POLICY } = require('../src/shared/utils/football-rules');
 let seq = 0;
 const teams = ids => ids.map(teamId => ({ teamId, teamName: `队${teamId}` }));
 const played = (teamA, teamB, scoreA, scoreB, more = {}) => ({
@@ -99,7 +99,7 @@ test('足球积分计算不修改队伍、赛果、规则或人工决定', () =>
   const before = JSON.stringify(input);
   table(input);
   assert.equal(JSON.stringify(input), before);
-  const source = require('../miniprogram/utils/football-standings');
-  const cloud = require('../cloudfunctions/data/lib/utils/football-standings');
+  const source = require('../src/shared/utils/football-standings');
+  const cloud = require('../cloudfunctions/data/lib/shared/utils/football-standings');
   assert.deepEqual(cloud.computeFootballTable(input), source.computeFootballTable(input));
 });

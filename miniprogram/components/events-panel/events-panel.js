@@ -26,7 +26,7 @@ const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 const { toast } = require('../../utils/page-helpers.js');
 

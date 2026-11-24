@@ -20,7 +20,7 @@ const {
   validateProfilePatch,
   buildProfilePatch,
   resolveNameDisplay,
-} = require('../miniprogram/services/profile.js');
+} = require('../src/shared/services/profile.js');
 
 /* ============================================================
  * 一、补丁清洗：白名单之外一律丢掉

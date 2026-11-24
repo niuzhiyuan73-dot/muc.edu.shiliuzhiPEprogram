@@ -36,7 +36,7 @@ const {
   canRedraw,
   normalizeGroupCount,
   normalizeAdvancePerGroup,
-} = require('../miniprogram/services/draw.js');
+} = require('../src/shared/services/draw.js');
 const {
   MATCH_TYPE,
   MATCH_TYPE_TO_POOL,
@@ -51,8 +51,8 @@ const {
   TEAM_ID_SEPARATOR,
   GENDER,
   LEG_DISCIPLINE,
-} = require('../miniprogram/utils/constants.js');
-const { DEFAULT_FORMAT } = require('../miniprogram/utils/match-format.js');
+} = require('../src/shared/utils/constants.js');
+const { DEFAULT_FORMAT } = require('../src/shared/utils/match-format.js');
 
 /** 一位带单打等级分与赛季积分的会员 */
 function member(id, { elo = 1450, points = 0 } = {}) {

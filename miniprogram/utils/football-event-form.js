@@ -4,7 +4,7 @@
 const {
   DEFAULT_PRESET_KEY, RULE_PRESETS, TIE_BREAK, RANKING_POLICY,
   normalizeFootballRules, formatFootballRules,
-} = require('./football-rules.js');
+} = require('../shared/utils/football-rules.js');
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 const clone = value => JSON.parse(JSON.stringify(value));
 const FORMATS = Object.freeze([

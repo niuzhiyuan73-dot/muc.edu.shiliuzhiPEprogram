@@ -76,10 +76,7 @@ function stripCommentsAndStrings(text) {
  * 放行——前提是它必须同时被下面的沙箱用例覆盖（在无 process 环境里能加载）。
  * **新增条目要给出理由，并且补一条沙箱用例**，否则白名单就会变成漏洞清单。
  */
-const ALLOWED = new Map([
-  ['miniprogram/services/context-cache.js',
-    'TTL 需要读环境变量；已用 hasNodeProcess() 判环境，并由本书第二条用例在无 process 沙箱里验证'],
-]);
+const ALLOWED = new Map([]);
 
 describe('小程序端不得使用 Node 专有 API', () => {
   test('miniprogram/ 下没有任何裸 process / Buffer / Node 内建', () => {
@@ -110,7 +107,7 @@ describe('小程序端不得使用 Node 专有 API', () => {
   });
 
   test('身份上下文缓存在没有 process 的环境里能加载，并自动关闭', () => {
-    const file = path.join(ROOT, 'miniprogram', 'services', 'context-cache.js');
+    const file = path.join(ROOT, 'src', 'server', 'services', 'context-cache.js');
     const code = fs.readFileSync(file, 'utf8');
     const mod = { exports: {} };
     // 沙箱里刻意不给 process —— 与微信小程序运行时一致
@@ -126,7 +123,7 @@ describe('小程序端不得使用 Node 专有 API', () => {
   });
 
   test('沙箱里加载 school-context 不会因为缓存模块而崩', () => {
-    const ctxFile = path.join(ROOT, 'miniprogram', 'services', 'school-context.js');
+    const ctxFile = path.join(ROOT, 'src', 'server', 'services', 'school-context.js');
     const code = fs.readFileSync(ctxFile, 'utf8');
     const mod = { exports: {} };
     const calls = [];
@@ -137,16 +134,14 @@ describe('小程序端不得使用 Node 专有 API', () => {
       Map, Set, Number, Boolean, String, Array, Object, Math, Date, RegExp, JSON, Promise,
       require: (id) => {
         calls.push(id);
-        // school-context 依赖 utils/school 与 ./context-cache：
-        // 前者是纯常量模块，后者由本文件第二条用例单独验过。
-        if (id === '../utils/school.js') {
-          return require(path.join(ROOT, 'miniprogram', 'utils', 'school.js'));
+        if (id === '../../shared/utils/school.js') {
+          return require(path.join(ROOT, 'src', 'shared', 'utils', 'school.js'));
         }
-        return require(path.join(ROOT, 'miniprogram', 'services', 'context-cache.js'));
+        return require(path.join(ROOT, 'src', 'server', 'services', 'context-cache.js'));
       },
     };
     vm.runInNewContext(code, sandbox);
     assert.equal(typeof mod.exports.buildSchoolContext, 'function');
-    assert.deepEqual(calls.sort(), ['../utils/school.js', './context-cache.js']);
+    assert.deepEqual(calls.sort(), ['../../shared/utils/school.js', './context-cache.js']);
   });
 });

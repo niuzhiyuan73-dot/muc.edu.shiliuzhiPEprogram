@@ -10,11 +10,11 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-rank-service');
-const { schoolMemberKey, scopeKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-rank-service');
+const { schoolMemberKey, scopeKey } = require('../src/shared/utils/school');
 const { ALL_RANK_PROJECTS, MATCH_TYPE, MATCH_STATUS, MATCH_OUTCOME,
-  RANK_PROJECT } = require('../miniprogram/utils/constants');
+  RANK_PROJECT } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -27,7 +27,7 @@ test('重置赛季：事务前撤销管理员角色，赛季原样保留', async
   const before = await repo.seasons.list();
   const transaction = repo.transaction;
   repo.transaction = async work => {
-    const id = require('../miniprogram/utils/school').schoolRoleKey(ctx.actorId, scope.schoolId);
+    const id = require('../src/shared/utils/school').schoolRoleKey(ctx.actorId, scope.schoolId);
     await repo.schoolRoles.set(id, { ...await repo.schoolRoles.getById(id), status: 'disabled' });
     return transaction(work);
   };
@@ -85,9 +85,9 @@ async function seedMatch(repo, id, {
   a, b, winner, matchType = MATCH_TYPE.SINGLES, time = at(-HOUR),
   schoolId = 'muc', association = 'pkb', ...extra
 }) {
-  const { buildSchoolContext } = require('../miniprogram/services/school-context');
-  const { settleMatchInTransaction } = require('../miniprogram/services/school-rating-service');
-  const { MATCH_TYPE_TO_POOL } = require('../miniprogram/utils/constants');
+  const { buildSchoolContext } = require('../src/server/services/school-context');
+  const { settleMatchInTransaction } = require('../src/server/services/school-rating-service');
+  const { MATCH_TYPE_TO_POOL } = require('../src/shared/utils/constants');
   const doc = {
     _id: id, schoolId, association, matchType,
     pool: MATCH_TYPE_TO_POOL[matchType] || 'singles',

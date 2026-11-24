@@ -16,10 +16,10 @@ const space = require('../../services/association-space.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
-const { RULE_PRESETS, DEFAULT_PRESET_KEY } = require('../../utils/basketball-rules.js');
-const { teamSportStrategyFor } = require('../../utils/team-sport-rules.js');
-const { CUP_MODE } = require('../../utils/constants.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
+const { RULE_PRESETS, DEFAULT_PRESET_KEY } = require('../../shared/utils/basketball-rules.js');
+const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
+const { CUP_MODE } = require('../../shared/utils/constants.js');
 
 /** 首版支持的赛制：与 team-event-service 的 FORMATS 保持一致 */
 const FORMAT_OPTIONS = [

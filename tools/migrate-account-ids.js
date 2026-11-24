@@ -1,7 +1,7 @@
 /** Offline, complete-export migration. Never connects to or modifies a live database. */
 const fs = require('node:fs');
-const { schoolAccountKey } = require('../miniprogram/utils/school');
-const { accountDirectoryFields } = require('../miniprogram/services/account-directory');
+const { schoolAccountKey } = require('../src/shared/utils/school');
+const { accountDirectoryFields } = require('../src/server/services/account-directory');
 const { COLLECTIONS } = require('../cloudfunctions/data/src/repository');
 
 function migrateExport(source) {

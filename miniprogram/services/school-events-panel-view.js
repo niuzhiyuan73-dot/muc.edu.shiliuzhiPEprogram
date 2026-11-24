@@ -3,8 +3,8 @@ const space = require('./association-space');
 const identity = require('./school-identity');
 const { loadSchoolEventListView } = require('./school-event-view');
 const { buildPointsRows, describeSeason } = require('./events-view');
-const { formatPercent } = require('../utils/format');
-const { USER_STATUS } = require('../utils/constants');
+const { formatPercent } = require('../shared/utils/format');
+const { USER_STATUS } = require('../shared/utils/constants');
 
 /**
  * 赛事工作台面板：积分榜前 10 + 最近的几场赛事。

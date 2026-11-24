@@ -2,10 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const groupHandlers = require('../miniprogram/services/association-group-service');
-const handlers = require('../miniprogram/services/association-training-service');
-const { schoolMembershipKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const groupHandlers = require('../src/server/services/association-group-service');
+const handlers = require('../src/server/services/association-training-service');
+const { schoolMembershipKey } = require('../src/shared/utils/school');
 
 // 训练用例要用小组服务造受众，故合并两套动作到一个派发表。
 const HANDLERS = { ...groupHandlers, ...handlers };

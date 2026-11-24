@@ -27,7 +27,7 @@ const {
   remainingMemberIds,
   entryStateOf,
   buildCollegeEntryRow,
-} = require('../miniprogram/services/college-entry.js');
+} = require('../src/shared/services/college-entry.js');
 const {
   ROLE,
   USER_STATUS,
@@ -35,8 +35,8 @@ const {
   COLLEGE_ENTRY_STATUS,
   TIE_ALGO,
   TIE_NET_MODE,
-} = require('../miniprogram/utils/constants.js');
-const { REVIEW_ACTION } = require('../miniprogram/services/member-review.js');
+} = require('../src/shared/utils/constants.js');
+const { REVIEW_ACTION } = require('../src/shared/services/member-review.js');
 
 /** 体育学院的负责人 */
 const STAFF = {

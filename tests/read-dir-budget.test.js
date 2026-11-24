@@ -24,7 +24,7 @@ const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createSchoolDemoSeed, createSchoolDemoContent } = require('../miniprogram/services/school-seed');
 const { MEMBER_SEED } = require('../miniprogram/services/seed');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };

@@ -14,13 +14,13 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/team-event-service');
-const teamHandlers = require('../miniprogram/services/team-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/team-event-service');
+const teamHandlers = require('../src/server/services/team-service');
 const {
   schoolMemberKey, schoolMembershipKey,
-} = require('../miniprogram/utils/school');
-const { TEAM_EVENT_STATUS } = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/school');
+const { TEAM_EVENT_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-20T10:00:00Z');
 const SCOPE = { schoolId: 'muc', association: 'bk' };

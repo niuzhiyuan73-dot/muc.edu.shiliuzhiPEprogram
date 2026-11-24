@@ -8,7 +8,7 @@ const {
   winRate,
   buildLeaderboard,
   calculateTrend,
-} = require('../miniprogram/utils/leaderboard.js');
+} = require('../src/shared/utils/leaderboard.js');
 
 /** 构造用户对象的辅助函数 */
 const user = (id, elo, extra = {}) => ({

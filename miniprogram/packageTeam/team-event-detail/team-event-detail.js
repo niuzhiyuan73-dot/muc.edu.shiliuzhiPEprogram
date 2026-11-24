@@ -68,7 +68,7 @@ function toInputTime(value) {
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /**
  * 轮次的名字。

@@ -24,9 +24,9 @@
  * ============================================================
  */
 
-const { allAssociations, getAssociation, isTeamSport } = require('../utils/associations.js');
-const { formatDate, formatDateTime } = require('../utils/format.js');
-const { ANNOUNCEMENT_STATUS } = require('../utils/constants.js');
+const { allAssociations, getAssociation, isTeamSport } = require('../shared/utils/associations.js');
+const { formatDate, formatDateTime } = require('../shared/utils/format.js');
+const { ANNOUNCEMENT_STATUS } = require('../shared/utils/constants.js');
 
 /** 首页默认展示的公告与赛事条数。太多会把首屏撑得很长。 */
 const DEFAULT_ANNOUNCEMENT_LIMIT = 2;

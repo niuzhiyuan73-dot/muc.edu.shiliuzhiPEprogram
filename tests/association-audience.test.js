@@ -2,7 +2,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   AUDIENCE_MODE, AUDIENCE_GROUP_MAX, buildAudience, readAudience, audienceAllows, hitGroupIds,
-} = require('../miniprogram/services/association-audience');
+} = require('../src/shared/services/association-audience');
 
 test('buildAudience 缺省即「不限」，显式 all 也规范成空清单', () => {
   assert.deepEqual(buildAudience(), { ok: true, audienceMode: 'all', audienceGroupIds: [], message: '' });

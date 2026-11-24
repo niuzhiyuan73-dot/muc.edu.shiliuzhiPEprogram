@@ -17,7 +17,7 @@ const {
   floorToStep,
   calculatePlacementRating,
   initialRatingFor,
-} = require('../miniprogram/utils/elo.js');
+} = require('../src/shared/utils/elo.js');
 
 /** 构造一个选手对象的辅助函数，减少测试代码重复 */
 const player = (rating, matchCount = 20) => ({ rating, matchCount });

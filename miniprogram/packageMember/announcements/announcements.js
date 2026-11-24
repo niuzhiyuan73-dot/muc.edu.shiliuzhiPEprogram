@@ -26,7 +26,7 @@ const { loadSchoolAnnouncementListView } = require('../../services/announcement-
 const { isMockNow } = require('../../services/runtime-mode.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 const { stopRefresh } = require('../../utils/page-helpers.js');
 

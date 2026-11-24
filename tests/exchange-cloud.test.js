@@ -14,7 +14,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 const handlers = require('../cloudfunctions/data/src/core/school-exchange-handlers');
 

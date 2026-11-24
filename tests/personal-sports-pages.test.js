@@ -134,9 +134,9 @@ test('单场面板只取指定比赛，探测原编号后最多解码一次，�
 test('单场展示接口仅补充本场最多5人昵称；默认详情不扩张响应字段', async () => {
   const { createSchoolSeed } = require('../miniprogram/services/school-seed');
   const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-  const { buildSchoolContext } = require('../miniprogram/services/school-context');
-  const { getSchoolMatch } = require('../miniprogram/services/school-match-service');
-  const { schoolMemberKey } = require('../miniprogram/utils/school');
+  const { buildSchoolContext } = require('../src/server/services/school-context');
+  const { getSchoolMatch } = require('../src/server/services/school-match-service');
+  const { schoolMemberKey } = require('../src/shared/utils/school');
   const seed = createSchoolSeed();
   seed.users = ['u', 'v', 'r', 'unrelated'].map(_id => ({ _id, nickName: _id, realName: 'SECRET', platformStatus: 'active', primarySchoolId: 'muc' }));
   seed.schoolMembers = seed.users.map(user => ({ _id: schoolMemberKey(user._id, 'muc'), schoolId: 'muc', userId: user._id, status: 'active' }));

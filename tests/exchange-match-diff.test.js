@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const { changedExchangeMatches } = require('../miniprogram/services/exchange-plan');
+const { changedExchangeMatches } = require('../src/server/services/exchange-plan');
 
 /** 造一份「已打完」的签表：每场都 active */
 function activeLedger(n) {
@@ -73,7 +73,7 @@ test('对阵与状态都没变的场次不写（避免把「待比赛」洗成�
 
 test('服务端循环的是差分而不是整张投影（源码级），防止缺陷被改回来', () => {
   const source = fs.readFileSync(
-    path.join(__dirname, '..', 'miniprogram', 'services', 'exchange-service.js'), 'utf8');
+    path.join(__dirname, '..', 'src', 'server', 'services', 'exchange-service.js'), 'utf8');
   assert.match(source, /changedExchangeMatches\(ledger, built\.matches\)/,
     'submitExchangeScore 必须用差分：签表规模越大，事务操作数不能跟着涨');
   assert.doesNotMatch(source, /for \(const row of built\.matches\)/,

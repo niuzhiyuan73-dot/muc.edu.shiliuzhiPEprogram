@@ -16,9 +16,9 @@ const assert = require('node:assert');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const teamService = require('../miniprogram/services/team-service');
-const { schoolMemberKey, schoolMembershipKey, collegeTeamKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const teamService = require('../src/server/services/team-service');
+const { schoolMemberKey, schoolMembershipKey, collegeTeamKey } = require('../src/shared/utils/school');
 
 const SCOPE = { schoolId: 'muc', association: 'bk' };
 const NOW = new Date('2026-10-20T10:00:00Z');

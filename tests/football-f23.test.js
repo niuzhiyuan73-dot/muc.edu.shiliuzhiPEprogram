@@ -1,9 +1,9 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { fixture, SCOPE } = require('./helpers/football-fixture');
-const { schoolKey, schoolMemberKey } = require('../miniprogram/utils/school');
-const { normalizeFootballReport, normalizeResult, matchMinutes } = require('../miniprogram/utils/football-report');
-const { defaultRulesFor, normalizeFootballRules, STANDARD_PRESET_KEY } = require('../miniprogram/utils/football-rules');
+const { schoolKey, schoolMemberKey } = require('../src/shared/utils/school');
+const { normalizeFootballReport, normalizeResult, matchMinutes } = require('../src/shared/utils/football-report');
+const { defaultRulesFor, normalizeFootballRules, STANDARD_PRESET_KEY } = require('../src/shared/utils/football-rules');
 const rules = defaultRulesFor();
 
 test('10 队足球单循环在云端预算内一次抽出 45 场', async () => {

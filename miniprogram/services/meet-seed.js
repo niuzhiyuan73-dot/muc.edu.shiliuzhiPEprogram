@@ -29,19 +29,19 @@
  */
 
 const { createSchoolMemoryRepo } = require('./school-memory-repo.js');
-const { buildMeetContext } = require('./meet-context.js');
-const meetService = require('./meet-service.js');
-const leadService = require('./meet-college-lead-service.js');
-const reg = require('./meet-registration-service.js');
-const schedule = require('./meet-schedule-service.js');
-const score = require('./meet-score-service.js');
-const advance = require('./meet-advance-service.js');
-const standing = require('./meet-standing-service.js');
-const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../utils/school.js');
+const { buildMeetContext } = require('../../src/server/services/meet-context.js');
+const meetService = require('../../src/server/services/meet-service.js');
+const leadService = require('../../src/server/services/meet-college-lead-service.js');
+const reg = require('../../src/server/services/meet-registration-service.js');
+const schedule = require('../../src/server/services/meet-schedule-service.js');
+const score = require('../../src/server/services/meet-score-service.js');
+const advance = require('../../src/server/services/meet-advance-service.js');
+const standing = require('../../src/server/services/meet-standing-service.js');
+const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../shared/utils/school.js');
 const {
   MEET_COLLECTIONS, meetSessionKey,
-} = require('../utils/meet-scope.js');
-const { COLLEGES } = require('../utils/constants.js');
+} = require('../shared/utils/meet-scope.js');
+const { COLLEGES } = require('../shared/utils/constants.js');
 const { demoDay, demoYear } = require('./demo-clock.js');
 
 const SCHOOL = 'muc'; // 中央民族大学，与学校演示种子同一所学校

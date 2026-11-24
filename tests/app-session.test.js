@@ -25,11 +25,11 @@ const associationScope = require('../miniprogram/services/association-scope.js')
 const appSession = require('../miniprogram/services/app-session.js');
 const schoolSession = require('../miniprogram/services/school-session.js');
 const schoolMock = require('../miniprogram/services/school-mock.js');
-const { resolveAuthState } = require('../miniprogram/services/auth.js');
+const { resolveAuthState } = require('../src/shared/services/auth.js');
 // 原常量住在 protocol-1 mock.js（P10 删）；演示身份编号约定不变
 const DEFAULT_CURRENT_USER_ID = 'u06';
-const { defaultAssociationId } = require('../miniprogram/utils/associations.js');
-const { DATA_SOURCE, STORAGE_KEY, ROLE, USER_STATUS } = require('../miniprogram/utils/constants.js');
+const { defaultAssociationId } = require('../src/shared/utils/associations.js');
+const { DATA_SOURCE, STORAGE_KEY, ROLE, USER_STATUS } = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 最小小程序运行环境

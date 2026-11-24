@@ -16,7 +16,7 @@ const {
   formatPlacement,
   formatRank,
   formatScore,
-} = require('../miniprogram/utils/format.js');
+} = require('../src/shared/utils/format.js');
 
 test('toDate —— 兼容各种时间形态', () => {
   assert.ok(toDate(new Date('2026-09-10T15:30:00')) instanceof Date);
@@ -94,7 +94,7 @@ test('跨年边界：年份也按东八区判', () => {
 });
 
 test('在 UTC 环境里跑，结果必须与本机一致（模拟云函数）', () => {
-  const modulePath = path.join(__dirname, '..', 'miniprogram', 'utils', 'format.js');
+  const modulePath = path.join(__dirname, '..', 'src', 'shared', 'utils', 'format.js');
   const script = [
     `const f = require(${JSON.stringify(modulePath)});`,
     "process.stdout.write(JSON.stringify([",

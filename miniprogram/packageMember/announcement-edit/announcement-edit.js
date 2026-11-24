@@ -25,14 +25,14 @@ const { withFormExperience } = require('../../templates/form-experience.js');
  * ============================================================
  */
 
-const { TITLE_MAX, CONTENT_MAX, DEFAULT_CATEGORY } = require('../../services/announcement.js');
+const { TITLE_MAX, CONTENT_MAX, DEFAULT_CATEGORY } = require('../../shared/services/announcement.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 生成一次提交的请求编号：时间戳 + 随机后缀，满足服务端的编号字符集要求 */
 function nextRequestId() {

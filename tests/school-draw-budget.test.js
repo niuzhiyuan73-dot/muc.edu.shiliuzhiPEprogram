@@ -3,10 +3,10 @@ const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const service = require('../cloudfunctions/data/lib/services/school-event-service');
-const { schoolMemberKey, schoolEventSignupKey } = require('../miniprogram/utils/school');
-const { EVENT_FORMAT, MATCH_TYPE } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const service = require('../cloudfunctions/data/lib/server/services/school-event-service');
+const { schoolMemberKey, schoolEventSignupKey } = require('../src/shared/utils/school');
+const { EVENT_FORMAT, MATCH_TYPE } = require('../src/shared/utils/constants');
 const scope = { schoolId: 'muc', association: 'pkb' };
 const now = new Date('2026-10-28T08:00:00Z');
 

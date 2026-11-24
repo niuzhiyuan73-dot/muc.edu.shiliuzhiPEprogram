@@ -12,15 +12,15 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const {
   MATCH_TYPE, EVENT_FORMAT, EVENT_BRONZE_MODE, SEED_MODE, MATCH_STATUS,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
-const eventSvc = require('../miniprogram/services/school-event-service');
-const matchSvc = require('../miniprogram/services/school-match-service');
-const rankSvc = require('../miniprogram/services/school-rank-service');
+const eventSvc = require('../src/server/services/school-event-service');
+const matchSvc = require('../src/server/services/school-match-service');
+const rankSvc = require('../src/server/services/school-rank-service');
 const assocSpace = require('../miniprogram/services/association-space');
 const view = require('../miniprogram/services/school-event-view');
 

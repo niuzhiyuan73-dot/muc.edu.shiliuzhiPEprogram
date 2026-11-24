@@ -137,7 +137,7 @@ test('聚合 —— 跨校只读浏览得到真实空聚合，不编数字', asy
  * ============================================================ */
 
 function fakeClient({ announcements = [], events = [], matchTotal = 0, seasonNumber = 1, memberTotal = 0, failAssociations = [] }) {
-  const associations = require('../miniprogram/utils/associations.js').allAssociations();
+  const associations = require('../src/shared/utils/associations.js').allAssociations();
   const apiFor = (assocId) => ({
     async listSchoolAnnouncements(payload = {}) {
       if (failAssociations.includes(assocId)) throw new Error('没有读取协会空间的权限');
@@ -213,7 +213,7 @@ test('聚合 —— 公告超过单页限量时如实带 hasMore，概况赛事�
   assert.strictEqual(view.announcements.rows[0].pinned, true, '置顶在最前');
   // 概况的赛事数用服务端返回的 totalAll（筛选前的总量），不再靠「循环取完再数」
   // 协会数由注册表决定（按 N 个设计），新增协会时聚合口径自然扩展，不必改数字
-  const { activeAssociations } = require('../miniprogram/utils/associations.js');
+  const { activeAssociations } = require('../src/shared/utils/associations.js');
   const assocCount = activeAssociations().length;
   assert.strictEqual(view.summary.eventCount, 80 * assocCount, '概况赛事数按协会相加');
   assert.strictEqual(view.summary.matchCount, 5 * assocCount);

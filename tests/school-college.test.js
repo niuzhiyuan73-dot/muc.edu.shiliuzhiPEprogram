@@ -19,18 +19,18 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-college-service');
-const { collegeTieKey } = require('../miniprogram/services/college-draw');
-const { collegeLegKey, tieStatusOf } = require('../miniprogram/services/college-tie');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-college-service');
+const { collegeTieKey } = require('../src/shared/services/college-draw');
+const { collegeLegKey, tieStatusOf } = require('../src/shared/services/college-tie');
 const {
   schoolMemberKey, schoolMembershipKey, collegeEventKey, collegeEntryKey, collegeKey,
   collegeLineupKey,
-} = require('../miniprogram/utils/school');
+} = require('../src/shared/utils/school');
 const {
   COLLEGES, COLLEGE_EVENT_STATUS, COLLEGE_ENTRY_STATUS, TIE_STATUS,
   LEG_DISCIPLINE, TIE_ALGO, TIE_NET_MODE, MATCH_COMPETITION, MATCH_STATUS,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -94,7 +94,7 @@ test('正式授权：学籍在 c01，仅管理 c02，不能借学籍提交 c01 �
   const repo = fixture();
   const scope = { schoolId: 'muc', association: 'pkb' };
   const admin = await buildSchoolContext({ repo, actorId: 'demo_muc_admin', scope, now: NOW });
-  const granted = (await require('../miniprogram/services/school-membership-service').createSchoolHandlers({}).grantSchoolPermission({
+  const granted = (await require('../src/server/services/school-membership-service').createSchoolHandlers({}).grantSchoolPermission({
     userId: 'demo_muc_member', permission: 'collegeLeader', collegeId: C02, make: true,
   }, admin)).data;
   assert.equal(granted.ok, true, granted.message);
@@ -494,7 +494,7 @@ test('写路径：请求期间管理权被撤销，开赛与录名次都不落�
   // 撤掉校级管理员角色（账号本身仍有效，所以只有「事务内重判角色」才拦得住）
   const transaction = repo.transaction;
   repo.transaction = async fn => {
-    const { schoolRoleKey } = require('../miniprogram/utils/school');
+    const { schoolRoleKey } = require('../src/shared/utils/school');
     const key = schoolRoleKey('demo_muc_admin', 'muc');
     const role = await repo.schoolRoles.getById(key);
     await repo.schoolRoles.set(key, { ...role, status: 'disabled' });
@@ -785,7 +785,7 @@ test('跨校：外校读不到排阵，也排不了阵 / 开不了大场', async
 
 /* ------------------------------------------------------------------ 小组限制（B6-b） */
 
-const groupHandlers = require('../miniprogram/services/association-group-service');
+const groupHandlers = require('../src/server/services/association-group-service');
 
 async function callGroup(repo, action, payload = {}, opts = {}) {
   const { actor = 'demo_muc_admin', schoolId = 'muc', association = 'pkb', now = NOW } = opts;
@@ -1197,7 +1197,7 @@ describe('名次与隔离 —— 旧栈 college-placement 的 S2 对应', () => 
     // 撤掉校级管理员角色（账号本身仍有效，所以只有「事务内重判角色」才拦得住）
     const transaction = repo.transaction;
     repo.transaction = async fn => {
-      const { schoolRoleKey } = require('../miniprogram/utils/school');
+      const { schoolRoleKey } = require('../src/shared/utils/school');
       const key = schoolRoleKey('demo_muc_admin', 'muc');
       const role = await repo.schoolRoles.getById(key);
       await repo.schoolRoles.set(key, { ...role, status: 'disabled' });

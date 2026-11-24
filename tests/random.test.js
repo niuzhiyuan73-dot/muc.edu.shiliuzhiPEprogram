@@ -13,7 +13,7 @@ const {
   pick,
   shuffle,
   chance,
-} = require('../miniprogram/utils/random.js');
+} = require('../src/shared/utils/random.js');
 
 describe('createSeededRandom —— 可复现的随机数', () => {
   test('相同种子产生完全相同的数列', () => {

@@ -8,8 +8,8 @@ const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo')
 const { COLLECTIONS } = require('../cloudfunctions/data/src/repository');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { schoolKey, schoolMemberKey, schoolMembershipKey } = require('../miniprogram/utils/school');
-const { fieldValues } = require('../miniprogram/services/scoped-team-reads');
+const { schoolKey, schoolMemberKey, schoolMembershipKey } = require('../src/shared/utils/school');
+const { fieldValues } = require('../src/server/services/scoped-team-reads');
 const scope = { schoolId: 'muc', association: 'bk' };
 const { directoryDatabase } = require('./audit-directory-database.cjs');
 const clone = value => value == null ? value : JSON.parse(JSON.stringify(value));

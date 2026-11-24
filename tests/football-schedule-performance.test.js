@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { conflicts } = require('../miniprogram/services/football-schedule-service');
+const { conflicts } = require('../src/server/services/football-schedule-service');
 const { fixture, SCOPE } = require('./helpers/football-fixture');
 
 test('4000 场排期：赛事不再线性查找，时间只解析一次，保留跨日及包含区间冲突', () => {

@@ -11,20 +11,20 @@
  * 动作集**，多了报错、少了报错，由 tests/school-action-surface.test.js 守护。
  * 清单与本地模拟端（school-mock.js）读的是同一份镜像文件，不会分叉。
  */
-const { SCHOOL_SPACE_ACTIONS, pickActions } = require('../../lib/utils/school-actions.js');
-const groupService = require('../../lib/services/association-group-service.js');
-const memberService = require('../../lib/services/association-member-service.js');
-const noticeService = require('../../lib/services/association-notice-service.js');
-const trainingService = require('../../lib/services/association-training-service.js');
-const eventService = require('../../lib/services/school-event-service.js');
-const matchService = require('../../lib/services/school-match-service.js');
-const liveService = require('../../lib/services/school-live-service.js');
-const collegeService = require('../../lib/services/school-college-service.js');
-const announcementService = require('../../lib/services/school-announcement-service.js');
-const schoolMemberService = require('../../lib/services/school-member-service.js');
-const rankService = require('../../lib/services/school-rank-service.js');
-const teamService = require('../../lib/services/team-service.js');
-const teamEventService = require('../../lib/services/team-event-service.js');
+const { SCHOOL_SPACE_ACTIONS, pickActions } = require('../../lib/shared/utils/school-actions.js');
+const groupService = require('../../lib/server/services/association-group-service.js');
+const memberService = require('../../lib/server/services/association-member-service.js');
+const noticeService = require('../../lib/server/services/association-notice-service.js');
+const trainingService = require('../../lib/server/services/association-training-service.js');
+const eventService = require('../../lib/server/services/school-event-service.js');
+const matchService = require('../../lib/server/services/school-match-service.js');
+const liveService = require('../../lib/server/services/school-live-service.js');
+const collegeService = require('../../lib/server/services/school-college-service.js');
+const announcementService = require('../../lib/server/services/school-announcement-service.js');
+const schoolMemberService = require('../../lib/server/services/school-member-service.js');
+const rankService = require('../../lib/server/services/school-rank-service.js');
+const teamService = require('../../lib/server/services/team-service.js');
+const teamEventService = require('../../lib/server/services/team-event-service.js');
 
 module.exports = Object.freeze(pickActions([
   groupService, memberService, noticeService, trainingService, eventService, matchService,

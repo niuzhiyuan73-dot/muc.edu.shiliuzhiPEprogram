@@ -1,7 +1,7 @@
 const space = require('../../services/association-space');
 const schoolSession = require('../../services/school-session');
 const associationScope = require('../../services/association-scope');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school');
 const { currentThemeClass } = require('../../services/branding');
 const { teamProfileView } = require('../../utils/team-profile-view');
 Component({

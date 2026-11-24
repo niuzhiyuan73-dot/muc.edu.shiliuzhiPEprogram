@@ -27,7 +27,7 @@ const {
   meetPublicationKey,
   meetResultRowKey,
   meetStandingKey,
-} = require('../miniprogram/utils/meet-scope.js');
+} = require('../src/shared/utils/meet-scope.js');
 
 const SCOPE = { schoolId: 'muc', meetId: 'mt_muc_abc' };
 

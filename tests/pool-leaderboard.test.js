@@ -12,11 +12,11 @@ const {
   buildProgressLeaderboard,
   calculatePercentile,
   percentileFromBoard,
-} = require('../miniprogram/utils/leaderboard.js');
+} = require('../src/shared/utils/leaderboard.js');
 
-const { createEmptyRatings, applyMatchResult } = require('../miniprogram/utils/rating.js');
-const { RATING_POOL, RANK_PROJECT } = require('../miniprogram/utils/constants.js');
-const { DEFAULT_CONFIG } = require('../miniprogram/utils/elo.js');
+const { createEmptyRatings, applyMatchResult } = require('../src/shared/utils/rating.js');
+const { RATING_POOL, RANK_PROJECT } = require('../src/shared/utils/constants.js');
+const { DEFAULT_CONFIG } = require('../src/shared/utils/elo.js');
 
 /** 未指定分数时的默认初始分（当前 1450），随配置变化 */
 const DEFAULT_ELO = DEFAULT_CONFIG.initialRating;

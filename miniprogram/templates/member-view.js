@@ -16,7 +16,7 @@
 
 const { loadSchoolMemberView, DEFAULT_HISTORY_LIMIT } = require('../services/profile-view.js');
 const { applyBranding, themeClassOf } = require('../services/branding.js');
-const { activeAssociations } = require('../utils/associations.js');
+const { activeAssociations } = require('../shared/utils/associations.js');
 const scope = require('../services/association-scope.js');
 const { renderEloChart } = require('../utils/chart-view.js');
 

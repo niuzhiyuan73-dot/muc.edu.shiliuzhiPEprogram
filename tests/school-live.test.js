@@ -11,11 +11,11 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-live-service');
-const matchHandlers = require('../miniprogram/services/school-match-service');
-const { schoolMemberKey, schoolMatchKey, schoolKey, schoolLiveKey } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, MATCH_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-live-service');
+const matchHandlers = require('../src/server/services/school-match-service');
+const { schoolMemberKey, schoolMatchKey, schoolKey, schoolLiveKey } = require('../src/shared/utils/school');
+const { MATCH_TYPE, MATCH_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -80,7 +80,7 @@ for (const action of ['startSchoolLiveScore', 'recordSchoolRally', 'undoSchoolRa
       repo.transaction = async work => {
         const actor = mutation === 'role' ? 'demo_muc_admin' : 'demo_muc_member';
         if (mutation === 'role') {
-          const key = require('../miniprogram/utils/school').schoolRoleKey(actor, 'muc');
+          const key = require('../src/shared/utils/school').schoolRoleKey(actor, 'muc');
           await repo.schoolRoles.set(key, { ...await repo.schoolRoles.getById(key), status: 'disabled' });
         }
         if (mutation === 'account') await repo.users.set(actor, { ...await repo.users.getById(actor), platformStatus: 'disabled' });
@@ -315,7 +315,7 @@ test('判球不读全院名单：每球不触发 buildDirectory', async () => {
 });
 
 test('学院负责人判球：只读这场两队成员的学院，且权限判定仍然正确', async () => {
-  const { schoolMembershipKey } = require('../miniprogram/utils/school');
+  const { schoolMembershipKey } = require('../src/shared/utils/school');
   const seed = createSchoolDemoSeed();
   [['demo_muc_member', 'c01'], ['demo_muc_member_2', 'c01'], ['demo_muc_member_3', 'c01']]
     .forEach(([id, collegeId]) => {

@@ -12,8 +12,8 @@
 const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { standardSeedOrder, bracketSizeOf, drawBracket } = require('../miniprogram/utils/bracket.js');
-const { createSeededRandom } = require('../miniprogram/utils/random.js');
+const { standardSeedOrder, bracketSizeOf, drawBracket } = require('../src/shared/utils/bracket.js');
+const { createSeededRandom } = require('../src/shared/utils/random.js');
 
 /** 参赛者 u1..uN */
 function entrants(n) {

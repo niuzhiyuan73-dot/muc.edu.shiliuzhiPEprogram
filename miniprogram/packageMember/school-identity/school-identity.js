@@ -1,5 +1,5 @@
 const service = require('../../services/school-identity.js');
-const { activeAssociations } = require('../../utils/associations.js');
+const { activeAssociations } = require('../../shared/utils/associations.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const STATUS_LABEL = { pending: '待审核', active: '已通过', rejected: '已驳回', left: '已离校', disabled: '已停用' };

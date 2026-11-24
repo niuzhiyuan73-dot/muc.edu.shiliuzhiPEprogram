@@ -28,8 +28,8 @@
  * ============================================================
  */
 
-const { defaultAssociationId, activeAssociations } = require('../utils/associations.js');
-const { LEGACY_SCHOOL_ID } = require('../utils/school.js');
+const { defaultAssociationId, activeAssociations } = require('../shared/utils/associations.js');
+const { LEGACY_SCHOOL_ID } = require('../shared/utils/school.js');
 
 /**
  * 各启用协会里，这个人的比赛场次（单打 + 双打，按池累加）。

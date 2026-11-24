@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
-const { schoolMemberKey, schoolRoleKey, schoolAssociationKey, collegeKey } = require('../miniprogram/utils/school');
+const { schoolMemberKey, schoolRoleKey, schoolAssociationKey, collegeKey } = require('../src/shared/utils/school');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');
 
 function fixture() {
@@ -306,7 +306,7 @@ test('转校：目标学校通过后，归属切换、原校身份转出、历�
   // 原校的校级角色 / 协会身份停用；新学校从普通会员起步（权限要重新指定）
   const oldRole = await repo.schoolRoles.getById(schoolRoleKey('new1', 'muc'));
   assert.ok(!oldRole || oldRole.status !== 'active');
-  const { schoolMembershipKey } = require('../miniprogram/utils/school');
+  const { schoolMembershipKey } = require('../src/shared/utils/school');
   const oldMembership = await repo.memberships.get(schoolMembershipKey('new1', { schoolId: 'muc', association: 'pkb' }));
   assert.equal(oldMembership.status, 'revoked');
 
@@ -602,7 +602,7 @@ test('授权：撤销协会负责人不能误撤学院负责人', async () => {
   const revoke = await grant('associationLeader', false);
   assert.equal(revoke.data.ok, false);
   assert.match(revoke.data.message, /学院负责人/);
-  const { schoolMembershipKey } = require('../miniprogram/utils/school');
+  const { schoolMembershipKey } = require('../src/shared/utils/school');
   const membership = await repo.memberships.get(schoolMembershipKey('new1', { schoolId: 'muc', association: 'pkb' }));
   assert.equal(membership.role, 'staff');
   assert.equal(membership.status, 'active');

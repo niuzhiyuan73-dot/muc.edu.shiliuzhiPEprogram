@@ -15,8 +15,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { buildCourtBoard } = require('../miniprogram/services/events-view.js');
-const { planCourts } = require('../miniprogram/services/court.js');
-const { MATCH_TYPE, MATCH_STATUS } = require('../miniprogram/utils/constants.js');
+const { planCourts } = require('../src/shared/services/court.js');
+const { MATCH_TYPE, MATCH_STATUS } = require('../src/shared/utils/constants.js');
 
 /** 造一批形状合法的比赛记录（字段只要够 planCourts / buildCourtBoard 用）。 */
 function fakeRecords(count, { round = 1, stage = 'main' } = {}) {

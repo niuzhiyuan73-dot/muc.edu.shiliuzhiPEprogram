@@ -22,13 +22,13 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const trainingHandlers = require('../miniprogram/services/association-training-service');
-const rankHandlers = require('../miniprogram/services/school-rank-service');
-const eventHandlers = require('../miniprogram/services/school-event-service');
-const seasonPoints = require('../miniprogram/services/season-points');
-const { schoolMemberKey, scopeKey, memberRatingKey } = require('../miniprogram/utils/school');
-const { EVENT_STATUS, MATCH_TYPE } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const trainingHandlers = require('../src/server/services/association-training-service');
+const rankHandlers = require('../src/server/services/school-rank-service');
+const eventHandlers = require('../src/server/services/school-event-service');
+const seasonPoints = require('../src/server/services/season-points');
+const { schoolMemberKey, scopeKey, memberRatingKey } = require('../src/shared/utils/school');
+const { EVENT_STATUS, MATCH_TYPE } = require('../src/shared/utils/constants');
 
 const HANDLERS = { ...trainingHandlers, ...rankHandlers, ...eventHandlers };
 const NOW = new Date('2026-10-13T10:00:00Z');

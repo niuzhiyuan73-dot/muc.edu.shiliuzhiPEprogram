@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
   DEFAULT_PRESET_KEY, STANDARD_PRESET_KEY, RULE_PRESETS, TIE_BREAK,
   presetOf, defaultRulesFor, normalizeFootballRules: normalize, formatFootballRules,
-} = require('../miniprogram/utils/football-rules');
+} = require('../src/shared/utils/football-rules');
 
 test('足球校园与标准时长两套预设，快照可独立序列化且归一化幂等', () => {
   const campus = normalize({ presetKey: DEFAULT_PRESET_KEY });

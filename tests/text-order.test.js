@@ -18,7 +18,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
-const { compareCode } = require('../miniprogram/utils/text-order');
+const { compareCode } = require('../src/shared/utils/text-order');
 
 test('compareCode 按码元比较：符号、大小写、数字都确定', () => {
   assert.equal(compareCode('a', 'b'), -1);

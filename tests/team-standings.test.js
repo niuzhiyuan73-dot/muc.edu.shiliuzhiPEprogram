@@ -13,8 +13,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const {
   isFinal, computeTeamTable, computeTeamPlacements,
-} = require('../miniprogram/utils/team-standings.js');
-const { TEAM_MATCH_STATUS, BRACKET_STAGE } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/team-standings.js');
+const { TEAM_MATCH_STATUS, BRACKET_STAGE } = require('../src/shared/utils/constants.js');
 
 /** 造一场已发布的比赛 */
 function played(teamA, teamB, scoreA, scoreB, extra = {}) {

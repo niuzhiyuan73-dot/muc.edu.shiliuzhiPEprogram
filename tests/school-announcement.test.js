@@ -16,10 +16,10 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-announcement-service');
-const { schoolKey, schoolAnnouncementKey } = require('../miniprogram/utils/school');
-const { ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-announcement-service');
+const { schoolKey, schoolAnnouncementKey } = require('../src/shared/utils/school');
+const { ANNOUNCEMENT_CATEGORIES, ANNOUNCEMENT_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const PLATFORM_ADMIN = 'demo_platform_admin';

@@ -34,7 +34,7 @@ const {
   COLLEGE_EVENT_STATUS,
   COLLEGE_ENTRY_STATUS,
   RATED_PAIR_LIMIT,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 最小小程序运行环境
@@ -4922,7 +4922,7 @@ collegeTest('石榴籽杯 —— 三个项目、默认项目列表与发起入�
 
     assert.strictEqual(page.data.loading, false);
     // 项目列表跟着启用协会走（按 N 个设计）：新增协会即多一个项目，不写死数量
-    const { activeAssociations } = require('../miniprogram/utils/associations.js');
+    const { activeAssociations } = require('../src/shared/utils/associations.js');
     assert.strictEqual(page.data.projects.length, activeAssociations().length, '每个启用协会一个项目');
     assert.strictEqual(page.data.projectId, 'pkb', '默认落在当前协会');
     assert.ok(page.data.total >= 1);
@@ -6396,7 +6396,7 @@ test('协会页 —— 列出本校的协会，当前全局协会标为「当前
     assert.strictEqual(page.data.error, '');
     assert.strictEqual(page.data.readOnlySchool, false);
     // 本校清单来自注册表：断言与注册表同序同量，新增协会不必再改这里
-    const { activeAssociations } = require('../miniprogram/utils/associations.js');
+    const { activeAssociations } = require('../src/shared/utils/associations.js');
     assert.deepStrictEqual(
       page.data.associations.map((item) => item.name),
       activeAssociations().map((assoc) => assoc.shortName)

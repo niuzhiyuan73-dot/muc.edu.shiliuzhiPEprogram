@@ -20,7 +20,7 @@ const {
   toOfficialScores,
   tennisPointText,
   LIVE_STATUS,
-} = require('../miniprogram/services/live-score.js');
+} = require('../src/shared/services/live-score.js');
 const { describeLive } = require('../miniprogram/services/live-view.js');
 
 const MATCH = {

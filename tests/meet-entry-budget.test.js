@@ -23,12 +23,12 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
-const meetService = require('../miniprogram/services/meet-service.js');
-const leadService = require('../miniprogram/services/meet-college-lead-service.js');
-const reg = require('../miniprogram/services/meet-registration-service.js');
-const { meetEventKey, meetInterestKey, MEET_ENTRY_MAX_MEMBERS } = require('../miniprogram/utils/meet-scope.js');
-const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const meetService = require('../src/server/services/meet-service.js');
+const leadService = require('../src/server/services/meet-college-lead-service.js');
+const reg = require('../src/server/services/meet-registration-service.js');
+const { meetEventKey, meetInterestKey, MEET_ENTRY_MAX_MEMBERS } = require('../src/shared/utils/meet-scope.js');
+const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 
 const SCHOOL = 'muc';
 const T0 = new Date('2026-10-17T09:00:00Z');
@@ -234,7 +234,7 @@ test('提交后 20 人的意向全部转为「已选入」', async () => {
 
   for (const userId of studentIds) {
     const interest = await repo.sportsMeetInterests.getById(
-      require('../miniprogram/utils/meet-scope.js').meetInterestKey(meetId, eventKey, userId),
+      require('../src/shared/utils/meet-scope.js').meetInterestKey(meetId, eventKey, userId),
     );
     assert.equal(interest.status, 'selected', `${userId} 的意向应转为已选入`);
     assert.equal(interest.entryKey, submitted.data.entry._id);

@@ -16,8 +16,8 @@ const space = require('../../services/association-space.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
-const { teamSportStrategyFor } = require('../../utils/team-sport-rules.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
+const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
 const { safeRouteId } = require('../../utils/route-query.js');
 
 Page({

@@ -23,8 +23,8 @@
  * ============================================================
  */
 
-const { GENDER_LABEL } = require('../utils/constants.js');
-const { formatDateTime } = require('../utils/format.js');
+const { GENDER_LABEL } = require('../shared/utils/constants.js');
+const { formatDateTime } = require('../shared/utils/format.js');
 const identity = require('./school-identity.js');
 
 /** 待审核台账的空态文案 */

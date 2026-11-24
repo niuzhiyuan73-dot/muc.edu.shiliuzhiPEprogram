@@ -31,7 +31,7 @@ const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo')
 const { COLLECTIONS } = require('../cloudfunctions/data/src/repository');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
 
-const SERVICE_DIR = path.join(__dirname, '..', 'cloudfunctions', 'data', 'lib', 'services');
+const SERVICE_DIR = path.join(__dirname, '..', 'cloudfunctions', 'data', 'lib', 'server', 'services');
 const CORE_DIR = path.join(__dirname, '..', 'cloudfunctions', 'data', 'src', 'core');
 
 /** 云数据库桩：只实现适配器用到的那几招（查询构造 + doc(id) 读写 + 事务）。 */

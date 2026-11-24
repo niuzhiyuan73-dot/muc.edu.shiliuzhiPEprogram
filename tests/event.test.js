@@ -27,7 +27,7 @@ const {
   signupStateOf,
   buildEventRow,
   buildSignupRow,
-} = require('../miniprogram/services/event.js');
+} = require('../src/shared/services/event.js');
 
 const {
   ROLE,
@@ -41,7 +41,7 @@ const {
   SIGNUP_STATUS,
   EVENT_FORMAT,
   LEG_DISCIPLINE,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 一位正常在册的普通会员 */
 const member = (id, extra = {}) => ({

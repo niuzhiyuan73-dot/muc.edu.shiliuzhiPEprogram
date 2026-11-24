@@ -3,7 +3,7 @@ const mock = require('../../miniprogram/services/school-mock');
 const session = require('../../miniprogram/services/school-session');
 const association = require('../../miniprogram/services/association-scope');
 const space = require('../../miniprogram/services/association-space');
-const { COLLEGES } = require('../../miniprogram/utils/constants');
+const { COLLEGES } = require('../../src/shared/utils/constants');
 
 const scope = { schoolId: 'muc', association: 'pkb' };
 const ADMIN = 'demo_muc_admin';

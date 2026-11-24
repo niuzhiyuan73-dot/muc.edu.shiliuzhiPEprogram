@@ -1,6 +1,6 @@
 /** S2 比赛页面适配：纯构建器负责展示，服务端 DTO 决定能力。 */
 const { buildRecordRow, TAB, TAB_LABEL, TAB_EMPTY, DEFAULT_LIMIT } = require('./match-view');
-const { MATCH_STATUS } = require('../utils/constants');
+const { MATCH_STATUS } = require('../shared/utils/constants');
 const { resolveRouteId } = require('../utils/route-query');
 
 const recordOf = dto => ({ ...dto, _id: dto.matchId });

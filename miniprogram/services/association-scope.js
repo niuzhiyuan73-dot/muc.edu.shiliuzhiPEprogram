@@ -21,7 +21,7 @@
 const {
   defaultAssociationId,
   isKnownAssociation,
-} = require('../utils/associations.js');
+} = require('../shared/utils/associations.js');
 
 /** 当前协会 id；空串表示尚未设定 */
 let current = '';

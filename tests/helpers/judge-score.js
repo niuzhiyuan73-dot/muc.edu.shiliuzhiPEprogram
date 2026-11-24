@@ -9,7 +9,7 @@
  * 走完整录分会把每个测试都拖长。
  */
 
-const { meetScoreKey } = require('../../miniprogram/utils/meet-scope.js');
+const { meetScoreKey } = require('../../src/shared/utils/meet-scope.js');
 
 module.exports = async function markSubmitted(repo, options) {
   const {

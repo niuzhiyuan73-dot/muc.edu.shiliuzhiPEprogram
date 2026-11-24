@@ -33,7 +33,7 @@ const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 通过面板的文案。通过即转正，不可逆。 */
 const APPROVE_TEXT = {

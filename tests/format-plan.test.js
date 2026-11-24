@@ -25,17 +25,17 @@ const {
   placementsFromBracket,
   hasDoubleKnockout,
   walkDoubleElim,
-} = require('../miniprogram/services/format-plan.js');
-const { eventMatchKey } = require('../miniprogram/services/draw.js');
-const { roundRobinRounds } = require('../miniprogram/utils/standings.js');
-const { standardSeedOrder, bracketSizeOf } = require('../miniprogram/utils/bracket.js');
+} = require('../src/shared/services/format-plan.js');
+const { eventMatchKey } = require('../src/shared/services/draw.js');
+const { roundRobinRounds } = require('../src/shared/utils/standings.js');
+const { standardSeedOrder, bracketSizeOf } = require('../src/shared/utils/bracket.js');
 const {
   MATCH_STATUS,
   BRACKET_STAGE,
   EVENT_FORMAT,
   EVENT_PLACEMENT_MODE,
   EVENT_BRONZE_MODE,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 一场比赛（默认已生效、A 方胜、无逐局比分） */
 function mk(eventId, round, stage, slot, a, b, { winner = 'A', group, status = MATCH_STATUS.ACTIVE } = {}) {

@@ -40,7 +40,7 @@ const {
   drawnTeamIds,
   buildTeamRows,
 } = require('../miniprogram/services/events-view.js');
-const { sortCollegeEvents } = require('../miniprogram/services/college-event.js');
+const { sortCollegeEvents } = require('../src/shared/services/college-event.js');
 const {
   MATCH_TYPE,
   MATCH_STATUS,
@@ -56,7 +56,7 @@ const {
   EVENT_FORMAT,
   COLLEGE_EVENT_STATUS,
   TEAM_ID_SEPARATOR,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 一、纯函数部分

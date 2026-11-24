@@ -36,8 +36,8 @@ const {
   buildPickerRows,
   pickerEmptyText,
 } = require('../miniprogram/services/match-entry-view.js');
-const { MATCH_TYPE } = require('../miniprogram/utils/constants.js');
-const { GAME_POINTS_OPTIONS, BEST_OF_OPTIONS } = require('../miniprogram/utils/match-format.js');
+const { MATCH_TYPE } = require('../src/shared/utils/constants.js');
+const { GAME_POINTS_OPTIONS, BEST_OF_OPTIONS } = require('../src/shared/utils/match-format.js');
 
 const ME = { _id: 'u06', nickName: '赵明宇' };
 

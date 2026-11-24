@@ -8,10 +8,10 @@
  * ============================================================
  */
 
-const { STORAGE_KEY, DATA_SOURCE } = require('./utils/constants.js');
+const { STORAGE_KEY, DATA_SOURCE } = require('./shared/utils/constants.js');
 const { CLOUD_ENV_ID } = require('./config.js');
-const { defaultAssociationId } = require('./utils/associations.js');
-const { LEGACY_SCHOOL_ID } = require('./utils/school.js');
+const { defaultAssociationId } = require('./shared/utils/associations.js');
+const { LEGACY_SCHOOL_ID } = require('./shared/utils/school.js');
 const runtime = require('./services/runtime-mode.js');
 const associationScope = require('./services/association-scope.js');
 const appSession = require('./services/app-session.js');

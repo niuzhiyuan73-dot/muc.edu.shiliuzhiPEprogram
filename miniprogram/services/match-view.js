@@ -31,10 +31,10 @@ const {
   MATCH_TYPE_LABEL,
   ROLE,
   courtNoTextOf,
-} = require('../utils/constants.js');
-const { formatDateTime, formatScore } = require('../utils/format.js');
-const { formatMatchFormat, formatOfRecord } = require('../utils/match-format.js');
-const { createNameResolver } = require('../utils/stats.js');
+} = require('../shared/utils/constants.js');
+const { formatDateTime, formatScore } = require('../shared/utils/format.js');
+const { formatMatchFormat, formatOfRecord } = require('../shared/utils/match-format.js');
+const { createNameResolver } = require('../shared/utils/stats.js');
 const { describeLive } = require('./live-view.js');
 const {
   canAssignReferee,
@@ -44,7 +44,7 @@ const {
   hasReferee,
   needsScore,
   sideOf,
-} = require('./match-record.js');
+} = require('../shared/services/match-record.js');
 // 运行模式取中立模块，不经协议 1 门面（P10-a）。本模块剩下的唯一用途是
 // buildRecordRow 的 isMock 缺省值——S2 装载器都显式传 isMock:false，
 // 这里只是给「忘了传」的场景兜一个与当前数据源一致的底。

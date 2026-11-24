@@ -26,7 +26,7 @@ const {
   isValidBasketballRules,
   formatBasketballRules,
   canStartWithRoster,
-} = require('../miniprogram/utils/basketball-rules.js');
+} = require('../src/shared/utils/basketball-rules.js');
 
 /* ============================================================
  * 一、预设数值

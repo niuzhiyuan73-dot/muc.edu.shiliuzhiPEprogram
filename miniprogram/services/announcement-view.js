@@ -29,10 +29,10 @@
  * ============================================================
  */
 
-const { ANNOUNCEMENT_STATUS } = require('../utils/constants.js');
-const { activeAssociations } = require('../utils/associations.js');
-const { formatDateTime } = require('../utils/format.js');
-const { DEFAULT_CATEGORY } = require('./announcement.js');
+const { ANNOUNCEMENT_STATUS } = require('../shared/utils/constants.js');
+const { activeAssociations } = require('../shared/utils/associations.js');
+const { formatDateTime } = require('../shared/utils/format.js');
+const { DEFAULT_CATEGORY } = require('../shared/services/announcement.js');
 const { brandOf } = require('./branding.js');
 const scope = require('./association-scope.js');
 const space = require('./association-space.js');

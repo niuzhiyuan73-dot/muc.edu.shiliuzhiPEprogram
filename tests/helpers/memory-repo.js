@@ -24,10 +24,10 @@
 
 /** 浅拷贝一条文档。null / 原始值原样返回。 */
 const { SCHOOL_COLLECTIONS, attachSchoolRepository } = require('../../cloudfunctions/data/src/school-repository.js');
-const { memoryMatchPage } = require('../../miniprogram/services/match-list-query');
-const { fieldValues } = require('../../miniprogram/services/scoped-team-reads');
-const { memoryDirectoryPage, memoryDirectoryCount } = require('../../miniprogram/services/account-directory');
-const { memoryPersonalPage } = require('../../miniprogram/services/personal-sports-query');
+const { memoryMatchPage } = require('../../src/server/services/match-list-query');
+const { fieldValues } = require('../../src/server/services/scoped-team-reads');
+const { memoryDirectoryPage, memoryDirectoryCount } = require('../../src/server/services/account-directory');
+const { memoryPersonalPage } = require('../../src/server/services/personal-sports-query');
 
 function clone(doc) {
   return doc === null || typeof doc !== 'object' ? doc : { ...doc };

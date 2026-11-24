@@ -1,13 +1,13 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { teamSportStrategy, teamSportStrategyFor } = require('../miniprogram/utils/team-sport-rules');
-const { getAssociation, isKnownAssociation, basketballRulesOf } = require('../miniprogram/utils/associations');
-const { DEFAULT_PRESET_KEY, defaultRulesFor } = require('../miniprogram/utils/football-rules');
+const { teamSportStrategy, teamSportStrategyFor } = require('../src/shared/utils/team-sport-rules');
+const { getAssociation, isKnownAssociation, basketballRulesOf } = require('../src/shared/utils/associations');
+const { DEFAULT_PRESET_KEY, defaultRulesFor } = require('../src/shared/utils/football-rules');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { schoolMemberKey, schoolMembershipKey } = require('../miniprogram/utils/school');
-const service = require('../miniprogram/services/team-event-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { schoolMemberKey, schoolMembershipKey } = require('../src/shared/utils/school');
+const service = require('../src/server/services/team-event-service');
 
 const scope = { schoolId: 'muc', association: 'bk' };
 const footballRules = defaultRulesFor();

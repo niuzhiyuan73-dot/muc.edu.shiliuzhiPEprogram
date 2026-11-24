@@ -17,12 +17,12 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const {
   MATCH_TYPE, MATCH_STATUS, EVENT_STATUS, COLLEGES, COLLEGE_EVENT_STATUS, TIE_STATUS, LEG_DISCIPLINE,
   TIE_ALGO, TIE_NET_MODE,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -30,7 +30,7 @@ const at = offset => new Date(NOW.getTime() + offset).toISOString();
 
 /* ────────────────────────── 跨校邀请赛 ────────────────────────── */
 
-const exchange = require('../miniprogram/services/exchange-service');
+const exchange = require('../src/server/services/exchange-service');
 const exchangeForm = {
   title: '民大北航交流赛', location: '模拟球场', startTime: '2026-11-01T10:00:00Z',
   participantSchoolIds: ['muc', 'buaa'], quota: 4, schoolQuotas: { muc: 2, buaa: 2 },
@@ -90,7 +90,7 @@ test('跨校邀请赛：名次确认之后，比分不可撤、不可重录', as
     { eventId, matchId: semis[0]._id, scoreA: 4, scoreB: 11 });
   assert.equal(rescore.ok, false, '已结束的赛事不能重录比分');
   assert.match(rescore.message, /已结束/);
-  const handlers = require('../miniprogram/services/exchange-service.js');
+  const handlers = require('../src/server/services/exchange-service.js');
   assert.equal(typeof handlers.revokeExchangeScore, 'undefined', '交流赛撤销比分已删除');
 
   // 台账与名次都没被动过：撤销会被「已结束」挡住，而不是悄悄改掉比分。
@@ -101,8 +101,8 @@ test('跨校邀请赛：名次确认之后，比分不可撤、不可重录', as
 
 /* ────────────────────────── 校内个人赛事 ────────────────────────── */
 
-const eventHandlers = require('../miniprogram/services/school-event-service');
-const matchHandlers = require('../miniprogram/services/school-match-service');
+const eventHandlers = require('../src/server/services/school-event-service');
+const matchHandlers = require('../src/server/services/school-match-service');
 
 /** 民大 pkb：管理员 + 四名在册男会员（够排一张 4 人单败签表）。 */
 function eventFixture() {
@@ -191,7 +191,7 @@ test('校内个人赛：赛事结束之后，比赛不可确认 / 撤销 / 弃�
 
 /* ────────────────────────── 学院赛 ────────────────────────── */
 
-const collegeHandlers = require('../miniprogram/services/school-college-service');
+const collegeHandlers = require('../src/server/services/school-college-service');
 const C01 = 'c01';
 const C02 = 'c02';
 const NAME_C01 = COLLEGES[0];

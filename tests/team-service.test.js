@@ -15,10 +15,10 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/team-service');
-const { schoolMemberKey, schoolMembershipKey } = require('../miniprogram/utils/school');
-const { TEAM_STATUS, TEAM_MEMBER_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/team-service');
+const { schoolMemberKey, schoolMembershipKey } = require('../src/shared/utils/school');
+const { TEAM_STATUS, TEAM_MEMBER_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-19T12:00:00Z');
 const SCOPE = { schoolId: 'muc', association: 'bk' };
@@ -222,7 +222,7 @@ test('退队 —— 队员可退且留痕；队长必须先交接或归档', asy
   const left = await call(repo, 'leaveTeam', { teamId }, { actor: 'u_m1' });
   assert.equal(left.ok, true);
   const row = await repo.teamMembers.getById(
-    require('../miniprogram/utils/school').teamMemberKey(teamId, 'u_m1')
+    require('../src/shared/utils/school').teamMemberKey(teamId, 'u_m1')
   );
   assert.equal(row.status, TEAM_MEMBER_STATUS.LEFT, '退队是留痕，不删记录');
   assert.equal((await repo.teams.getById(teamId)).memberCount, 1);
@@ -247,7 +247,7 @@ test('转让队长 —— 只能转给在队队员，角色互换且队伍指向
   const team = await repo.teams.getById(teamId);
   assert.equal(team.captainId, 'u_m1');
 
-  const { teamMemberKey } = require('../miniprogram/utils/school');
+  const { teamMemberKey } = require('../src/shared/utils/school');
   const oldCaptain = await repo.teamMembers.getById(teamMemberKey(teamId, 'u_cap'));
   const newCaptain = await repo.teamMembers.getById(teamMemberKey(teamId, 'u_m1'));
   assert.equal(oldCaptain.role, 'member');

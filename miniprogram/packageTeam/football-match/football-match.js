@@ -3,10 +3,10 @@ const { fingerprintOf } = require('../../utils/fingerprint.js');
 const associationScope = require('../../services/association-scope');
 const schoolSession = require('../../services/school-session');
 const { currentThemeClass } = require('../../services/branding');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school');
 const { resolveRouteId } = require('../../utils/route-query');
 const { createReportForm, reportPayload, coverageLabels } = require('../../utils/football-report-form');
-const { normalizeFootballReport, normalizeSide, scoreText } = require('../../utils/football-report');
+const { normalizeFootballReport, normalizeSide, scoreText } = require('../../shared/utils/football-report');
 const { reportDifferences } = require('../../utils/interface-view');
 const requestId = () => `fb_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 Page({

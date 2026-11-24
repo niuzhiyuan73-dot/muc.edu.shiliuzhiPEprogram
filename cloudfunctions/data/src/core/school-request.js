@@ -1,10 +1,10 @@
 /** 协议 2：学校身份 + 协会空间接口。未迁移的旧 action 不可借此跨校调用。 */
 const { fail, ok } = require('../envelope.js');
 const { buildSchoolContext } = require('./school-context.js');
-const { buildMeetContext } = require('../../lib/services/meet-context.js');
-const { SCHOOL_MEET_ACTIONS } = require('../../lib/utils/school-actions.js');
+const { buildMeetContext } = require('../../lib/server/services/meet-context.js');
+const { SCHOOL_MEET_ACTIONS } = require('../../lib/shared/utils/school-actions.js');
 const { guardRate } = require('./rate-limit.js');
-const contextCache = require('../../lib/services/context-cache.js');
+const contextCache = require('../../lib/server/services/context-cache.js');
 const handlers = {
   ...require('./school-member-handlers.js'),
   ...require('./school-space-handlers.js'),

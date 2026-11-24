@@ -37,16 +37,16 @@
  * ============================================================
  */
 
-const { applyRally, liveScoreOf, LIVE_STATUS } = require('../../services/live-score.js');
+const { applyRally, liveScoreOf, LIVE_STATUS } = require('../../shared/services/live-score.js');
 const { describeLive } = require('../../services/live-view.js');
-const { formatMatchFormat, formatOfRecord } = require('../../utils/match-format.js');
-const { MATCH_COMPETITION, MATCH_STATUS } = require('../../utils/constants.js');
+const { formatMatchFormat, formatOfRecord } = require('../../shared/utils/match-format.js');
+const { MATCH_COMPETITION, MATCH_STATUS } = require('../../shared/utils/constants.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 const { pageScope, toast } = require('../../utils/page-helpers.js');
 

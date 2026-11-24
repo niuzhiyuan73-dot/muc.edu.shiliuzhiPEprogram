@@ -15,7 +15,7 @@ const space = require('../../services/association-space.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 生成一次提交的请求编号：时间戳 + 随机后缀，满足服务端字符集要求 */
 function nextRequestId() {

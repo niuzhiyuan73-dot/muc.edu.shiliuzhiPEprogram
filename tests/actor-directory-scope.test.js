@@ -22,10 +22,10 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { actorDirectory, userDirectory } = require('../miniprogram/services/school-actor');
-const rank = require('../miniprogram/services/school-rank-service');
-const teamEvent = require('../miniprogram/services/team-event-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { actorDirectory, userDirectory } = require('../src/server/services/school-actor');
+const rank = require('../src/server/services/school-rank-service');
+const teamEvent = require('../src/server/services/team-event-service');
 
 const SCOPE = { schoolId: 'muc', association: 'bk' };
 

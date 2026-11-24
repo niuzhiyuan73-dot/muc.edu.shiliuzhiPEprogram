@@ -23,7 +23,7 @@ const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-
 // 下的副本，而源文件在 miniprogram/services/。两份模块各自持有自己的 Map 与 TTL——
 // 拿源文件那份去断言，测的是另一个缓存，永远是「没命中」。镜像与源逐字节一致
 // 由 tests/cloud-lib-sync.test.js 守着，所以这里以运行时真正用到的那份为准。
-const contextCache = require('../cloudfunctions/data/lib/services/context-cache');
+const contextCache = require('../cloudfunctions/data/lib/server/services/context-cache');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 
@@ -113,7 +113,7 @@ describe('身份上下文缓存', () => {
     );
 
     // now 不进缓存：时间判定（报名截止、赛季分界）必须用本次请求的时间
-    const { buildSchoolContext } = require('../cloudfunctions/data/lib/services/school-context');
+    const { buildSchoolContext } = require('../cloudfunctions/data/lib/server/services/school-context');
     const before = await buildSchoolContext({ repo, openId: 'mock_openid_muc_admin', scope: SCOPE, action: 'getSchoolMembers' });
     const after = await buildSchoolContext({ repo, openId: 'mock_openid_muc_admin', scope: SCOPE, action: 'getSchoolMembers', now: new Date(Date.now() + 1000) });
     assert.notEqual(after.now, before.now);

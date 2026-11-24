@@ -2,11 +2,11 @@ const assert = require('node:assert/strict');
 const { generateSeed } = require('../../miniprogram/services/seed');
 const { createSchoolDemoSeed } = require('../../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../../miniprogram/services/school-context');
-const { schoolMemberKey, schoolRoleKey } = require('../../miniprogram/utils/school');
-const handlers = { ...require('../../miniprogram/services/school-match-service'),
-  ...require('../../miniprogram/services/school-rank-service'), ...require('../../miniprogram/services/school-event-service'),
-  ...require('../../miniprogram/services/school-live-service') };
+const { buildSchoolContext } = require('../../src/server/services/school-context');
+const { schoolMemberKey, schoolRoleKey } = require('../../src/shared/utils/school');
+const handlers = { ...require('../../src/server/services/school-match-service'),
+  ...require('../../src/server/services/school-rank-service'), ...require('../../src/server/services/school-event-service'),
+  ...require('../../src/server/services/school-live-service') };
 const space = require('../../miniprogram/services/association-space');
 
 /** 保留既有页面用例的人名和编号；所有读写均执行 S2 处理器。 */

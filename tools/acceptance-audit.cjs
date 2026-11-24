@@ -5,11 +5,11 @@
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const matches = require('../miniprogram/services/school-match-service');
-const events = require('../miniprogram/services/school-event-service');
-const { schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school');
-const { MATCH_TYPE, MATCH_STATUS, RATED_PAIR_LIMIT } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const matches = require('../src/server/services/school-match-service');
+const events = require('../src/server/services/school-event-service');
+const { schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school');
+const { MATCH_TYPE, MATCH_STATUS, RATED_PAIR_LIMIT } = require('../src/shared/utils/constants');
 const scope = { schoolId: 'muc', association: 'pkb' };
 const now = new Date('2026-10-16T10:00:00Z');
 const admin = 'demo_muc_admin', member = 'demo_muc_member';

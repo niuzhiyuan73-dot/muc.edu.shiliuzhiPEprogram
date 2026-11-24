@@ -2,10 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/exchange-service');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
-const { EVENT_FORMAT_LABEL } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/exchange-service');
+const { schoolMemberKey } = require('../src/shared/utils/school');
+const { EVENT_FORMAT_LABEL } = require('../src/shared/utils/constants');
 const NOW = new Date('2026-10-13T10:00:00Z');
 const form = { title: '民大北航交流赛', location: '模拟球场', startTime: '2026-11-01T10:00:00Z',
   participantSchoolIds: ['muc', 'buaa'], quota: 4, schoolQuotas: { muc: 2, buaa: 2 }, requestId: 'test1' };
@@ -371,7 +371,7 @@ test('退赛：本人取消与管理员移除都只在报名阶段，且释放�
   const after = await repo.exchangeEvents.getById(id);
   assert.equal(after.signupCount, 2);
   assert.equal(after.schoolCounts.muc, 1);
-  const row = await repo.exchangeSignups.getById(require('../miniprogram/utils/school')
+  const row = await repo.exchangeSignups.getById(require('../src/shared/utils/school')
     .schoolKey('xs', id, 'demo_muc_admin'));
   assert.equal(row.status, 'removed');
   assert.equal(row.removeReason, '临时有事');
@@ -451,7 +451,7 @@ test('比分撤销已取消：已确认的交流赛比分不可退回待确认',
   const confirmed = await repo.exchangeMatches.getById(semis[0]._id);
   assert.equal(confirmed.status, 'active');
   assert.equal(typeof handlers.revokeExchangeScore, 'undefined', '撤销实现已删除');
-  const actions = require('../miniprogram/utils/school-actions.js');
+  const actions = require('../src/shared/utils/school-actions.js');
   assert.equal(actions.SCHOOL_EXCHANGE_ACTIONS.includes('revokeExchangeScore'), false,
     '撤销动作已从协议 2 白名单移除');
   assert.equal((await repo.exchangeMatches.getById(semis[0]._id)).scoreA, 11, '比分未被清空');
@@ -478,7 +478,7 @@ test('失效身份在锁定名单时被清理并释放名额，仍够两校则�
   assert.deepEqual(event.prunedSignups.map(row => row.userId), ['demo_buaa_admin']);
   // 报名行不再被改写：锁定是「产出一份名册」，不是对每条报名做状态迁移。
   // 失效者只是不进名册，历史报名记录保持原样（锁定后本来也不允许再改动）。
-  const untouched = await repo.exchangeSignups.getById(require('../miniprogram/utils/school')
+  const untouched = await repo.exchangeSignups.getById(require('../src/shared/utils/school')
     .schoolKey('xs', id, 'demo_buaa_admin'));
   assert.equal(untouched.status, 'signed', '报名行不应被改写');
   assert.deepEqual(event.roster.map(row => row.userId).sort(),

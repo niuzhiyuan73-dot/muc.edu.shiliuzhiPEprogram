@@ -8,7 +8,7 @@ const {
   describeSearch,
   loadSchoolRankView,
 } = require('../miniprogram/services/rank-view.js');
-const { RANK_PROJECT } = require('../miniprogram/utils/constants.js');
+const { RANK_PROJECT } = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 本文件已被 P10 合并批瘦身（26 条 → 9 条）

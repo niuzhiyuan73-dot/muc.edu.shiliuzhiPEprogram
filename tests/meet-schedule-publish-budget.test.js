@@ -22,12 +22,12 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
-const schedule = require('../miniprogram/services/meet-schedule-service.js');
-const advance = require('../miniprogram/services/meet-advance-service.js');
-const { MEET_STATUS, MEET_EVENT_STATUS, meetSessionKey } = require('../miniprogram/utils/meet-scope.js');
-const { MEET_SCORE_TYPE } = require('../miniprogram/services/meet-event-catalog.js');
-const { schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const schedule = require('../src/server/services/meet-schedule-service.js');
+const advance = require('../src/server/services/meet-advance-service.js');
+const { MEET_STATUS, MEET_EVENT_STATUS, meetSessionKey } = require('../src/shared/utils/meet-scope.js');
+const { MEET_SCORE_TYPE } = require('../src/shared/services/meet-event-catalog.js');
+const { schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 
 const SCHOOL = 'muc';
 const T0 = new Date('2026-10-24T08:00:00Z');

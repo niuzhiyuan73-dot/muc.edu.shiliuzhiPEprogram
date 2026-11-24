@@ -31,7 +31,7 @@
  * ============================================================
  */
 
-const { RATING_POOL_LABEL } = require('../utils/constants.js');
+const { RATING_POOL_LABEL } = require('../shared/utils/constants.js');
 const {
   formatDate,
   formatSigned,
@@ -40,11 +40,11 @@ const {
   formatPlacement,
   formatRank,
   formatScore,
-} = require('../utils/format.js');
-const { sortProjectsForDisplay } = require('../utils/leaderboard.js');
-const { allAssociations } = require('../utils/associations.js');
-const { formatMatchFormat, formatOfRecord } = require('../utils/match-format.js');
-const { resolveNameDisplay } = require('./profile.js');
+} = require('../shared/utils/format.js');
+const { sortProjectsForDisplay } = require('../shared/utils/leaderboard.js');
+const { allAssociations } = require('../shared/utils/associations.js');
+const { formatMatchFormat, formatOfRecord } = require('../shared/utils/match-format.js');
+const { resolveNameDisplay } = require('../shared/services/profile.js');
 
 /** 默认取多少场逐场战绩。太多会拖慢首屏，剩下的靠「加载更多」。 */
 const DEFAULT_HISTORY_LIMIT = 20;

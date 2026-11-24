@@ -2,11 +2,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const groupHandlers = require('../miniprogram/services/association-group-service');
-const handlers = require('../miniprogram/services/association-training-service');
-const { buildTrainingPointFacts } = require('../miniprogram/services/training-points');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const groupHandlers = require('../src/server/services/association-group-service');
+const handlers = require('../src/server/services/association-training-service');
+const { buildTrainingPointFacts } = require('../src/server/services/training-points');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 
 const HANDLERS = { ...groupHandlers, ...handlers };
 
@@ -20,7 +20,7 @@ function fixture({ leader = false } = {}) {
   seed.users.push({ _id: 'demo_platform_admin', openId: 'mock_openid_platform_admin',
     nickName: '平台管理员', platformStatus: 'active', platformRole: 'admin', simulated: true });
   if (leader) {
-    seed.memberships.push({ _id: require('../miniprogram/utils/school').schoolMembershipKey(
+    seed.memberships.push({ _id: require('../src/shared/utils/school').schoolMembershipKey(
       'demo_muc_member', { schoolId: 'muc', association: 'pkb' }),
       userId: 'demo_muc_member', schoolId: 'muc', association: 'pkb', role: 'leader', status: 'active' });
   }
@@ -74,7 +74,7 @@ test('T04 未报名不能签到，且只会给自己签到（忽略伪造 userId
   assert.equal(submitted.ok, true);
   assert.equal(submitted.registration.attendanceStatus, 'pending');
   const adminReg = await repo.trainingRegistrations.getById(
-    require('../miniprogram/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_admin',
+    require('../src/shared/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_admin',
       { schoolId: 'muc', association: 'pkb' }));
   assert.equal(adminReg, null, '伪造的 userId 未落库');
 });
@@ -254,7 +254,7 @@ test('T25 已报名后失去会员身份，负责人确认被拒并自动移除�
   assert.match(confirmed.message, /自动移除/);
 
   const reg = await repo.trainingRegistrations.getById(
-    require('../miniprogram/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_member',
+    require('../src/shared/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_member',
       { schoolId: 'muc', association: 'pkb' }));
   assert.equal(reg.signupStatus, 'canceled', '报名被自动取消');
   assert.equal(reg.attendanceStatus, 'not_submitted');
@@ -275,7 +275,7 @@ test('赛季重置：未确认的 pending 自动退回为未参加（T15）', as
   assert.equal(returned, 1);
 
   const reg = await repo.trainingRegistrations.getById(
-    require('../miniprogram/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_member',
+    require('../src/shared/utils/school').trainingRegistrationKey(t.trainingId, 'demo_muc_member',
       { schoolId: 'muc', association: 'pkb' }));
   assert.equal(reg.attendanceStatus, 'not_submitted', 'pending 被退回为未参加');
   assert.match(reg.rejectionReason, /赛季/);

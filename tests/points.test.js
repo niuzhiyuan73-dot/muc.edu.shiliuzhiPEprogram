@@ -12,12 +12,12 @@ const {
   DEFAULT_POINT_CONFIG,
   placementBaseOf,
   calculateEventPoints,
-} = require('../miniprogram/utils/points.js');
+} = require('../src/shared/utils/points.js');
 const {
   EVENT_LEVEL,
   EVENT_LEVEL_MULTIPLIER,
   DEFAULT_EVENT_LEVEL,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 describe('placementBaseOf —— 名次档位基础分', () => {
   test('前四名各有固定档位', () => {

@@ -6,11 +6,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/team-event-service');
-const teamHandlers = require('../miniprogram/services/team-service');
-const { schoolMemberKey, schoolMembershipKey } = require('../miniprogram/utils/school');
-const { TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS, TEAM_MATCH_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/team-event-service');
+const teamHandlers = require('../src/server/services/team-service');
+const { schoolMemberKey, schoolMembershipKey } = require('../src/shared/utils/school');
+const { TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS, TEAM_MATCH_STATUS } = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-20T10:00:00Z');
 const SCOPE = { schoolId: 'muc', association: 'bk' };
@@ -113,7 +113,7 @@ test('报名 → 审核 → 锁定：名单成为快照，锁后不可改', asyn
   assert.equal(updated.status, TEAM_EVENT_STATUS.LOCKED, '锁定名单只到「名单已锁定」，赛程要抽签之后才有');
 
   const entry = await repo.teamEventEntries.getById(
-    require('../miniprogram/utils/school.js').schoolKey('ten', event.eventId, teamId)
+    require('../src/shared/utils/school.js').schoolKey('ten', event.eventId, teamId)
   );
   assert.equal(entry.status, TEAM_ENTRY_STATUS.LOCKED);
   assert.equal(entry.roster.length, 5);
@@ -410,7 +410,7 @@ test('录分 —— 带个人统计时合计与球队得分不符只提示，不
   assert.match(out.warnings[0], /差 60 分待归属/);
 
   const stats = await repo.teamMatchStats.getById(
-    require('../miniprogram/utils/school.js').schoolKey('tms', row.matchId, row.teamA)
+    require('../src/shared/utils/school.js').schoolKey('tms', row.matchId, row.teamA)
   );
   assert.equal(stats.integrity, 'basic');
   assert.deepEqual(stats.players, [{ userId: scorer, points: 20, fouls: 3 }]);
@@ -544,7 +544,7 @@ test('统计保存 —— 合计与球队得分不符只提示；空格子保持
   assert.match(saved.warnings[0], /差 60 分待归属/);
 
   const doc = await repo.teamMatchStats.getById(
-    require('../miniprogram/utils/school.js').schoolKey('tms', row.matchId, side.teamId)
+    require('../src/shared/utils/school.js').schoolKey('tms', row.matchId, side.teamId)
   );
   assert.equal(doc.integrity, 'basic');
   const first = doc.players.find(item => item.userId === side.players[0].userId);
@@ -677,7 +677,7 @@ test('按节统计 —— 合计由各行算出，节次越界与未开模式的
   assert.equal(after.assists, null, '没录的指标是未记录，不是 0');
 
   const doc = await repo.teamMatchStats.getById(
-    require('../miniprogram/utils/school.js').schoolKey('tms', row.matchId, row.teamA)
+    require('../src/shared/utils/school.js').schoolKey('tms', row.matchId, row.teamA)
   );
   assert.equal(doc.mode, 'detailed');
   assert.equal(doc.rows.length, 2);
@@ -729,7 +729,7 @@ test('按节统计 —— 赛事没开 detailed 时拒绝，录满全队才记 f
     rows: side.players.map(player => ({ period: 1, userId: player.userId, points: 6 })),
   });
   const doc = await repo2.teamMatchStats.getById(
-    require('../miniprogram/utils/school.js').schoolKey('tms', m2.matchId, m2.teamA)
+    require('../src/shared/utils/school.js').schoolKey('tms', m2.matchId, m2.teamA)
   );
   assert.equal(doc.integrity, 'full');
   assert.equal(doc.rows.length, 5);

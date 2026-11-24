@@ -33,14 +33,14 @@
  * ============================================================
  */
 
-const { RATING_POOL, SIGNUP_STATUS } = require('../utils/constants.js');
-const { getAssociation, isKnownAssociation } = require('../utils/associations.js');
+const { RATING_POOL, SIGNUP_STATUS } = require('../shared/utils/constants.js');
+const { getAssociation, isKnownAssociation } = require('../shared/utils/associations.js');
 // 路由编号兼容（query 值在不同环境可能已解码 / 未解码，见 utils/route-query.js）
 const { resolveRouteId } = require('../utils/route-query.js');
 const space = require('./association-space.js');
-const { buildEventRow } = require('./event.js');
-const { actualSeedCount, manualPlayersNeeded } = require('./draw.js');
-const { derivePlacements } = require('./format-plan.js');
+const { buildEventRow } = require('../shared/services/event.js');
+const { actualSeedCount, manualPlayersNeeded } = require('../shared/services/draw.js');
+const { derivePlacements } = require('../shared/services/format-plan.js');
 
 /**
  * `limit: Infinity`（取齐）最多翻几页。每页在服务端都是一次全表读 + 全量排序，

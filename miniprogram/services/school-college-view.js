@@ -39,22 +39,22 @@ const {
   COLLEGE_EVENT_STATUS, COLLEGE_ENTRY_STATUS, TIE_STATUS, MATCH_STATUS, MATCH_OUTCOME,
   GENDER_LABEL, LEG_DISCIPLINE_LABEL, MATCH_TYPE_LABEL,
   requiredGendersOf, courtNoTextOf, courtCountTextOf,
-} = require('../utils/constants.js');
-const { formatDate, formatDateTime, formatScore } = require('../utils/format.js');
-const { formatMatchFormat } = require('../utils/match-format.js');
+} = require('../shared/utils/constants.js');
+const { formatDate, formatDateTime, formatScore } = require('../shared/utils/format.js');
+const { formatMatchFormat } = require('../shared/utils/match-format.js');
 // 路由编号兼容（query 值在不同环境可能已解码 / 未解码，见 utils/route-query.js）
 const { routeIdCandidates } = require('../utils/route-query.js');
 const space = require('./association-space.js');
-const { entryStateOf, remainingMemberIds } = require('./college-entry.js');
-const { approvedCollegesOf } = require('./college-draw.js');
+const { entryStateOf, remainingMemberIds } = require('../shared/services/college-entry.js');
+const { approvedCollegesOf } = require('../shared/services/college-draw.js');
 const {
   tieStatusLabelOf, firstRoundPairsOf, isDoublesDiscipline,
-} = require('./college-tie.js');
-const { defaultLineupEntries, playersPerLeg } = require('./college-lineup.js');
+} = require('../shared/services/college-tie.js');
+const { defaultLineupEntries, playersPerLeg } = require('../shared/services/college-lineup.js');
 const { statusTagOf } = require('./match-view.js');
 const { describeLive } = require('./live-view.js');
-// 列表读端封顶的条数：与 school-college-service 同一常量，避免两处各写一个数。
-const { EVENT_LIST_MAX } = require('./school-college-service.js');
+// 列表读端封顶的条数：从共享层 college-event 取统一常量，避免前端视图误引服务端模块。
+const { EVENT_LIST_MAX } = require('../shared/services/college-event.js');
 
 /** 取齐最多翻几页，与 school-event-view.js:49 同口径：每页都是一次服务端整表读 */
 const INFINITE_FETCH_PAGES = 5;
@@ -967,7 +967,7 @@ async function canPublishCollegeEvent(options = {}) {
 
 /** 名次文案：淘汰赛口径（1 冠军 / 2 亚军 / 3 四强），与个人赛的奖牌文案各管各的。 */
 function formatPlacementText(placement) {
-  const { formatPlacement } = require('../utils/format.js');
+  const { formatPlacement } = require('../shared/utils/format.js');
   return formatPlacement(placement);
 }
 

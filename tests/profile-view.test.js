@@ -9,9 +9,9 @@ const {
   loadSchoolProfileSummaryView,
   DEFAULT_HISTORY_LIMIT,
 } = require('../miniprogram/services/profile-view.js');
-const { PLACEHOLDER } = require('../miniprogram/utils/format.js');
-const { sortProjectsForDisplay } = require('../miniprogram/utils/leaderboard.js');
-const { RANK_PROJECT_CONFIG } = require('../miniprogram/utils/constants.js');
+const { PLACEHOLDER } = require('../src/shared/utils/format.js');
+const { sortProjectsForDisplay } = require('../src/shared/utils/leaderboard.js');
+const { RANK_PROJECT_CONFIG } = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 一、纯函数部分

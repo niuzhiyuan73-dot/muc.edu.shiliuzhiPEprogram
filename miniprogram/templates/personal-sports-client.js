@@ -1,6 +1,6 @@
 const identity = require('../services/school-identity');
 const association = require('../services/association-scope');
-const { isKnownAssociation } = require('../utils/associations');
+const { isKnownAssociation } = require('../shared/utils/associations');
 function loadPersonalSports(schoolId, payload) {
   return identity.forSchoolIdentity({ schoolId, association: association.getAssociation() }).getMySportsDashboard(payload);
 }

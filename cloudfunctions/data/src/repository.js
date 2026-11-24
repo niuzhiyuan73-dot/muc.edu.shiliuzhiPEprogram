@@ -88,7 +88,7 @@
  * ============================================================
  */
 
-const { COLLECTION } = require('../lib/utils/constants.js');
+const { COLLECTION } = require('../lib/shared/utils/constants.js');
 
 /** 逻辑名 → 集合名。集合名集中在 utils/constants.js 定义，便于迁移。 */
 const COLLECTIONS = {

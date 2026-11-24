@@ -293,7 +293,7 @@ test('个人主页与荣誉的整表读也登记了成本点（第十八轮 P1�
 
 test('成本表只能登记白名单里的动作，且成本为正整数', () => {
   const { SCHOOL_IDENTITY_ACTIONS, SCHOOL_SPACE_ACTIONS,
-    SCHOOL_EXCHANGE_ACTIONS, SCHOOL_MEET_ACTIONS } = require('../miniprogram/utils/school-actions');
+    SCHOOL_EXCHANGE_ACTIONS, SCHOOL_MEET_ACTIONS } = require('../src/shared/utils/school-actions');
   const known = new Set([...SCHOOL_IDENTITY_ACTIONS, ...SCHOOL_SPACE_ACTIONS,
     ...SCHOOL_EXCHANGE_ACTIONS, ...SCHOOL_MEET_ACTIONS]);
   for (const [action, cost] of Object.entries(ACTION_READ_COST)) {

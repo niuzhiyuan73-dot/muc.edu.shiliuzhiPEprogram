@@ -17,12 +17,12 @@
  * ============================================================
  */
 
-const { createSeededRandom, randomInt, pick, shuffle } = require('../utils/random.js');
+const { createSeededRandom, randomInt, pick, shuffle } = require('../shared/utils/random.js');
 // 标准种子排位表搬到工具层，正式抽签与这里的模拟数据共用同一份
-const { standardSeedOrder } = require('../utils/bracket.js');
+const { standardSeedOrder } = require('../shared/utils/bracket.js');
 // 比赛的确定性编号（轮次 + 阶段 + 签位）也只有一份，演示赛事的签表
 // 必须与正式抽签用同一个键，否则「逐轮推进」会把它当成没排过而重复生成
-const { eventMatchKey } = require('./draw.js');
+const { eventMatchKey } = require('../shared/services/draw.js');
 const {
   MATCH_TYPE,
   MATCH_TYPE_LABEL,
@@ -36,12 +36,12 @@ const {
   SIGNUP_STATUS,
   LEG_DISCIPLINE,
   ROLE,
-} = require('../utils/constants.js');
-const { DEFAULT_FORMAT, gamesToWin } = require('../utils/match-format.js');
+} = require('../shared/utils/constants.js');
+const { DEFAULT_FORMAT, gamesToWin } = require('../shared/utils/match-format.js');
 // 场号必须用与正式抽签完全相同的分配函数算出来，不能在种子里手写：
 // 手写的场号一旦与 planCourts 的算法分叉，界面上的「场地分配」表就会
 // 与签表里的场号对不上，而这种不一致光看数据是看不出来的
-const { withCourts } = require('./court.js');
+const { withCourts } = require('../shared/services/court.js');
 
 /** 默认随机种子。换一个数字就能得到一整套完全不同的模拟数据。 */
 const DEFAULT_SEED = 20260901;

@@ -43,7 +43,7 @@ const {
   nextRoundPairsOf,
   roundTextOf,
   buildTieRow,
-} = require('../miniprogram/services/college-tie.js');
+} = require('../src/shared/services/college-tie.js');
 const {
   ROLE,
   USER_STATUS,
@@ -59,8 +59,8 @@ const {
   COLLEGE_LEG_FORMAT,
   EVENT_LEVEL,
   TEAM,
-} = require('../miniprogram/utils/constants.js');
-const { validateMatchScore } = require('../miniprogram/utils/match-format.js');
+} = require('../src/shared/utils/constants.js');
+const { validateMatchScore } = require('../src/shared/utils/match-format.js');
 
 /** 造一条小项 */
 function leg(legNo, discipline, winner, pointsA = 0, pointsB = 0) {

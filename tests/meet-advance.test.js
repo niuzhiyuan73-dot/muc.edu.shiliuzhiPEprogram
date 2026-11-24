@@ -17,7 +17,7 @@ const assert = require('node:assert');
 const {
   ADVANCE_MODE, advanceFromHeats, bracketStandings, bracketTotalRounds,
   bracketRoundLabel, roundRobinRounds, roundRobinStandings, rankByValue,
-} = require('../miniprogram/services/meet-advance.js');
+} = require('../src/server/services/meet-advance.js');
 
 /** 构造一组预赛：heats[index] = [[entryKey, 成绩], ...] */
 function heatsOf(spec) {

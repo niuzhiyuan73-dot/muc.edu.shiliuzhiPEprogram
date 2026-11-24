@@ -12,8 +12,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
 
-const { isActive, canManage, managesCollege } = require('../miniprogram/services/permission.js');
-const { ROLE, USER_STATUS } = require('../miniprogram/utils/constants.js');
+const { isActive, canManage, managesCollege } = require('../src/shared/services/permission.js');
+const { ROLE, USER_STATUS } = require('../src/shared/utils/constants.js');
 
 /** 一位在岗会员，角色与学院由 extra 指定 */
 const actor = (role, extra = {}) => ({

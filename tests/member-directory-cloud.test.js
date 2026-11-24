@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { readMemberPage } = require('../cloudfunctions/data/src/adapters/member-page');
-const { memoryDirectoryPage, accountDirectoryFields } = require('../miniprogram/services/account-directory');
+const { memoryDirectoryPage, accountDirectoryFields } = require('../src/server/services/account-directory');
 const scope = { schoolId: 'muc', association: 'pkb' };
 const { directoryDatabase } = require('../tools/audit-directory-database.cjs');
 

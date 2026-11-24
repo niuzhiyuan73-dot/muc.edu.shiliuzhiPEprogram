@@ -23,7 +23,7 @@ const { createMemberPage } = require('../../templates/member-view.js');
 const identity = require('../../services/school-identity.js');
 const scope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 档位中文名：只用于按钮文案，档位清单仍以服务端 grants 为准 */
 const PERMISSION_LABEL = {

@@ -11,13 +11,13 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-event-service');
-const matchHandlers = require('../miniprogram/services/school-match-service');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-event-service');
+const matchHandlers = require('../src/server/services/school-match-service');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const {
   MATCH_TYPE, MATCH_STATUS, MATCH_COMPETITION, EVENT_STATUS, SIGNUP_STATUS,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;

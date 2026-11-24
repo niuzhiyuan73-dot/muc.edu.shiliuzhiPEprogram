@@ -19,7 +19,7 @@
  */
 
 const crypto = require('crypto');
-const { schoolAccountKey } = require('../../lib/utils/school.js');
+const { schoolAccountKey } = require('../../lib/shared/utils/school.js');
 
 /**
  * 把若干字段拼成定长十六进制摘要。

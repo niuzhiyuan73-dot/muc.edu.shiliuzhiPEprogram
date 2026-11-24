@@ -15,12 +15,12 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const rank = require('../miniprogram/services/school-rank-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const rank = require('../src/server/services/school-rank-service');
 const {
   collegeKey, schoolMemberKey, memberRatingKey, schoolAssociationKey,
-} = require('../miniprogram/utils/school');
-const { MATCH_STATUS, SETTLEMENT_STATUS, MATCH_TYPE } = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/school');
+const { MATCH_STATUS, SETTLEMENT_STATUS, MATCH_TYPE } = require('../src/shared/utils/constants');
 
 const SCHOOL = 'muc';
 const ASSOC = 'pkb';

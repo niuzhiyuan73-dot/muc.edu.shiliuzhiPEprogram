@@ -23,9 +23,9 @@
 const identity = require('../../services/school-identity.js');
 const space = require('../../services/association-space.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { validateAnnouncement } = require('../../services/announcement.js');
-const { ANNOUNCEMENT_CATEGORIES } = require('../../utils/constants.js');
-const { formatDateTime } = require('../../utils/format.js');
+const { validateAnnouncement } = require('../../shared/services/announcement.js');
+const { ANNOUNCEMENT_CATEGORIES } = require('../../shared/utils/constants.js');
+const { formatDateTime } = require('../../shared/utils/format.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 
 /** 二级页签定义。顺序即页面上的先后，默认落在「训练」 */
@@ -355,7 +355,7 @@ Component({
         ? require('../../services/school-demo.js').schoolAssociations(schoolId) : null;
       const found = demo && demo.find((item) => item.id === association);
       if (found) return found.name;
-      return require('../../utils/associations.js').getAssociation(association).shortName;
+      return require('../../shared/utils/associations.js').getAssociation(association).shortName;
     },
 
     describeGroup(row) {

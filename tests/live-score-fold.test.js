@@ -19,7 +19,7 @@ const assert = require('node:assert/strict');
 const {
   LIVE_STATUS, RALLY_FOLD_AT, createLive, applyRally, undoRally, hasRally,
   replayRallies, toOfficialScores, foldedCount,
-} = require('../miniprogram/services/live-score.js');
+} = require('../src/shared/services/live-score.js');
 
 const NOW = new Date('2026-10-23T10:00:00Z');
 // bestOf 只有 1 / 3 / 5 三种（match-format 的 BEST_OF_OPTIONS），5 局制需要 3 局到手

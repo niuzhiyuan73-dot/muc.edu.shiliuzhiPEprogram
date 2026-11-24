@@ -72,7 +72,7 @@ function cloudAdapter() {
   } catch (err) {
     throw new Error('缺少 @cloudbase/node-sdk，请先 npm i @cloudbase/node-sdk，或改用 --adapter=memory 演练');
   }
-  const { schoolMemberKey } = require('../miniprogram/utils/school.js');
+  const { schoolMemberKey } = require('../src/shared/utils/school.js');
   const app = tcb.init({
     env: process.env.TCB_ENV || process.env.CLOUDBASE_ENV || process.env.ENV_ID,
     secretId: process.env.TCB_SECRET_ID || process.env.SECRETID,
@@ -113,9 +113,9 @@ function cloudAdapter() {
 function memoryAdapter() {
   const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed.js');
   const { createMemoryRepo } = require('../tests/helpers/memory-repo.js');
-  const { schoolMemberKey, memberRatingKey } = require('../miniprogram/utils/school.js');
-  const { RATING_POOL } = require('../miniprogram/utils/constants.js');
-  const { allAssociations } = require('../miniprogram/utils/associations.js');
+  const { schoolMemberKey, memberRatingKey } = require('../src/shared/utils/school.js');
+  const { RATING_POOL } = require('../src/shared/utils/constants.js');
+  const { allAssociations } = require('../src/shared/utils/associations.js');
   const seed = createSchoolDemoSeed();
   const repo = createMemoryRepo(seed);
   // 造数是异步的，必须等它写完再开始扫，否则第一批会读到半成品。

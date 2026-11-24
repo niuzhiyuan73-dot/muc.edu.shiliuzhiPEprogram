@@ -18,9 +18,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
-const reg = require('../miniprogram/services/meet-registration-service.js');
-const { MEET_INTEREST_STATUS, MEET_ENTRY_STATUS } = require('../miniprogram/utils/meet-scope.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
+const reg = require('../src/server/services/meet-registration-service.js');
+const { MEET_INTEREST_STATUS, MEET_ENTRY_STATUS } = require('../src/shared/utils/meet-scope.js');
 
 const SCHOOL = 'muc';
 const MEET = 'mt_muc_59';

@@ -12,8 +12,8 @@ const {
   validateAnnouncement,
   buildAnnouncementRecord,
   buildAnnouncementRow,
-} = require('../miniprogram/services/announcement.js');
-const { ROLE, USER_STATUS, ANNOUNCEMENT_STATUS } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/services/announcement.js');
+const { ROLE, USER_STATUS, ANNOUNCEMENT_STATUS } = require('../src/shared/utils/constants.js');
 
 /** 一个正常会员 */
 function member(overrides = {}) {

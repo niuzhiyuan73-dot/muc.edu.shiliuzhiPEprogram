@@ -20,9 +20,9 @@ const {
   seasonPairCounts,
   findCappedMatchIds,
   checkSubmitAllowed,
-} = require('../miniprogram/services/rating-cap.js');
+} = require('../src/server/services/rating-cap.js');
 
-const { MATCH_STATUS, MATCH_TYPE, RATED_PAIR_LIMIT } = require('../miniprogram/utils/constants.js');
+const { MATCH_STATUS, MATCH_TYPE, RATED_PAIR_LIMIT } = require('../src/shared/utils/constants.js');
 
 /** 一场日常单打 */
 function casualSingles(id, a, b, matchTime, status = MATCH_STATUS.ACTIVE) {
@@ -745,7 +745,7 @@ describe('checkSubmitAllowed —— 提交前那道闸门', () => {
  * findCappedPairs 挑出已满的对，pairCapMessage 说同一句话。
  */
 
-const { findCappedPairs, pairCapMessage } = require('../miniprogram/services/rating-cap.js');
+const { findCappedPairs, pairCapMessage } = require('../src/server/services/rating-cap.js');
 
 describe('findCappedPairs —— 按给定用量挑出已满额的对', () => {
   const pairs = [

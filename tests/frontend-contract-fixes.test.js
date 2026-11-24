@@ -157,9 +157,9 @@ test('跨校页面：主办校不能去除，超过八校拒绝；单校和非�
 test('跨校三校表单实际写入服务端：主办校自动接受，两所受邀校待确认，配额保持独立', async () => {
   const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
   const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-  const { buildSchoolContext } = require('../miniprogram/services/school-context');
-  const { schoolAssociationKey } = require('../miniprogram/utils/school');
-  const backend = require('../miniprogram/services/exchange-service');
+  const { buildSchoolContext } = require('../src/server/services/school-context');
+  const { schoolAssociationKey } = require('../src/shared/utils/school');
+  const backend = require('../src/server/services/exchange-service');
   const seed = createSchoolDemoSeed();
   seed.schools.push({ _id: 'third', schoolId: 'third', name: '第三所大学', status: 'active' });
   seed.schoolAssociations.push({ _id: schoolAssociationKey({ schoolId: 'third', association: 'pkb' }),

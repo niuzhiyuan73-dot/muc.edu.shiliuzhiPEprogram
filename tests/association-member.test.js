@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeText, normalizeKeyword, matchesKeyword, prefixRank,
   encodeCursor, decodeCursor, searchMemberPage,
-} = require('../miniprogram/services/association-member');
+} = require('../src/server/services/association-member');
 
 const ROSTER = Object.freeze([
   { userId: 'u3', nickName: '张宇轩', realName: '张三' },

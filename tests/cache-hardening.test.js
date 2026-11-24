@@ -8,9 +8,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 
 // 取云端镜像实例：handleSchoolRequest 加载的是 cloudfunctions/data/lib 下的同一份。
-const contextCache = require('../cloudfunctions/data/lib/services/context-cache.js');
-const { loadColleges } = require('../miniprogram/services/college-directory.js');
-const { isCalendarDate } = require('../miniprogram/services/meet-time.js');
+const contextCache = require('../cloudfunctions/data/lib/server/services/context-cache.js');
+const { loadColleges } = require('../src/server/services/college-directory.js');
+const { isCalendarDate } = require('../src/server/services/meet-time.js');
 const { createMemoryRepo } = require('./helpers/memory-repo');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-request');

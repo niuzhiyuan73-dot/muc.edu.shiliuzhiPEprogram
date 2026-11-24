@@ -1,5 +1,5 @@
 const { COLLECTIONS } = require('../repository');
-const { queryPlan } = require('../../lib/services/personal-sports-query');
+const { queryPlan } = require('../../lib/server/services/personal-sports-query');
 
 /** SDK 表达式只在适配器构造，查询规格不依赖云 SDK。 */
 function compileExpression(value, aggregate) {

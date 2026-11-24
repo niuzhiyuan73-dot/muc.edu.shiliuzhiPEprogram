@@ -18,8 +18,8 @@ const {
   normalizeCourtCount,
   planCourts,
   withCourts,
-} = require('../miniprogram/services/court.js');
-const { BRACKET_STAGE, COURT_LIMITS } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/services/court.js');
+const { BRACKET_STAGE, COURT_LIMITS } = require('../src/shared/utils/constants.js');
 
 /** 造一场比赛。只带分配用得到的字段，_id 用来兜底排序 */
 function match(id, extra = {}) {

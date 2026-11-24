@@ -24,11 +24,11 @@ const { handleSchoolRequest } = require('../cloudfunctions/data/src/core/school-
 const {
   computeSettlement, materializeRatings, settleMatchInTransaction, buildRatingDoc,
   syncRatingProfileInTransaction,
-} = require('../miniprogram/services/school-rating-service');
+} = require('../src/server/services/school-rating-service');
 const {
   memberRatingKey, schoolMemberKey, SCHOOL_MEMBER_STATUS,
-} = require('../miniprogram/utils/school');
-const { RATING_POOL } = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/school');
+const { RATING_POOL } = require('../src/shared/utils/constants');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const NOW = new Date('2026-10-23T02:00:00Z');

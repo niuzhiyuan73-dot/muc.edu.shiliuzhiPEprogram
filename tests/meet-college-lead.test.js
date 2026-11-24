@@ -14,17 +14,17 @@ const test = require('node:test');
 const assert = require('node:assert');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildMeetContext } = require('../miniprogram/services/meet-context.js');
+const { buildMeetContext } = require('../src/server/services/meet-context.js');
 const {
   canManageMeet, canLeadCollegeMeet, isPlatformAdminCtx, isSchoolAdminCtx,
-} = require('../miniprogram/services/meet-permission.js');
+} = require('../src/server/services/meet-permission.js');
 const {
   grantMeetCollegeLead, revokeMeetCollegeLead, listMeetCollegeLeads, getMyMeetCollegeLead,
-} = require('../miniprogram/services/meet-college-lead-service.js');
+} = require('../src/server/services/meet-college-lead-service.js');
 const {
   meetCollegeLeadKey, MEET_COLLEGE_LEAD_STATUS,
-} = require('../miniprogram/utils/meet-scope.js');
-const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school.js');
+} = require('../src/shared/utils/meet-scope.js');
+const { collegeKey, schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school.js');
 
 const SCHOOL = 'muc';
 

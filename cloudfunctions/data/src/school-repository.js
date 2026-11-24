@@ -1,15 +1,15 @@
 /** 两个适配器共享的学校仓储扩展。原单校接口保留，S2 逐一接入新接口。 */
-const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../lib/utils/school.js');
-const { MEET_COLLECTIONS, meetScope } = require('../lib/utils/meet-scope.js');
-const { attachTeamReads, unique } = require('../lib/services/scoped-team-reads.js');
-const { attachOverviewReads } = require('../lib/services/school-overview-reads.js');
-const { pageOfCollection } = require('../lib/services/event-list-page.js');
+const { schoolScope, SCHOOL_MEMBER_STATUS } = require('../lib/shared/utils/school.js');
+const { MEET_COLLECTIONS, meetScope } = require('../lib/shared/utils/meet-scope.js');
+const { attachTeamReads, unique } = require('../lib/server/services/scoped-team-reads.js');
+const { attachOverviewReads } = require('../lib/server/services/school-overview-reads.js');
+const { pageOfCollection } = require('../lib/server/services/event-list-page.js');
 
 // 集合清单与本地模拟仓储共用一份（miniprogram/services/school-collections.js，
 // 由 tools/sync-cloud-lib.js 镜像到 lib）。新增集合只改那一处。
 const {
   SCHOOL_ONLY, EVENT_SCOPED, SCOPED_COLLECTIONS, SCHOOL_COLLECTIONS,
-} = require('../lib/services/school-collections.js');
+} = require('../lib/server/services/school-collections.js');
 
 /**
  * 通用「受范围仓储」。

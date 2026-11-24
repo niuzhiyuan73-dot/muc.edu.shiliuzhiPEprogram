@@ -17,11 +17,11 @@ const {
   applyTrainingPointFacts,
   TRAINING_POINT_AMOUNT,
   ATTENDANCE_STATUS,
-} = require('../miniprogram/services/training-points.js');
-const { aggregatePoints, collectEventPointFacts } = require('../miniprogram/services/school-points-service.js');
-const { getPoolRating } = require('../miniprogram/utils/rating.js');
-const { DEFAULT_CONFIG } = require('../miniprogram/utils/elo.js');
-const { EVENT_STATUS, RATING_POOL, MATCH_TYPE } = require('../miniprogram/utils/constants.js');
+} = require('../src/server/services/training-points.js');
+const { aggregatePoints, collectEventPointFacts } = require('../src/server/services/school-points-service.js');
+const { getPoolRating } = require('../src/shared/utils/rating.js');
+const { DEFAULT_CONFIG } = require('../src/shared/utils/elo.js');
+const { EVENT_STATUS, RATING_POOL, MATCH_TYPE } = require('../src/shared/utils/constants.js');
 
 const MALE_START = DEFAULT_CONFIG.initialRating;
 

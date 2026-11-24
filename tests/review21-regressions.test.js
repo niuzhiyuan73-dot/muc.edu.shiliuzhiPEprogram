@@ -3,15 +3,15 @@ const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { buildMeetContext } = require('../miniprogram/services/meet-context');
-const { buildDirectory } = require('../miniprogram/services/school-actor');
-const { accountDirectoryFields } = require('../miniprogram/services/account-directory');
-const { schoolMemberKey, associationGroupMemberKey } = require('../miniprogram/utils/school');
-const C = require('../miniprogram/utils/constants');
-const college = require('../miniprogram/services/school-college-service');
-const groups = require('../miniprogram/services/association-group-service');
-const advance = require('../miniprogram/services/meet-advance-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { buildMeetContext } = require('../src/server/services/meet-context');
+const { buildDirectory } = require('../src/server/services/school-actor');
+const { accountDirectoryFields } = require('../src/server/services/account-directory');
+const { schoolMemberKey, associationGroupMemberKey } = require('../src/shared/utils/school');
+const C = require('../src/shared/utils/constants');
+const college = require('../src/server/services/school-college-service');
+const groups = require('../src/server/services/association-group-service');
+const advance = require('../src/server/services/meet-advance-service');
 const scope = { schoolId: 'muc', association: 'pkb' };
 const now = new Date('2026-11-16T00:00:00Z');
 const actorId = 'demo_muc_admin';
@@ -160,7 +160,7 @@ test('14队两组各7队全部同分出线，最后一场成功扩签且不重�
 });
 
 test('学院赛排序对输入排列稳定：置顶、状态、时间、编号依次比较', () => {
-  const sort = require('../miniprogram/services/college-event').sortCollegeEvents;
+  const sort = require('../src/shared/services/college-event').sortCollegeEvents;
   const rows = [{ _id: 'pin', pinned: true, status: 3 }, { _id: 'b', status: 0 }, { _id: 'a', status: 0 }];
   for (const input of [rows, rows.slice().reverse(), [rows[1], rows[0], rows[2]]]) assert.deepEqual(sort(input).map(row => row._id), ['pin', 'a', 'b']);
 });
@@ -171,7 +171,7 @@ test('足球进球与助攻榜按数值降序，同分按编号稳定排序', as
   const players = [{ userId: 'high', goals: 3, assists: 1 }, { userId: 'low', goals: 1, assists: 3 }, { userId: 'equal', goals: 3, assists: 1 }];
   await f.repo.teamMatches.set('match', { _id: 'match', schoolId: 'muc', association: 'fb', eventId: 'e', status: 'published',
     footballPublished: { sides: { A: { players, coverage: {} }, B: { players: [], coverage: {} } } } });
-  const result = (await require('../miniprogram/services/football-match-service').getTeamEventPlayerStats({ eventId: 'e' }, target)).data;
+  const result = (await require('../src/server/services/football-match-service').getTeamEventPlayerStats({ eventId: 'e' }, target)).data;
   assert.deepEqual(result.scorers.map(row => row.userId), ['equal', 'high', 'low']);
   assert.deepEqual(result.assists.map(row => row.userId), ['low', 'equal', 'high']);
 });
@@ -189,7 +189,7 @@ test('10001名新成员学校的目录及学院赛详情只取涉及的人，不
 
 test('选人目录可搜索及连续翻页，接口不再一次下发全校人员', async () => {
   const f = await fixture(107);
-  const service = require('../miniprogram/services/school-match-service');
+  const service = require('../src/server/services/school-match-service');
   const first = (await service.getSchoolMatchEntryContext({}, f.ctx)).data;
   assert.ok(first.members.length <= 51); assert.equal(first.hasMore, true);
   const second = (await service.getSchoolMatchEntryContext({ cursor: first.nextCursor }, f.ctx)).data;
@@ -236,13 +236,13 @@ test('建组 28 人在预算内，29 人按上限拒绝', async () => {
 /* ------------------------------------------------------------------ 第二十三轮 Batch A */
 
 test('P0-1：真实微信注册账号 acc:<40位hex> 可完整走通运动会部长任命、意向、报名、派裁与录分', async () => {
-  const { schoolAccountKey, collegeKey, schoolRoleKey } = require('../miniprogram/utils/school');
-  const { meetEventKey } = require('../miniprogram/utils/meet-scope');
-  const meetService = require('../miniprogram/services/meet-service');
-  const leadService = require('../miniprogram/services/meet-college-lead-service');
-  const regService = require('../miniprogram/services/meet-registration-service');
-  const scheduleService = require('../miniprogram/services/meet-schedule-service');
-  const scoreService = require('../miniprogram/services/meet-score-service');
+  const { schoolAccountKey, collegeKey, schoolRoleKey } = require('../src/shared/utils/school');
+  const { meetEventKey } = require('../src/shared/utils/meet-scope');
+  const meetService = require('../src/server/services/meet-service');
+  const leadService = require('../src/server/services/meet-college-lead-service');
+  const regService = require('../src/server/services/meet-registration-service');
+  const scheduleService = require('../src/server/services/meet-schedule-service');
+  const scoreService = require('../src/server/services/meet-score-service');
 
   const adminId = schoolAccountKey('openid_real_admin_23');
   const leadId = schoolAccountKey('openid_real_lead_23');
@@ -318,8 +318,8 @@ test('P0-1：真实微信注册账号 acc:<40位hex> 可完整走通运动会部
 });
 
 test('P0-3：停用平台管理员不能发布或下架全校公告，且 isPlatformAdminCtx 为 false', async () => {
-  const announcements = require('../miniprogram/services/school-announcement-service');
-  const { isPlatformAdminCtx } = require('../miniprogram/services/school-permission');
+  const announcements = require('../src/server/services/school-announcement-service');
+  const { isPlatformAdminCtx } = require('../src/server/services/school-permission');
   const f = await fixture(0);
   await f.repo.users.set('plat_admin', {
     _id: 'plat_admin', openId: 'plat_admin', nickName: '平台管理员',
@@ -351,9 +351,9 @@ test('P0-3：停用平台管理员不能发布或下架全校公告，且 isPlat
 });
 
 test('P0-4：12 人单败淘汰赛（含 4 轮空）首轮 4 名负者按并列第 9 名结算，不误触发八强逻辑', () => {
-  const { standardSeedOrder, bracketSizeOf } = require('../miniprogram/utils/bracket');
-  const { buildInitialMatches, planStageMatches, derivePlacements } = require('../miniprogram/services/format-plan');
-  const { eventMatchKey } = require('../miniprogram/services/draw');
+  const { standardSeedOrder, bracketSizeOf } = require('../src/shared/utils/bracket');
+  const { buildInitialMatches, planStageMatches, derivePlacements } = require('../src/shared/services/format-plan');
+  const { eventMatchKey } = require('../src/shared/services/draw');
   const ids = Array.from({ length: 12 }, (_, i) => `p${i + 1}`);
   const size = bracketSizeOf(ids.length);
   const byRank = new Array(size).fill(null);
@@ -392,9 +392,9 @@ test('P0-4：12 人单败淘汰赛（含 4 轮空）首轮 4 名负者按并列�
 });
 
 test('赛季重置后零分会员首次签到及移除均使用单行增量', async () => {
-  const trainingService = require('../miniprogram/services/association-training-service');
-  const { resetSchoolSeason } = require('../miniprogram/services/school-rank-service');
-  const { refreshAssociationPoints } = require('../miniprogram/services/season-points');
+  const trainingService = require('../src/server/services/association-training-service');
+  const { resetSchoolSeason } = require('../src/server/services/school-rank-service');
+  const { refreshAssociationPoints } = require('../src/server/services/season-points');
   const f = await fixture(1);
   const [u1] = f.ids;
 
@@ -441,7 +441,7 @@ test('赛季重置后零分会员首次签到及移除均使用单行增量', as
 
 test('Batch A 安全与状态机止血：已结束学院赛锁小场、总裁判离校失权、平局相互战绩与重抽 voidedAt 过滤', async () => {
   // 1. 团队循环赛允许平局时，相互战绩不将平局计为 B 队胜场
-  const { computeTeamTable } = require('../miniprogram/utils/team-standings');
+  const { computeTeamTable } = require('../src/shared/utils/team-standings');
   const standings = computeTeamTable({
     entries: [
       { teamId: 'tA', teamName: 'A' },
@@ -459,7 +459,7 @@ test('Batch A 安全与状态机止血：已结束学院赛锁小场、总裁判
   assert.equal(standings[1].teamId, 'tB');
 
   // 2. 运动会总裁判离校/停用后失去成绩发布与重排权限
-  const { isChiefJudge, canPublishMeetResult } = require('../miniprogram/services/meet-permission');
+  const { isChiefJudge, canPublishMeetResult } = require('../src/server/services/meet-permission');
   const meetDoc = {
     _id: 'm1', schoolId: 'muc',
     chiefJudge: { userId: 'cj1', schoolId: 'muc', meetId: 'm1', status: 'active' },
@@ -482,7 +482,7 @@ test('Batch A 安全与状态机止血：已结束学院赛锁小场、总裁判
   assert.equal(canPublishMeetResult(transferredChiefCtx), false);
 
   // 3. 已结束学院赛的小场不可补录、确认或驳回
-  const matchService = require('../miniprogram/services/school-match-service');
+  const matchService = require('../src/server/services/school-match-service');
   const f = await fixture(2);
   const eventId = await publish(f);
   await f.repo.collegeEvents.set(eventId, {

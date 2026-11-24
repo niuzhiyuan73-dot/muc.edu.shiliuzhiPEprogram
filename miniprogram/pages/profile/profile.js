@@ -20,8 +20,8 @@ const { loadSchoolProfileSummaryView } = require('../../services/profile-view.js
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { resetBranding } = require('../../services/branding.js');
 const associationScope = require('../../services/association-scope.js');
-const { isTeamSport } = require('../../utils/associations.js');
-const { teamSportStrategyFor } = require('../../utils/team-sport-rules.js');
+const { isTeamSport } = require('../../shared/utils/associations.js');
+const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
 
 Page({
   data: {

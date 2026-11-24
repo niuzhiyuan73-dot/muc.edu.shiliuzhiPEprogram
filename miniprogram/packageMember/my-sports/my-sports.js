@@ -1,9 +1,9 @@
 const { loadPersonalSports, openSportsTarget, careerMilestonesOf } = require('../../templates/personal-sports-client');
 const schoolSession = require('../../services/school-session');
 const association = require('../../services/association-scope');
-const { allAssociations, isKnownAssociation } = require('../../utils/associations');
+const { allAssociations, isKnownAssociation } = require('../../shared/utils/associations');
 const { currentThemeClass } = require('../../services/branding');
-const { formatDateTime } = require('../../utils/format');
+const { formatDateTime } = require('../../shared/utils/format');
 const TABS = [{ id: 'schedule', label: '我的赛程' }, { id: 'tasks', label: '我的待办' }, { id: 'passport', label: '运动护照' }];
 const CAPTIONS = { schedule: '未来 90 天已排期安排；等待赛程单独标记。', tasks: '只显示当前有权限处理的事项，进入后仍会重新核验状态。', passport: '记录经确认或发布的事实。名单入选、报告收录和实际出场分别表述。' };
 Page({

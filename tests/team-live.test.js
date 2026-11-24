@@ -2,10 +2,10 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const { schoolMemberKey, schoolMembershipKey, schoolKey } = require('../miniprogram/utils/school');
-const service = require('../miniprogram/services/team-event-service');
-const { TEAM_MATCH_STATUS } = require('../miniprogram/utils/constants');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const { schoolMemberKey, schoolMembershipKey, schoolKey } = require('../src/shared/utils/school');
+const service = require('../src/server/services/team-event-service');
+const { TEAM_MATCH_STATUS } = require('../src/shared/utils/constants');
 
 const scope = { schoolId: 'muc', association: 'bk' };
 async function fixture({ statPolicy = 'basic', fullRoster = false } = {}) {

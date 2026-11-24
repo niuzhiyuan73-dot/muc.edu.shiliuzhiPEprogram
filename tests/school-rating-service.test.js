@@ -16,10 +16,10 @@ const {
   decideSettlement, materializeRatings, computeSettlement, buildRatingDoc,
   displayRating, assertValidRatingDoc, buildExcludedSettlement,
   settleMatchInTransaction, participantsOf, resolveEventLevel,
-} = require('../miniprogram/services/school-rating-service');
-const { calculateMatchRatings, initialRatingFor } = require('../miniprogram/utils/elo');
-const { memberRatingKey, ratingSeqKey, schoolMemberKey } = require('../miniprogram/utils/school');
-const { RATING_POOL, SETTLEMENT_STATUS, EXCLUSION_REASON } = require('../miniprogram/utils/constants');
+} = require('../src/server/services/school-rating-service');
+const { calculateMatchRatings, initialRatingFor } = require('../src/shared/utils/elo');
+const { memberRatingKey, ratingSeqKey, schoolMemberKey } = require('../src/shared/utils/school');
+const { RATING_POOL, SETTLEMENT_STATUS, EXCLUSION_REASON } = require('../src/shared/utils/constants');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 const NOW = new Date('2026-10-17T10:00:00Z');

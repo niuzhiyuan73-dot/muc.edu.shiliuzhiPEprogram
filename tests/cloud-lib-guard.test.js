@@ -27,8 +27,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const { MANIFEST, DEST_ROOT } = require('../tools/sync-cloud-lib');
-const LIB_SERVICES = path.join(DEST_ROOT, 'services');
-const LIB_UTILS = path.join(DEST_ROOT, 'utils');
+const LIB_SHARED = path.join(DEST_ROOT, 'shared');
+const LIB_SERVER = path.join(DEST_ROOT, 'server');
 
 /** 递归列出目录下的 .js 文件。 */
 function jsFiles(dir) {
@@ -55,7 +55,7 @@ function facadeRequires(file) {
   return found;
 }
 
-const MIRRORED = [...jsFiles(LIB_SERVICES), ...jsFiles(LIB_UTILS)];
+const MIRRORED = [...jsFiles(LIB_SHARED), ...jsFiles(LIB_SERVER)];
 
 test('镜像里没有任何文件在模块顶层 require 门面（加载期安全）', () => {
   const offenders = [];
@@ -94,5 +94,5 @@ test('门面 index.js 本身不在 MANIFEST、也不在镜像里', () => {
 test('扫描逻辑本身有效：MANIFEST 里的纯模块确实都镜像到了', () => {
   const missing = MANIFEST.filter(rel => !fs.existsSync(path.join(DEST_ROOT, rel)));
   assert.deepEqual(missing, [], `这些清单文件没同步：${missing.join('、')}`);
-  assert.ok(jsFiles(LIB_SERVICES).length >= 30, '镜像 services 数量异常，扫描目录可能写错了');
+  assert.ok(jsFiles(path.join(LIB_SERVER, 'services')).length >= 30, '镜像 services 数量异常，扫描目录可能写错了');
 });

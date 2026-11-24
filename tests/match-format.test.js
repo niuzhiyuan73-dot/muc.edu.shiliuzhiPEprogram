@@ -12,7 +12,7 @@ const {
   formatMatchFormat,
   validateGame,
   validateMatchScore,
-} = require('../miniprogram/utils/match-format.js');
+} = require('../src/shared/utils/match-format.js');
 
 /* ============================================================
  * 一、赛制本身
@@ -248,7 +248,7 @@ const {
   validateTennisSet,
   tennisGameWon,
   tennisSetWon,
-} = require('../miniprogram/utils/match-format.js');
+} = require('../src/shared/utils/match-format.js');
 
 const T6_3 = { scoring: 'tennis', bestOf: 3, setGames: 6, tiebreakAt: 6, tiebreakPoints: 7, noAd: false };
 const T6_1 = { ...T6_3, bestOf: 1 };

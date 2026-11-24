@@ -4,9 +4,9 @@ process.env.RATE_LIMIT = 'off';
 const assert = require('node:assert/strict');
 const { createSchoolDemoSeed } = require('../../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../../miniprogram/services/school-context');
-const service = require('../../miniprogram/services/team-event-service');
-const { schoolMemberKey, schoolMembershipKey, teamMemberKey, schoolKey } = require('../../miniprogram/utils/school');
+const { buildSchoolContext } = require('../../src/server/services/school-context');
+const service = require('../../src/server/services/team-event-service');
+const { schoolMemberKey, schoolMembershipKey, teamMemberKey, schoolKey } = require('../../src/shared/utils/school');
 const { database } = require('../../tools/audit-basketball-cloud.cjs');
 const { createRepo } = require('../../cloudfunctions/data/src/adapters/cloud-repo');
 const { handleSchoolRequest } = require('../../cloudfunctions/data/src/core/school-request');
@@ -19,7 +19,7 @@ async function fixture({ cloud = false, count = 2, format = 'round_robin', rules
     seed.schoolMembers.push({ _id: schoolMemberKey(id, 'muc'), userId: id, schoolId: 'muc', status: 'active', collegeId: 'c01' });
     seed.memberships.push({ _id: schoolMembershipKey(id, SCOPE), ...SCOPE, userId: id, status: 'active', role: 'member' });
   }
-  seed.users = seed.users.map(user => ({ ...user, ...require('../../miniprogram/services/account-directory').accountDirectoryFields(user) }));
+  seed.users = seed.users.map(user => ({ ...user, ...require('../../src/server/services/account-directory').accountDirectoryFields(user) }));
   const db = cloud ? database(seed) : null;
   const repo = cloud ? createRepo(db) : createSchoolMemoryRepo(seed);
   let request = 0;

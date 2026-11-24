@@ -1,9 +1,9 @@
 /** 足球演示：保留报名流程，另给一届明确标注的已完赛示例用于查看成绩。 */
 const { MEMBER_SEED } = require('./seed.js');
-const { schoolKey, teamMemberKey } = require('../utils/school.js');
-const { normalizeFootballRules, DEFAULT_PRESET_KEY } = require('../utils/football-rules.js');
-const { TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_ENTRY_STATUS, TEAM_EVENT_STATUS } = require('../utils/constants.js');
-const { normalizeFootballReport, FIELDS } = require('../utils/football-report');
+const { schoolKey, teamMemberKey } = require('../shared/utils/school.js');
+const { normalizeFootballRules, DEFAULT_PRESET_KEY } = require('../shared/utils/football-rules.js');
+const { TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_ENTRY_STATUS, TEAM_EVENT_STATUS } = require('../shared/utils/constants.js');
+const { normalizeFootballReport, FIELDS } = require('../shared/utils/football-report');
 const { demoIso } = require('./demo-clock.js');
 const SCOPE = Object.freeze({ schoolId: 'muc', association: 'fb' });
 const ISO = demoIso(0);

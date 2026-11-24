@@ -13,10 +13,10 @@ const {
   applyMatchResult,
   hasPlayedPool,
   summarizeCareer,
-} = require('../miniprogram/utils/rating.js');
+} = require('../src/shared/utils/rating.js');
 
-const { RATING_POOL, ALL_RATING_POOLS } = require('../miniprogram/utils/constants.js');
-const { calculateMatchRatings, DEFAULT_CONFIG } = require('../miniprogram/utils/elo.js');
+const { RATING_POOL, ALL_RATING_POOLS } = require('../src/shared/utils/constants.js');
+const { calculateMatchRatings, DEFAULT_CONFIG } = require('../src/shared/utils/elo.js');
 
 /** 未指定初始分时的默认值（当前 1450），随配置变化 */
 const DEFAULT_ELO = DEFAULT_CONFIG.initialRating;

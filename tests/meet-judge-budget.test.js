@@ -2,9 +2,9 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { database } = require('../tools/audit-basketball-cloud.cjs');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
-const schedule = require('../cloudfunctions/data/lib/services/meet-schedule-service');
-const { buildMeetContext } = require('../cloudfunctions/data/lib/services/meet-context');
-const { schoolMemberKey, schoolRoleKey } = require('../miniprogram/utils/school');
+const schedule = require('../cloudfunctions/data/lib/server/services/meet-schedule-service');
+const { buildMeetContext } = require('../cloudfunctions/data/lib/server/services/meet-context');
+const { schoolMemberKey, schoolRoleKey } = require('../src/shared/utils/school');
 
 async function fixture(judgeCount, sessionCount) {
   const judges = Array.from({ length: judgeCount }, (_, i) => `judge${i}`);

@@ -19,7 +19,7 @@
  * ============================================================
  */
 
-const { activeAssociations, getAssociation } = require('../../utils/associations.js');
+const { activeAssociations, getAssociation } = require('../../shared/utils/associations.js');
 const { resetBranding, themeClassOf } = require('../../services/branding.js');
 const associationScope = require('../../services/association-scope.js');
 const runtime = require('../../services/runtime-mode.js');

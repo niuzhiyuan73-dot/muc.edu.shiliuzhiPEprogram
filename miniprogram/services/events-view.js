@@ -41,13 +41,13 @@ const {
   isRankable,
   stageOrder,
   courtNoTextOf,
-} = require('../utils/constants.js');
-const { computeStandings } = require('../utils/standings.js');
-const { planCourts } = require('./court.js');
-const { derivePlacements, hasDoubleKnockout } = require('./format-plan.js');
-const { getPoolRating } = require('../utils/rating.js');
-const { buildLeaderboard } = require('../utils/leaderboard.js');
-const { formatDate, formatDateTime, formatPercent, formatScore } = require('../utils/format.js');
+} = require('../shared/utils/constants.js');
+const { computeStandings } = require('../shared/utils/standings.js');
+const { planCourts } = require('../shared/services/court.js');
+const { derivePlacements, hasDoubleKnockout } = require('../shared/services/format-plan.js');
+const { getPoolRating } = require('../shared/utils/rating.js');
+const { buildLeaderboard } = require('../shared/utils/leaderboard.js');
+const { formatDate, formatDateTime, formatPercent, formatScore } = require('../shared/utils/format.js');
 const {
   canManageEvent,
   canCheckIn,
@@ -55,7 +55,7 @@ const {
   buildEventRow,
   buildSignupRow,
   signupStateOf,
-} = require('./event.js');
+} = require('../shared/services/event.js');
 const {
   canAssignReferee,
   canConfirm,
@@ -63,12 +63,12 @@ const {
   hasReferee,
   isParticipant,
   needsScore,
-} = require('./match-record.js');
+} = require('../shared/services/match-record.js');
 const { statusTagOf } = require('./match-view.js');
 const { describeLive } = require('./live-view.js');
 // 手工指定种子要凑几位，与真正抽签时同一把尺子（种子数与参赛人数的较小者）；
 // 双打每两位参赛者编成一队，人数是组数的两倍，见 manualPlayersNeeded
-const { actualSeedCount, manualPlayersNeeded, splitTeamId } = require('./draw.js');
+const { actualSeedCount, manualPlayersNeeded, splitTeamId } = require('../shared/services/draw.js');
 const MEDALS = ['gold', 'silver', 'bronze'];
 
 /** 名次 → 奖牌样式。只有前三名有奖牌，第四名与八强不装饰 */

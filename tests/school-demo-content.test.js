@@ -19,17 +19,17 @@ const {
   createSchoolDemoContent, DEMO_CONTENT_SPECS, DEMO_ACCOUNTS,
 } = require('../miniprogram/services/school-seed.js');
 const { MEMBER_SEED } = require('../miniprogram/services/seed.js');
-const { isAnnouncementDoc } = require('../miniprogram/services/school-announcement-service.js');
-const { isEventDoc } = require('../miniprogram/services/school-event-service.js');
+const { isAnnouncementDoc } = require('../src/server/services/school-announcement-service.js');
+const { isEventDoc } = require('../src/server/services/school-event-service.js');
 const {
   loadSchoolEventDetailView, loadSchoolEventPlacementView,
 } = require('../miniprogram/services/school-event-view.js');
 const schoolMock = require('../miniprogram/services/school-mock.js');
-const { schoolEventSignupKey } = require('../miniprogram/utils/school.js');
+const { schoolEventSignupKey } = require('../src/shared/utils/school.js');
 const {
   MATCH_STATUS, MATCH_OUTCOME, MATCH_COMPETITION, RANK_PROJECT,
   EVENT_STATUS, SIGNUP_STATUS,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 const SCOPE = { schoolId: 'muc', association: 'pkb' };
 

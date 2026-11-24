@@ -36,7 +36,7 @@ function collectFacts() {
   const subTotal = Object.values(subDetail).reduce((a, b) => a + b, 0);
 
   // 四组 action：常量数组长度即注册面大小
-  const actions = require(path.join(ROOT, 'miniprogram/utils/school-actions.js'));
+  const actions = require(path.join(ROOT, 'src/shared/utils/school-actions.js'));
   const groupKeys = Object.keys(actions).filter((k) => k.endsWith('_ACTIONS'));
   const groups = {};
   groupKeys.forEach((k) => {
@@ -44,7 +44,7 @@ function collectFacts() {
   });
   const actionTotal = Object.values(groups).reduce((a, b) => a + b, 0);
 
-  const constants = require(path.join(ROOT, 'miniprogram/utils/constants.js'));
+  const constants = require(path.join(ROOT, 'src/shared/utils/constants.js'));
   const collections = Object.keys(constants.COLLECTION || {}).length;
 
   const syncLib = require(path.join(ROOT, 'tools/sync-cloud-lib.js'));

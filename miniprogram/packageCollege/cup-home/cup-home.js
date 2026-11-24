@@ -25,13 +25,13 @@
  * ============================================================
  */
 
-const { activeAssociations, sportTypeOf, SPORT_TYPE } = require('../../utils/associations.js');
+const { activeAssociations, sportTypeOf, SPORT_TYPE } = require('../../shared/utils/associations.js');
 const space = require('../../services/association-space.js');
 const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
-const { CUP_MODE, EVENT_FORMAT_LABEL } = require('../../utils/constants.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
+const { CUP_MODE, EVENT_FORMAT_LABEL } = require('../../shared/utils/constants.js');
 
 const PAGE_SIZE = 50;
 /** 输入停顿多久才发请求：按住键盘连打时不至于每敲一个字都问一次服务端 */

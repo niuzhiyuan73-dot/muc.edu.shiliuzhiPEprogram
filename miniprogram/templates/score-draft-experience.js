@@ -1,5 +1,5 @@
 /** 客户端交互：保护当前页面的未提交输入，不写本地存储。 */
-const { MEASURE_RULES } = require('../services/meet-measure.js');
+const { MEASURE_RULES } = require('../shared/services/meet-measure.js');
 function withScoreDraftExperience(config) {
   config.data = { ...config.data, scoreDirty: false, dirtyEntryKeys: {}, scoreContext: '' };
   const update = config.update;

@@ -24,14 +24,14 @@ const {
   planCollegeDraw,
   buildCollegeDrawRecord,
   collegeTieKey,
-} = require('../miniprogram/services/college-draw.js');
+} = require('../src/shared/services/college-draw.js');
 const {
   ROLE,
   USER_STATUS,
   COLLEGE_EVENT_STATUS,
   COLLEGE_ENTRY_STATUS,
   BRACKET_STAGE,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 管理员 */
 const ADMIN = { _id: 'u01', nickName: '巴特尔', role: ROLE.ADMIN, status: USER_STATUS.ACTIVE };

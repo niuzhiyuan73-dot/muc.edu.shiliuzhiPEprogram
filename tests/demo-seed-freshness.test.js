@@ -28,7 +28,7 @@ const { createSchoolDemoContent } = require('../miniprogram/services/school-seed
 const { createMeetDemoRecords } = require('../miniprogram/services/meet-seed.js');
 const {
   EVENT_STATUS, TEAM_EVENT_STATUS, COLLEGE_EVENT_STATUS,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 const msOf = value => new Date(value).getTime();
 const content = createSchoolDemoContent();

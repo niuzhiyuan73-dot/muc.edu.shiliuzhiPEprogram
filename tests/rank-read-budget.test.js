@@ -18,12 +18,12 @@ const { test, describe } = require('node:test');
 const assert = require('node:assert/strict');
 
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const rank = require('../miniprogram/services/school-rank-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const rank = require('../src/server/services/school-rank-service');
 const {
   collegeKey, schoolMemberKey, memberRatingKey, schoolAssociationKey, SCHOOL_MEMBER_STATUS,
-} = require('../miniprogram/utils/school');
-const { RATING_POOL } = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/school');
+const { RATING_POOL } = require('../src/shared/utils/constants');
 
 const SCHOOL = 'muc';
 const ASSOC = 'pkb';

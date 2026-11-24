@@ -28,7 +28,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const SERVICES_DIR = path.join(__dirname, '..', 'miniprogram', 'services');
+const SERVICES_DIR = path.join(__dirname, '..', 'src', 'server', 'services');
 
 /** 允许顶层无范围读取的集合：平台级 / 学校级小目录。 */
 const ALLOWED = new Set(['schools', 'schoolAssociations', 'colleges']);

@@ -29,8 +29,8 @@
  * ============================================================
  */
 
-const { ALL_GENDERS, GENDER_LABEL } = require('../../utils/constants.js');
-const { PROFILE_RULES, resolveAuthState } = require('../../services/auth.js');
+const { ALL_GENDERS, GENDER_LABEL } = require('../../shared/utils/constants.js');
+const { PROFILE_RULES, resolveAuthState } = require('../../shared/services/auth.js');
 const { uploadAvatar } = require('../../services/avatar.js');
 const identity = require('../../services/school-identity.js');
 const appSession = require('../../services/app-session.js');

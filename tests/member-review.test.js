@@ -35,14 +35,14 @@ const {
   buildInitialEloByAssoc,
   validateReview,
   buildApplicationRow,
-} = require('../miniprogram/services/member-review.js');
+} = require('../src/shared/services/member-review.js');
 const {
   ROLE,
   ASSOC_ROLE,
   USER_STATUS,
   COLLEGES,
   RATING_POOL,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 一位刚注册、还没通过的申请人 */
 const APPLICANT = {

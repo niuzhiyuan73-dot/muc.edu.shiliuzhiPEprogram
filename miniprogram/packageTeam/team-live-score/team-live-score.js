@@ -2,11 +2,11 @@
 const space = require('../../services/association-space.js');
 const scopeService = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 const { resolveRouteId } = require('../../utils/route-query.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { getDataSource } = require('../../services/runtime-mode.js');
-const { applyBasketballOperation } = require('../../utils/basketball-live.js');
+const { applyBasketballOperation } = require('../../shared/utils/basketball-live.js');
 const STAT_FIELDS = [
   { field: 'points', label: '得分' }, { field: 'rebounds', label: '篮板' },
   { field: 'assists', label: '助攻' }, { field: 'steals', label: '抢断' },

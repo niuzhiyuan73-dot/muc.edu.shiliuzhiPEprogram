@@ -18,7 +18,7 @@ const assert = require('node:assert/strict');
 const { createSchoolDemoContent } = require('../miniprogram/services/school-seed.js');
 const {
   COLLEGE_EVENT_STATUS, TEAM_EVENT_STATUS, TEAM_TYPE, TEAM_MATCH_STATUS, CUP_MODE, TIE_STATUS,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 const content = createSchoolDemoContent();
 

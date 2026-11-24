@@ -23,7 +23,7 @@
  * ============================================================
  */
 
-const { formatPercent } = require('../utils/format.js');
+const { formatPercent } = require('../shared/utils/format.js');
 
 /**
  * 等级榜最多展示多少名。

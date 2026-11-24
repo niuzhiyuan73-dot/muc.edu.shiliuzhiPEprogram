@@ -41,11 +41,11 @@
  */
 
 const { loadSchoolHomeView } = require('../../services/school-home-view.js');
-const { resolveAuthState } = require('../../services/auth.js');
+const { resolveAuthState } = require('../../shared/services/auth.js');
 const { resetBranding } = require('../../services/branding.js');
 const associationScope = require('../../services/association-scope.js');
-const { getAssociation, isKnownAssociation } = require('../../utils/associations.js');
-const { STORAGE_KEY } = require('../../utils/constants.js');
+const { getAssociation, isKnownAssociation } = require('../../shared/utils/associations.js');
+const { STORAGE_KEY } = require('../../shared/utils/constants.js');
 const { loadPersonalSports, openSportsTarget, withPersonalActions } = require('../../templates/personal-sports-client');
 
 /** 首屏缓存。只用来「先把内容画出来」，随后那次 refresh 一定会覆盖它。

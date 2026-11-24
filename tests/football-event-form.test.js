@@ -4,7 +4,7 @@ const {
   createFootballEventForm: create, setFootballEventField: update, applyFootballPreset: preset,
   hasCustomFootballRules: customized, validateFootballEventForm: validate, footballEventFormView: view,
 } = require('../miniprogram/utils/football-event-form');
-const { STANDARD_PRESET_KEY, DEFAULT_PRESET_KEY, TIE_BREAK } = require('../miniprogram/utils/football-rules');
+const { STANDARD_PRESET_KEY, DEFAULT_PRESET_KEY, TIE_BREAK } = require('../src/shared/utils/football-rules');
 const ready = () => ({ ...create(), name: ' 自由组队足球杯 ' });
 
 test('足球表单产生完整请求、保留单双名单边界，预览不改变草稿', () => {

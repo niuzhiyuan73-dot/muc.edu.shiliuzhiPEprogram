@@ -7,18 +7,18 @@
  */
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
-const { RATED_PAIR_LIMIT } = require('../miniprogram/utils/constants');
+const { RATED_PAIR_LIMIT } = require('../src/shared/utils/constants');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const handlers = require('../miniprogram/services/school-match-service');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const handlers = require('../src/server/services/school-match-service');
 const {
   schoolMemberKey, schoolMatchKey, schoolKey, PLATFORM_STATUS, SCHOOL_MEMBER_STATUS,
-} = require('../miniprogram/utils/school');
+} = require('../src/shared/utils/school');
 const {
   MATCH_TYPE, MATCH_STATUS, MATCH_OUTCOME,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const HOUR = 60 * 60 * 1000;
@@ -104,9 +104,9 @@ test('确认即结算：同一比赛重复确认幂等，已结算后驳回/弃�
     { actor: 'demo_muc_member_2' });
   assert.equal(first.ok, true, first.message);
   const ratingDoc = await repo.memberRatings.getById(
-    require('../miniprogram/utils/school.js').memberRatingKey('demo_muc_member', 'singles',
+    require('../src/shared/utils/school.js').memberRatingKey('demo_muc_member', 'singles',
       { schoolId: 'muc', association: 'pkb' }));
-  const counterId = require('../miniprogram/utils/school.js').ratingSeqKey({ schoolId: 'muc', association: 'pkb' });
+  const counterId = require('../src/shared/utils/school.js').ratingSeqKey({ schoolId: 'muc', association: 'pkb' });
   const afterFirst = { rating: ratingDoc && ratingDoc.elo, seq: (await repo.ratingCounters.getById(counterId)).seq };
 
   // 确认响应丢失后的重试：返回既有结果，评级与序号纹丝不动
@@ -149,7 +149,7 @@ test('弃权：终态封口带不计分结算快照，且不占评级', async ()
   assert.equal(stored.settlement.exclusionReason, 'forfeit');
   assert.equal(stored.settlement.settlementSeq, null, '不计分不占序号');
   // 参赛者没有评级文档被建出来
-  const ratingKey = require('../miniprogram/utils/school.js').memberRatingKey;
+  const ratingKey = require('../src/shared/utils/school.js').memberRatingKey;
   assert.equal(await repo.memberRatings.getById(ratingKey('demo_muc_member', 'singles', { schoolId: 'muc', association: 'pkb' })), null);
 });
 
@@ -199,7 +199,7 @@ test('撤销已取消：action 不在协议 2 白名单，已结算比赛没有�
   assert.equal(confirmed.ok, true, confirmed.message);
 
   // 撤销动作已随 Elo 逐场结算改造从协议 2 删除：白名单与实现里都没有它
-  const actions = require('../miniprogram/utils/school-actions.js');
+  const actions = require('../src/shared/utils/school-actions.js');
   assert.equal(actions.SCHOOL_SPACE_ACTIONS.includes('revokeSchoolMatch'), false,
     '撤销动作不应在协议 2 白名单里');
   const write = require('../miniprogram/utils/write.js');
@@ -207,7 +207,7 @@ test('撤销已取消：action 不在协议 2 白名单，已结算比赛没有�
     '撤销动作不应在写操作名单里');
 
   // 服务端实现也不再导出：旧 action 无从构造
-  assert.equal(typeof require('../miniprogram/services/school-match-service.js').revokeSchoolMatch,
+  assert.equal(typeof require('../src/server/services/school-match-service.js').revokeSchoolMatch,
     'undefined', '撤销实现已删除');
   assert.ok(confirmed.match.settlement, '确认即结算：比赛带结算快照');
 });
@@ -418,7 +418,7 @@ test('新赛季：交手次数提示与提交上限同时清零', async () => {
     await call(repo, 'confirmSchoolMatch', { matchId: match.matchId }, { actor: 'demo_muc_member_2' });
   }
   assert.equal((await call(repo, 'getSchoolMatchEntryContext')).pairInfo.counts.demo_muc_member_2, RATED_PAIR_LIMIT);
-  const { scopeKey } = require('../miniprogram/utils/school');
+  const { scopeKey } = require('../src/shared/utils/school');
   const scope = { schoolId: 'muc', association: 'pkb' };
   await repo.seasons.set(scopeKey(scope), { ...scope, resetTime: at(-HOUR / 2) });
   assert.deepEqual((await call(repo, 'getSchoolMatchEntryContext')).pairInfo.counts, {});
@@ -469,7 +469,7 @@ async function setMemberStatus(repo, userId, status) {
 }
 
 async function setSchoolRoleStatus(repo, userId, status) {
-  const { schoolRoleKey } = require('../miniprogram/utils/school');
+  const { schoolRoleKey } = require('../src/shared/utils/school');
   const key = schoolRoleKey(userId, 'muc');
   const row = await repo.schoolRoles.getById(key);
   if (row) await repo.schoolRoles.set(key, { ...row, status });
@@ -771,7 +771,7 @@ test('F3 相邻：赛事比赛不受交手名额限制，赛季重置后计数�
   assert.equal(bracketFill.ok, true, bracketFill.message);
 
   // 赛季重置：新赛季号 → 新键，计数天然清零
-  const { scopeKey } = require('../miniprogram/utils/school');
+  const { scopeKey } = require('../src/shared/utils/school');
   await repo.seasons.set(scopeKey({ schoolId: 'muc', association: 'pkb' }),
     { schoolId: 'muc', association: 'pkb', seasonNumber: 2, resetTime: at(-HOUR / 2) });
   const afterReset = await call(repo, 'submitSchoolMatch', { requestId: 'cap_new_season', ...casual() });

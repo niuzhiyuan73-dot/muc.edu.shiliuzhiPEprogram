@@ -15,8 +15,8 @@ const {
   normalizeScores,
   buildMatchRecord,
   fillScheduledMatch,
-} = require('../miniprogram/services/match-record.js');
-const { MATCH_TYPE, MATCH_STATUS, ROLE } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/services/match-record.js');
+const { MATCH_TYPE, MATCH_STATUS, ROLE } = require('../src/shared/utils/constants.js');
 
 /* ============================================================
  * 一、位置与身份

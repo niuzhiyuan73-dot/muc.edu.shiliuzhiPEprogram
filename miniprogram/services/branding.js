@@ -15,7 +15,7 @@
  * ============================================================
  */
 
-const { getAssociation: lookup, isKnownAssociation } = require('../utils/associations.js');
+const { getAssociation: lookup, isKnownAssociation } = require('../shared/utils/associations.js');
 const scope = require('./association-scope.js');
 
 /**

@@ -10,7 +10,7 @@
 
 const schoolSession = require('../services/school-session.js');
 const associationScope = require('../services/association-scope.js');
-const { LEGACY_SCHOOL_ID } = require('./school.js');
+const { LEGACY_SCHOOL_ID } = require('../shared/utils/school.js');
 
 /** 当前学校 + 协会范围。每次现取，调用方不要在异步等待期间缓存。 */
 function pageScope() {

@@ -20,7 +20,7 @@ const assert = require('node:assert/strict');
 const { createRepo } = require('../cloudfunctions/data/src/adapters/cloud-repo');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
 const { memberKey } = require('../cloudfunctions/data/src/core/idempotency');
-const { schoolAccountKey } = require('../miniprogram/utils/school');
+const { schoolAccountKey } = require('../src/shared/utils/school');
 
 /**
  * 云数据库桩：只实现 getByOpenId 用到的那条查询链，并**记录**调用顺序。

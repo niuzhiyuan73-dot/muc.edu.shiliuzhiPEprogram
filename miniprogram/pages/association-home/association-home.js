@@ -24,7 +24,7 @@
 
 const {
   getAssociation, isKnownAssociation, workbenchTabsOf, sportTypeOf, SPORT_TYPE,
-} = require('../../utils/associations.js');
+} = require('../../shared/utils/associations.js');
 const { applyBranding } = require('../../services/branding.js');
 const scope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');

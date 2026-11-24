@@ -17,7 +17,7 @@
  * ============================================================
  */
 
-const { activeAssociations } = require('../../utils/associations.js');
+const { activeAssociations } = require('../../shared/utils/associations.js');
 
 Component({
   properties: {

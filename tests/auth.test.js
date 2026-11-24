@@ -16,8 +16,8 @@ const {
   buildAccount,
   resolveAuthState,
   register,
-} = require('../miniprogram/services/auth.js');
-const { ROLE, USER_STATUS, COLLEGES: COLLEGES_CONST } = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/services/auth.js');
+const { ROLE, USER_STATUS, COLLEGES: COLLEGES_CONST } = require('../src/shared/utils/constants.js');
 const { MEMBER_SEED } = require('../miniprogram/services/seed.js');
 const fs = require('node:fs');
 const path = require('node:path');
@@ -223,7 +223,7 @@ describe('register —— 注册申请', () => {
     //   ① auth.js 不再 require 任何数据源（mock / index / store）；
     //   ② 同一输入永远得到相同输出（无隐藏的写副作用可改变后续结果）。
     const text = fs.readFileSync(
-      path.join(__dirname, '..', 'miniprogram', 'services', 'auth.js'), 'utf8');
+      path.join(__dirname, '..', 'src', 'shared', 'services', 'auth.js'), 'utf8');
     assert.ok(!/require\(['"]\.\/(mock|index)|services\/(mock|index)/.test(text),
       'auth.js 不得再依赖旧栈数据源');
     const a = register(validForm(), { now: new Date('2026-09-10T10:00:00') });

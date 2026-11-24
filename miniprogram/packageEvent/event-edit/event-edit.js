@@ -47,20 +47,20 @@ const {
   DOUBLES_SEED_MODES,
   COURT_LIMITS,
   disciplineOptionsFor,
-} = require('../../utils/constants.js');
+} = require('../../shared/utils/constants.js');
 const {
   TITLE_MAX,
   DESCRIPTION_MAX,
   LOCATION_MAX,
-} = require('../../services/event.js');
+} = require('../../shared/services/event.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
-const { drawCapacityOf } = require('../../utils/event-capacity.js');
+const { drawCapacityOf } = require('../../shared/utils/event-capacity.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 生成一次提交的请求编号：时间戳 + 随机后缀，满足服务端的编号字符集要求 */
 function nextRequestId() {

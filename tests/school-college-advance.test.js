@@ -16,15 +16,15 @@ const assert = require('node:assert/strict');
 
 const { createSchoolDemoSeed } = require('../miniprogram/services/school-seed');
 const { createSchoolMemoryRepo } = require('../miniprogram/services/school-memory-repo');
-const { buildSchoolContext } = require('../miniprogram/services/school-context');
-const college = require('../miniprogram/services/school-college-service');
-const match = require('../miniprogram/services/school-match-service');
-const { collegeTieKey } = require('../miniprogram/services/college-draw');
-const { collegeLegKey } = require('../miniprogram/services/college-tie');
-const { schoolMemberKey } = require('../miniprogram/utils/school');
+const { buildSchoolContext } = require('../src/server/services/school-context');
+const college = require('../src/server/services/school-college-service');
+const match = require('../src/server/services/school-match-service');
+const { collegeTieKey } = require('../src/shared/services/college-draw');
+const { collegeLegKey } = require('../src/shared/services/college-tie');
+const { schoolMemberKey } = require('../src/shared/utils/school');
 const {
   COLLEGES, TIE_STATUS, LEG_DISCIPLINE, TIE_ALGO, TIE_NET_MODE, MATCH_COMPETITION,
-} = require('../miniprogram/utils/constants');
+} = require('../src/shared/utils/constants');
 
 const NOW = new Date('2026-10-13T10:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -214,7 +214,7 @@ test('撤销小场已取消：学院赛小场一经确认即为最终结算', as
   await startTie(repo, tie);
   await playLeg(repo, eventId, tie, 1, 'A');
 
-  const mod = require('../miniprogram/services/school-match-service.js');
+  const mod = require('../src/server/services/school-match-service.js');
   assert.equal(typeof mod.revokeSchoolMatch, 'undefined', '撤销实现已删除');
   const stored = await repo.ties.getById(tie.tieId);
   assert.equal(stored.legs[0].winner, defByName(tie.collegeA).name, '已生效的小场结果保持不变');

@@ -12,7 +12,7 @@ const assert = require('node:assert/strict');
 
 const runtime = require('../miniprogram/services/runtime-mode.js');
 const { uploadAvatar, isTempPath, buildCloudPath } = require('../miniprogram/services/avatar.js');
-const { DATA_SOURCE } = require('../miniprogram/utils/constants.js');
+const { DATA_SOURCE } = require('../src/shared/utils/constants.js');
 
 /** 记录 uploadFile 的调用，并按需伪造成功 / 失败 */
 let uploads = [];

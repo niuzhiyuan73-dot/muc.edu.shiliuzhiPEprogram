@@ -15,7 +15,7 @@
  * ============================================================
  */
 
-const { DATA_SOURCE } = require('../utils/constants.js');
+const { DATA_SOURCE } = require('../shared/utils/constants.js');
 
 const KNOWN_SOURCES = Object.values(DATA_SOURCE);
 

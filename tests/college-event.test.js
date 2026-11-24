@@ -32,7 +32,7 @@ const {
   canFinishCollegeEvent,
   validateCollegePlacements,
   buildCollegeResultRows,
-} = require('../miniprogram/services/college-event.js');
+} = require('../src/shared/services/college-event.js');
 const {
   ROLE,
   USER_STATUS,
@@ -40,7 +40,7 @@ const {
   TIE_ALGO,
   TIE_NET_MODE,
   ROSTER_LIMITS,
-} = require('../miniprogram/utils/constants.js');
+} = require('../src/shared/utils/constants.js');
 
 /** 一位管理员 */
 const ADMIN = { _id: 'u01', nickName: '巴特尔', role: ROLE.ADMIN, status: USER_STATUS.ACTIVE };

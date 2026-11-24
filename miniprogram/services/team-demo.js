@@ -23,13 +23,13 @@
  */
 
 const { MEMBER_SEED } = require('./seed.js');
-const { eventMatchKey } = require('./draw.js');
-const { schoolKey, schoolMembershipKey, teamMemberKey } = require('../utils/school.js');
+const { eventMatchKey } = require('../shared/services/draw.js');
+const { schoolKey, schoolMembershipKey, teamMemberKey } = require('../shared/utils/school.js');
 const {
   TEAM_STATUS, TEAM_MEMBER_STATUS, TEAM_EVENT_STATUS, TEAM_ENTRY_STATUS,
   TEAM_MATCH_STATUS, EVENT_FORMAT, EVENT_BRONZE_MODE, BRACKET_STAGE,
-} = require('../utils/constants.js');
-const { normalizeBasketballRules } = require('../utils/basketball-rules.js');
+} = require('../shared/utils/constants.js');
+const { normalizeBasketballRules } = require('../shared/utils/basketball-rules.js');
 const { demoIso, demoAt } = require('./demo-clock.js');
 
 const SCHOOL_ID = 'muc';

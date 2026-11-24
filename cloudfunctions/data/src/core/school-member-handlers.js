@@ -8,9 +8,9 @@
  * 悄悄变成可被客户端调用的 action（见 2026-10-16 只读审计 H1）。
  */
 const crypto = require('crypto');
-const { SCHOOL_IDENTITY_ACTIONS, pickActions } = require('../../lib/utils/school-actions.js');
-const { createSchoolHandlers } = require('../../lib/services/school-membership-service.js');
-const personalSportsService = require('../../lib/services/personal-sports-service.js');
+const { SCHOOL_IDENTITY_ACTIONS, pickActions } = require('../../lib/shared/utils/school-actions.js');
+const { createSchoolHandlers } = require('../../lib/server/services/school-membership-service.js');
+const personalSportsService = require('../../lib/server/services/personal-sports-service.js');
 
 module.exports = Object.freeze(pickActions([createSchoolHandlers({
   claimKey: (schoolId, studentId) => `sid_${crypto.createHash('sha256').update(JSON.stringify([schoolId, studentId])).digest('hex')}`,

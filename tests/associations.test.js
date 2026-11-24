@@ -24,11 +24,11 @@ const {
   capabilitiesOf,
   workbenchTabsOf,
   basketballRulesOf,
-} = require('../miniprogram/utils/associations.js');
-const { ASSOCIATION_STATUS } = require('../miniprogram/utils/constants.js');
-const { isValidFormat } = require('../miniprogram/utils/match-format.js');
-const { isValidBasketballRules } = require('../miniprogram/utils/basketball-rules.js');
-const { isValidFootballRules } = require('../miniprogram/utils/football-rules.js');
+} = require('../src/shared/utils/associations.js');
+const { ASSOCIATION_STATUS } = require('../src/shared/utils/constants.js');
+const { isValidFormat } = require('../src/shared/utils/match-format.js');
+const { isValidBasketballRules } = require('../src/shared/utils/basketball-rules.js');
+const { isValidFootballRules } = require('../src/shared/utils/football-rules.js');
 
 const DEST_ROOT = path.join(__dirname, '..', 'cloudfunctions', 'data', 'lib');
 
@@ -160,7 +160,7 @@ test('isKnownAssociation —— 只认注册表里的 id', () => {
  */
 
 test('云端镜像能加载，且协会 id 清单与源文件一致', () => {
-  const mirror = require(path.join(DEST_ROOT, 'utils', 'associations.js'));
+  const mirror = require(path.join(DEST_ROOT, 'shared', 'utils', 'associations.js'));
   assert.deepStrictEqual(
     mirror.allAssociations().map((a) => a.id),
     allAssociations().map((a) => a.id)

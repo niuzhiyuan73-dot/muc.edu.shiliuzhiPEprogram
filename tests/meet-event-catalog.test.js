@@ -23,14 +23,14 @@ const {
   searchTemplates,
   listByCategory,
   normalizeKeyword,
-} = require('../miniprogram/services/meet-event-catalog.js');
+} = require('../src/shared/services/meet-event-catalog.js');
 
 const {
   normalizeMeasure,
   formatMeasure,
   compareMeasure,
   countsTowardPersonalQuota,
-} = require('../miniprogram/services/meet-measure.js');
+} = require('../src/shared/services/meet-measure.js');
 
 const idsOf = (items) => items.map((item) => item.id);
 

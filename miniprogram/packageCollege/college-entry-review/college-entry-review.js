@@ -21,13 +21,13 @@
 const { loadCollegeEntryReviewView } = require('../../services/school-college-view.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
 // 审核动作与入会审核共用同一套取值，直接复用，免得两处各写一份字符串
-const { REVIEW_ACTION } = require('../../services/member-review.js');
+const { REVIEW_ACTION } = require('../../shared/services/member-review.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const space = require('../../services/association-space.js');
 const identity = require('../../services/school-identity.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 const { pageScope, toast } = require('../../utils/page-helpers.js');
 

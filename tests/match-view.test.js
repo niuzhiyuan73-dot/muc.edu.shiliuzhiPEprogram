@@ -10,7 +10,7 @@ const {
   buildRecordRow,
   filterRecords,
 } = require('../miniprogram/services/match-view.js');
-const { MATCH_STATUS, MATCH_TYPE, ROLE } = require('../miniprogram/utils/constants.js');
+const { MATCH_STATUS, MATCH_TYPE, ROLE } = require('../src/shared/utils/constants.js');
 
 const ME = 'u06';
 const RIVAL = 'u01';

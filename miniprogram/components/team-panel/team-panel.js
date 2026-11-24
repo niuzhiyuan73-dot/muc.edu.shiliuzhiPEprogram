@@ -18,7 +18,7 @@ const space = require('../../services/association-space.js');
 const schoolSession = require('../../services/school-session.js');
 const associationScope = require('../../services/association-scope.js');
 const { currentThemeClass } = require('../../services/branding.js');
-const { LEGACY_SCHOOL_ID } = require('../../utils/school.js');
+const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 
 /** 页签里只露前几支队，更多去列表页看 */
 const PANEL_LIMIT = 6;
