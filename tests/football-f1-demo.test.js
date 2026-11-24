@@ -36,9 +36,9 @@ test('足球演示可重复生成，和篮球各集合主键不冲突、不串�
   assert.equal(JSON.stringify(basketball), before);
   // 扩容后共 4 场：原有 1 场 + 双回合 2 场 + 单败决赛 1 场
   assert.equal(football.teamMatches.length, 4); assert.deepEqual(football.teamMatchStats, []);
-  const demoMatch = football.teamMatches.find(row => row.footballPublished);
+  const demoMatch = football.teamMatches.find(row => row.sportPublished);
   assert.ok(demoMatch, '至少有一场带战报的快照');
-  assert.equal(demoMatch.footballPublished.result.scoreA, 2);
+  assert.equal(demoMatch.sportPublished.result.scoreA, 2);
   assert.deepEqual(football.memberships, [], '普通会员沿用学校身份，不在演示数据中额外升权');
 });
 

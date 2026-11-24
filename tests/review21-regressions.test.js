@@ -170,7 +170,7 @@ test('足球进球与助攻榜按数值降序，同分按编号稳定排序', as
   await f.repo.teamEvents.set('e', { _id: 'e', schoolId: 'muc', association: 'fb', status: 'finished', sportFormat: 'football11' });
   const players = [{ userId: 'high', goals: 3, assists: 1 }, { userId: 'low', goals: 1, assists: 3 }, { userId: 'equal', goals: 3, assists: 1 }];
   await f.repo.teamMatches.set('match', { _id: 'match', schoolId: 'muc', association: 'fb', eventId: 'e', status: 'published',
-    footballPublished: { sides: { A: { players, coverage: {} }, B: { players: [], coverage: {} } } } });
+    sportPublished: { sides: { A: { players, coverage: {} }, B: { players: [], coverage: {} } } } });
   const result = (await require('../src/server/services/football-match-service').getTeamEventPlayerStats({ eventId: 'e' }, target)).data;
   assert.deepEqual(result.scorers.map(row => row.userId), ['equal', 'high', 'low']);
   assert.deepEqual(result.assists.map(row => row.userId), ['low', 'equal', 'high']);

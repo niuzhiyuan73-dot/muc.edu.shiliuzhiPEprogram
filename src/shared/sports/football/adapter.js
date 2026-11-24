@@ -56,6 +56,8 @@ const footballAdapter = Object.freeze({
     requiresWinnerOnElimSettle: true,
     sharedEliminationRank: true,
     supportsRankingDecisions: true,
+    strictEntryRosterCheck: true,
+    schedulePeopleSource: 'school',
   }),
   rules: Object.freeze({
     defaultPresetKey: football.DEFAULT_PRESET_KEY,

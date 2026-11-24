@@ -83,7 +83,7 @@ function createFootballDemoContent() {
   const teamMatches = [{ _id: matchId, ...SCOPE, eventId: completedId, sportFormat: 'football11', rules,
     teamA: specs[0].teamId, teamB: specs[1].teamId, round: 1, stage: 'group', slot: 0,
     status: 'published', scoreA: 2, scoreB: 1, winner: 'A', forfeit: null, overtime: false,
-    footballPublished: normalized.value, footballPublishedRevision: 3, footballDraft: null,
+    sportPublished: normalized.value, sportPublishedRevision: 3, sportDraft: null,
     revision: 3, recordedBy: 'demo_muc_admin', publishedBy: 'demo_muc_admin', publishedAt: ISO,
     matchTime: demoIso(-1), durationMinutes: 110, location: '校足球场（演示）',
     createdAt: ISO, updatedAt: ISO, simulated: true }];
@@ -128,7 +128,7 @@ function createFootballDemoContent() {
   /**
    * 一份「已发布」的赛后报告快照。
    *
-   * 【为什么每场都必须有】统计端只认 `status === 'published' && footballPublished`
+   * 【为什么每场都必须有】统计端只认 `status === 'published' && sportPublished`
    * 的比赛（见 football-match-service 的 publicMatches）。扩容时补的那几场当初
    * 只写了 scoreA/scoreB，结果就是：赛事写着「已完赛」、名次也在，但
    *   · 比赛详情的比分显示「—」（footballMatchView 是从报告里取比分的）；
@@ -172,7 +172,7 @@ function createFootballDemoContent() {
     teamA: specs[0].teamId, teamB: specs[1].teamId, round, stage, slot,
     status: 'published', scoreA, scoreB, winner: scoreA > scoreB ? 'A' : 'B', forfeit: null, overtime: false,
     // 没有这两个字段，「已发布」就是一句空话（见上面的说明）
-    footballPublished: publishedReportOf(scoreA, scoreB, format), footballPublishedRevision: 2, footballDraft: null,
+    sportPublished: publishedReportOf(scoreA, scoreB, format), sportPublishedRevision: 2, sportDraft: null,
     revision: 2, recordedBy: 'demo_muc_admin', publishedBy: 'demo_muc_admin', publishedAt: ISO,
     matchTime, durationMinutes: 105, location: '校足球场', createdAt: ISO, updatedAt: ISO, simulated: true,
   });

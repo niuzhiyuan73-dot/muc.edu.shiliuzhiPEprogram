@@ -153,9 +153,9 @@ test('足球演示：已发布的比赛必须带赛后报告，否则统计与�
     && row.status === TEAM_MATCH_STATUS.PUBLISHED);
   assert.ok(published.length >= 4, '足球演示应有若干场已发布比赛');
   for (const match of published) {
-    assert.ok(match.footballPublished, `足球比赛 ${match._id} 已发布却没有赛后报告`);
-    assert.equal(match.footballPublished.result.scoreA, match.scoreA);
-    assert.equal(match.footballPublished.result.scoreB, match.scoreB);
+    assert.ok(match.sportPublished, `足球比赛 ${match._id} 已发布却没有赛后报告`);
+    assert.equal(match.sportPublished.result.scoreA, match.scoreA);
+    assert.equal(match.sportPublished.result.scoreB, match.scoreB);
   }
 });
 

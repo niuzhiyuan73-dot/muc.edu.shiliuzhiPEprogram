@@ -248,7 +248,7 @@ test('F2 并发录分只接受同版本的一份，不缺版本降级；云端�
   };
   assert.equal((await cloud.call('recordTeamMatch', { matchId: match._id, expectRevision: current.revision,
     requestId: 'revoked', report: await cloud.report(match) }, 'recorder')).ok, false);
-  assert.equal((await cloud.repo.teamMatches.getById(match._id)).footballDraft, undefined);
+  assert.equal((await cloud.repo.teamMatches.getById(match._id)).sportDraft, undefined);
 });
 
 test('F2 云端赛程新增窗口由排期版本封住；失败不写半份时间', async () => {
@@ -300,9 +300,9 @@ test('F2 足球录入人候选包含无需额外角色行的普通会员；队�
 });
 
 test('云端协议：足球比赛没有待审核报告就发不出去（云库不会出现「已发布却无报告」）', async () => {
-  // 演示种子里曾经有过「status=published 但缺 footballPublished」的比赛（已修）。
+  // 演示种子里曾经有过「status=published 但缺 sportPublished」的比赛（已修）。
   // 那个缺陷在云端不会发生：足球的 publishTeamMatch 以「有待审核报告」为前置，
-  // 且只有这一条路径会写 footballPublished。这条用例把该前置钉住。
+  // 且只有这一条路径会写 sportPublished。这条用例把该前置钉住。
   const f = await fixture({ cloud: true });
   const match = (await f.matches())[0];
   // 走 write 包装：mutate 要求 requestId + expectRevision（幂等与并发保护）
@@ -312,7 +312,7 @@ test('云端协议：足球比赛没有待审核报告就发不出去（云库�
 
   const fresh = await f.repo.forScope(SCOPE).teamMatches.getById(match._id);
   assert.notEqual(fresh.status, 'published', '不能绕过报告直接把比赛标成已发布');
-  assert.equal(fresh.footballPublished, undefined);
+  assert.equal(fresh.sportPublished, undefined);
 });
 
 test('F2 单队战绩只读本队那几十条，不再整表读全协会历史（2026-10-26 只读审查 P2-7）', async () => {

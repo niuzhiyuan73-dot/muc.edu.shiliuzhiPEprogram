@@ -63,8 +63,8 @@ function attachTeamReads(surface, { inTx, query, byIds, command }) {
     select('teamMatches', 'teamA', ids), select('teamMatches', 'teamB', ids),
   ])).flat());
   surface.teamMatches.listForPlayer = async id => unique((await Promise.all([
-    select('teamMatches', 'footballPublished.sides.A.players.userId', [id]),
-    select('teamMatches', 'footballPublished.sides.B.players.userId', [id]),
+    select('teamMatches', 'sportPublished.sides.A.players.userId', [id]),
+    select('teamMatches', 'sportPublished.sides.B.players.userId', [id]),
   ])).flat());
   surface.teamMatchStats.listForUser = async id => unique((await Promise.all([
     select('teamMatchStats', 'published.players.userId', [id]),

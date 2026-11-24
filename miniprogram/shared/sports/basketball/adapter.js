@@ -4,7 +4,7 @@
 
 const basketball = require('../../utils/basketball-rules.js');
 const { computeTeamTable } = require('../../utils/team-standings.js');
-const { draftOf, publishedOf, lineupsOf } = require('../contract.js');
+const { createSportAdapter } = require('../contract.js');
 
 const own = (value, key) => Object.prototype.hasOwnProperty.call(value, key);
 
@@ -19,72 +19,35 @@ function normalizeBasketball(input) {
   return basketball.normalizeBasketballRules(input);
 }
 
-const basketballAdapter = Object.freeze({
-  meta: Object.freeze({
+const basketballAdapter = createSportAdapter({
+  meta: {
     sportFormat: basketball.BASKETBALL_FORMAT.FIVE,
     sportKey: 'basketball',
     supportsLiveScore: true,
     supportsMatchData: true,
     supportsRedraw: true,
-    redrawRefuseMessage: '',
     allowsDraw: false,
     defaultMatchTimeFromEvent: true,
-    defaultDurationMinutes: () => 90,
-    requiresStrictRulesOnEntry: false,
-    requiresWinnerOnElimSettle: false,
-    sharedEliminationRank: false,
-    supportsRankingDecisions: false,
-  }),
-  rules: Object.freeze({
+    strictEntryRosterCheck: false,
+    schedulePeopleSource: 'membership',
+  },
+  rules: {
     defaultPresetKey: basketball.DEFAULT_PRESET_KEY,
     defaultRules: () => normalizeBasketball({ presetKey: basketball.DEFAULT_PRESET_KEY }),
     normalizeRules: normalizeBasketball,
     formatRules: basketball.formatBasketballRules,
-  }),
-  permissions: Object.freeze({
-    canRecord: ({ manage, captain, isRecorder, supportsMatchData = true } = {}) =>
-      Boolean(supportsMatchData && (manage || captain || isRecorder)),
-    canSeePending: ({ manage, captain, isRecorder } = {}) =>
-      Boolean(manage || captain || isRecorder),
-    canSetLineup: ({ active, manage, captain } = {}) =>
-      Boolean(active && (manage || captain)),
-    canEditSchedule: ({ manage, eventActive, match } = {}) =>
-      Boolean(manage && eventActive && match && match.status !== 'canceled'),
-  }),
-  matchLifecycle: Object.freeze({
-    initMatchExtra: event => ({
-      matchTime: (event && event.startTime) || null,
-    }),
-    hasActivityOrDraft: match => Boolean(match && (
-      match.status === 'live'
-      || match.liveScore
-      || draftOf(match)
-      || publishedOf(match)
-      || lineupsOf(match)
-      || (match.scoreA !== null && match.scoreA !== undefined)
-    )),
-    validateBeforeSettle: () => ({ ok: true, message: '' }),
-    validateRankingDecisions: (_payload, event) => ({
-      ok: true,
-      decisions: (event && event.rankingDecisions) || [],
-    }),
-    validateEntryPayload: () => ({ ok: true, message: '' }),
-    decorateMatchView: () => ({}),
-  }),
-  standings: Object.freeze({
+  },
+  standings: {
     computeTable: computeTeamTable,
-    adjustEliminationPlacements: placements => placements,
-  }),
-  view: Object.freeze({
+  },
+  view: {
     eventFormMode: 'basketball',
-    recordPageUrl: () => '',
     liveScorePageUrl: matchId => `/packageTeam/team-live-score/team-live-score?matchId=${encodeURIComponent(matchId)}`,
-    recordHintText: '',
     statColumns: Object.freeze([
       Object.freeze({ key: 'points', label: '得分' }),
       Object.freeze({ key: 'fouls', label: '犯规' }),
     ]),
-  }),
+  },
 });
 
 module.exports = { basketballAdapter, normalizeBasketball };

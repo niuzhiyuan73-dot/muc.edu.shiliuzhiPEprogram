@@ -412,7 +412,7 @@ function teamCup({ association, sportName, year, ongoing = false }) {
   /**
    * 足球赛的赛后报告快照。
    *
-   * 【为什么必须有】统计端只认 `status === 'published' && footballPublished`
+   * 【为什么必须有】统计端只认 `status === 'published' && sportPublished`
    * 的比赛；缺报告的比赛连比分都显示不出来（详情页从报告里取比分），
    * 出场与战绩一律为 0 —— 这就会造出「没打却有亚军」的假象。
    */
@@ -461,8 +461,8 @@ function teamCup({ association, sportName, year, ongoing = false }) {
       forfeit: null,
       overtime: false,
       ...(football ? {
-        footballPublished: footballReportOf(home, away, scoreA, scoreB),
-        footballPublishedRevision: 2, footballDraft: null,
+        sportPublished: footballReportOf(home, away, scoreA, scoreB),
+        sportPublishedRevision: 2, sportDraft: null,
       } : {}),
       revision: 2,
       recordedBy: ADMIN_ID,

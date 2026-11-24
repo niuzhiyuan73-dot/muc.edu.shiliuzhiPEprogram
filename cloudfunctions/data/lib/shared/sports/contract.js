@@ -1,20 +1,19 @@
 /**
  * 团队运动 SportAdapter 契约与统一字段读取辅助（共享纯模块）
  * ============================================================
- * 兼容过渡期同时支持读取 `sportDraft`/`footballDraft`、
- * `sportPublished`/`footballPublished`、`sportLineups`/`footballLineups`。
+ * 单场运动扩展字段统一为：`sportDraft`、`sportPublished`、`sportLineups`。
  */
 
 function draftOf(match) {
-  return (match && (match.sportDraft || match.footballDraft)) || null;
+  return (match && match.sportDraft) || null;
 }
 
 function publishedOf(match) {
-  return (match && (match.sportPublished || match.footballPublished)) || null;
+  return (match && match.sportPublished) || null;
 }
 
 function lineupsOf(match) {
-  return (match && (match.sportLineups || match.footballLineups)) || null;
+  return (match && match.sportLineups) || null;
 }
 
 function isFn(value) {
@@ -51,10 +50,14 @@ function validateSportAdapter(adapter) {
     'supportsLiveScore', 'supportsMatchData', 'supportsRedraw', 'allowsDraw',
     'defaultMatchTimeFromEvent', 'requiresStrictRulesOnEntry',
     'requiresWinnerOnElimSettle', 'sharedEliminationRank', 'supportsRankingDecisions',
+    'strictEntryRosterCheck',
   ]) {
     if (!isBool(meta[flag])) {
       return { ok: false, message: `meta.${flag} 必须为布尔值` };
     }
+  }
+  if (meta.schedulePeopleSource !== 'membership' && meta.schedulePeopleSource !== 'school') {
+    return { ok: false, message: 'meta.schedulePeopleSource 必须为 membership 或 school' };
   }
   if (!isFn(meta.defaultDurationMinutes)) {
     return { ok: false, message: 'meta.defaultDurationMinutes 必须为函数' };
@@ -100,9 +103,79 @@ function validateSportAdapter(adapter) {
   return { ok: true, message: '' };
 }
 
+/**
+ * 辅助工厂：为可选钩子提供显式默认空实现并执行契约校验，避免新运动插件重复写空壳。
+ *
+ * @param {Object} spec
+ * @returns {Object} 冻结的 SportAdapter
+ */
+function createSportAdapter(spec) {
+  if (!spec || typeof spec !== 'object' || Array.isArray(spec)) {
+    throw new Error('SportAdapter 配置必须为对象');
+  }
+  const meta = Object.freeze({
+    redrawRefuseMessage: '',
+    requiresStrictRulesOnEntry: false,
+    requiresWinnerOnElimSettle: false,
+    sharedEliminationRank: false,
+    supportsRankingDecisions: false,
+    strictEntryRosterCheck: false,
+    schedulePeopleSource: 'membership',
+    defaultDurationMinutes: () => 90,
+    ...(spec.meta || {}),
+  });
+  const rules = Object.freeze({ ...(spec.rules || {}) });
+  const permissions = Object.freeze({
+    canRecord: ({ manage, captain, isRecorder, supportsMatchData = true } = {}) =>
+      Boolean(supportsMatchData && (manage || captain || isRecorder)),
+    canSeePending: ({ manage, captain, isRecorder } = {}) =>
+      Boolean(manage || captain || isRecorder),
+    canSetLineup: ({ active, manage, captain } = {}) =>
+      Boolean(active && (manage || captain)),
+    canEditSchedule: ({ manage, eventActive, match } = {}) =>
+      Boolean(manage && eventActive && match && match.status !== 'canceled'),
+    ...(spec.permissions || {}),
+  });
+  const matchLifecycle = Object.freeze({
+    initMatchExtra: event => ({ matchTime: (event && event.startTime) || null }),
+    hasActivityOrDraft: match => Boolean(match && (
+      match.status === 'live'
+      || match.liveScore
+      || draftOf(match)
+      || publishedOf(match)
+      || lineupsOf(match)
+      || (match.scoreA !== null && match.scoreA !== undefined)
+    )),
+    validateBeforeSettle: () => ({ ok: true, message: '' }),
+    validateRankingDecisions: (_payload, event) => ({
+      ok: true,
+      decisions: (event && event.rankingDecisions) || [],
+    }),
+    validateEntryPayload: () => ({ ok: true, message: '' }),
+    decorateMatchView: () => ({}),
+    ...(spec.matchLifecycle || {}),
+  });
+  const standings = Object.freeze({
+    adjustEliminationPlacements: placements => placements,
+    ...(spec.standings || {}),
+  });
+  const view = Object.freeze({
+    recordHintText: '',
+    recordPageUrl: () => '',
+    liveScorePageUrl: () => '',
+    statColumns: Object.freeze([]),
+    ...(spec.view || {}),
+  });
+  const adapter = Object.freeze({ meta, rules, permissions, matchLifecycle, standings, view });
+  const check = validateSportAdapter(adapter);
+  if (!check.ok) throw new Error(check.message);
+  return adapter;
+}
+
 module.exports = {
   draftOf,
   publishedOf,
   lineupsOf,
   validateSportAdapter,
+  createSportAdapter,
 };

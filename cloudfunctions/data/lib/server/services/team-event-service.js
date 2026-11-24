@@ -42,9 +42,8 @@ const { roundRobinRounds } = require('../../shared/utils/standings.js');
 const { createSeededRandom, shuffle } = require('../../shared/utils/random.js');
 const { eventMatchKey, planNextRound } = require('../../shared/services/draw.js');
 const { computeTeamPlacements, isFinal } = require('../../shared/utils/team-standings.js');
-const football = require('./football-match-service');
-const footballSchedule = require('./football-schedule-service');
-const { matchMinutes: footballMatchMinutes } = require('../../shared/utils/football-report');
+const { getSportAdapterFor } = require('../../shared/sports/registry.js');
+const { getServerSportPluginFor } = require('../sports/registry.js');
 const { compareCode } = require('../../shared/utils/text-order.js');
 
 const ok = data => ({ ok: true, data });
@@ -206,6 +205,7 @@ function matchView(match, teamName, rights = {}) {
   // 未发布且无权查看待审核：数字、胜方、加时、弃权一律不下发
   const masked = !isPublished && rights.canSeePending !== true;
   const showScore = hasScore && !masked;
+  const adapter = getSportAdapterFor(match.association, { sportFormat: match.sportFormat });
   const strategy = teamSportStrategyFor(match.association, { sportFormat: match.sportFormat });
   const live = strategy && strategy.supportsLiveScore && match.status === TEAM_MATCH_STATUS.LIVE
     ? basketballLiveView(match.liveScore, false) : null;
@@ -250,7 +250,7 @@ function matchView(match, teamName, rights = {}) {
     canSeePending: rights.canSeePending === true,
     // 这一场的统计有未审核的新版本（只有能看到待审核内容的人才需要知道）
     statPending: rights.canSeePending === true && rights.statPending === true,
-    ...(strategy && strategy.sportFormat === 'football11' ? football.footballMatchView(match, rights.canSeePending === true) : {}),
+    ...(adapter ? adapter.matchLifecycle.decorateMatchView(match, { canSeePending: rights.canSeePending === true }) : {}),
   };
 }
 
@@ -433,15 +433,18 @@ async function getTeamEvent(payload = {}, ctx) {
     );
     const active = ![TEAM_EVENT_STATUS.FINISHED, TEAM_EVENT_STATUS.CANCELED].includes(event.status)
       && ![TEAM_MATCH_STATUS.PUBLISHED, TEAM_MATCH_STATUS.CANCELED, TEAM_MATCH_STATUS.LIVE].includes(match.status);
-    // 管理者与参赛队队长既录分也看得到自己录的待审核数字；其余人只看「待审核」
+    const adapter = strategy.adapter;
+    const isRecorder = match.recorderId === ctx.actorId;
+    const eventActive = ![TEAM_EVENT_STATUS.FINISHED, TEAM_EVENT_STATUS.CANCELED].includes(event.status);
+    // 权限差异统一委托给 SportAdapter
     return {
-      canRecord: strategy.supportsMatchData && (manage || (strategy.sportFormat !== 'football11' && captain) || match.recorderId === ctx.actorId),
+      canRecord: adapter.permissions.canRecord({
+        manage, captain, isRecorder, supportsMatchData: strategy.supportsMatchData,
+      }),
       canPublish: strategy.supportsMatchData && manage,
-      canSetLineup: active && (manage || captain) && !match.footballDraft,
-      canSchedule: manage && ![TEAM_EVENT_STATUS.FINISHED, TEAM_EVENT_STATUS.CANCELED].includes(event.status)
-        && match.status !== TEAM_MATCH_STATUS.CANCELED
-        && (strategy.sportFormat !== 'football11' || match.status === TEAM_MATCH_STATUS.SCHEDULED),
-      canSeePending: manage || (strategy.sportFormat !== 'football11' && captain) || match.recorderId === ctx.actorId,
+      canSetLineup: adapter.permissions.canSetLineup({ active, manage, captain, match }),
+      canSchedule: adapter.permissions.canEditSchedule({ manage, eventActive, match }),
+      canSeePending: adapter.permissions.canSeePending({ manage, captain, isRecorder }),
       statPending: pendingStatMatches.has(match._id),
     };
   };
@@ -840,9 +843,10 @@ async function submitTeamEntry(payload = {}, ctx) {
   if (event.status !== TEAM_EVENT_STATUS.REGISTRATION) return ok(refused('赛事当前不开放报名'));
   const strategy = teamSportStrategyFor(ctx.association, event);
   if (!strategy) return ok(refused('赛事运动规则与协会不符'));
-  const football = strategy.sportFormat === 'football11';
-  if (football && !strategy.normalizeRules(event.rules)) return ok(refused('足球规则配置不合法'));
-  if (football && payload.roster !== undefined && !Array.isArray(payload.roster)) return ok(refused('报名名单格式不合法'));
+  const adapter = strategy.adapter;
+  const strictEntry = adapter.meta.strictEntryRosterCheck === true;
+  const entryCheck = adapter.matchLifecycle.validateEntryPayload(payload, event);
+  if (!entryCheck.ok) return ok(refused(entryCheck.message));
 
   // 学院赛与院队是绑定的：学院赛只收院队，院队也只打学院赛。
   // 前者防止「随便一支队代表学院」，后者防止院队被当成万能队报进普通赛事。
@@ -899,7 +903,7 @@ async function submitTeamEntry(payload = {}, ctx) {
     }
   }
   const chosen = incoming || members.map(row => ({ userId: row.userId, no: null }));
-  if (football && incoming && incoming.length !== payload.roster.length) return ok(refused('报名名单里有空白或无效队员'));
+  if (strictEntry && incoming && incoming.length !== payload.roster.length) return ok(refused('报名名单里有空白或无效队员'));
   if (chosen.length < entryMin) {
     return ok(refused(`报名至少需要 ${entryMin} 人，当前选了 ${chosen.length} 人`));
   }
@@ -951,7 +955,7 @@ async function submitTeamEntry(payload = {}, ctx) {
     ...(resubmitted ? { reviewedBy: null, reviewedAt: null } : {}),
   };
   // 所有有效报名变动都会递增赛事版本；事务内比较完整快照，封住查询后的新增行窗口。
-  if (football) {
+  if (strictEntry) {
     const chosenIds = new Set(roster.map(row => row.userId));
     const occupied = (await repo.teamEventEntries.listByEvent(event._id)).find(entry =>
       entry.teamId !== team._id
@@ -967,7 +971,7 @@ async function submitTeamEntry(payload = {}, ctx) {
     const currentTeam = await tx.teams.getById(team._id);
     const currentEntry = await tx.teamEventEntries.getById(key);
     if (!currentEvent || currentEvent.status !== TEAM_EVENT_STATUS.REGISTRATION) return refused('赛事当前不开放报名');
-    if (football && Number(currentEvent.revision || 0) !== Number(event.revision || 0)) {
+    if (strictEntry && Number(currentEvent.revision || 0) !== Number(event.revision || 0)) {
       return refused('赛事或报名刚被改过，请刷新后重试');
     }
     if (!currentTeam || currentTeam.status !== TEAM_STATUS.ACTIVE
@@ -980,7 +984,7 @@ async function submitTeamEntry(payload = {}, ctx) {
     for (const row of roster) {
       const member = await tx.teamMembers.getById(teamMemberKey(team._id, row.userId));
       if (!member || member.status !== TEAM_MEMBER_STATUS.ACTIVE) return refused('名单里有人已不在本队，请刷新后重试');
-      if (football) {
+      if (strictEntry) {
         const user = await root.users.getById(row.userId);
         const schoolMember = await root.schoolMembers.getById(schoolMemberKey(row.userId, fresh.schoolId));
         if (!user || user.platformStatus !== PLATFORM_STATUS.ACTIVE || user.primarySchoolId !== fresh.schoolId
@@ -1330,13 +1334,13 @@ async function saveTeamMatchLineup(payload = {}, ctx) {
 
 /** 一场待打的比赛。比分留空 = 还没打，与「打了 0 分」区分开 */
 function matchDocOf({ event, ctx, round, stage, slot, teamA, teamB, now }) {
-  const strategy = teamSportStrategyFor(ctx.association, event);
+  const adapter = getSportAdapterFor(ctx.association, event);
   return {
     _id: eventMatchKey(event._id, round, stage, slot),
     schoolId: ctx.schoolId,
     association: ctx.association,
     eventId: event._id,
-    sportFormat: strategy ? strategy.sportFormat : null,
+    sportFormat: adapter ? adapter.meta.sportFormat : null,
     round,
     stage,
     slot,
@@ -1348,9 +1352,7 @@ function matchDocOf({ event, ctx, round, stage, slot, teamA, teamB, now }) {
     forfeit: null,
     winner: null,
     status: TEAM_MATCH_STATUS.SCHEDULED,
-    matchTime: strategy && strategy.sportFormat === 'football11' ? null : event.startTime || null,
-    ...(strategy && strategy.sportFormat === 'football11' ? { rules: event.rules,
-      durationMinutes: footballMatchMinutes(event.rules, event.format) } : {}),
+    ...(adapter ? adapter.matchLifecycle.initMatchExtra(event) : { matchTime: event.startTime || null }),
     location: event.location || '',
     recordedBy: null,
     recordedAt: null,
@@ -1397,11 +1399,15 @@ async function drawTeamEvent(payload = {}, ctx) {
     .sort((a, b) => compareCode(a.teamId, b.teamId));
   if (entries.length < 2) return ok(refused('至少 2 支球队才能抽签'));
 
+  const adapter = getSportAdapterFor(ctx.association, event);
+  if (!adapter) return ok(refused('赛事运动规则与协会不符'));
   const existingMatches = await repo.teamMatches.listByEvent(event._id);
-  if (football.isFootball(ctx) && existingMatches.length) return ok(refused('足球赛程已经生成；首版不重抽，请核对现有签表或重建赛事'));
-  if (existingMatches.some(match => match.status === TEAM_MATCH_STATUS.LIVE || match.liveScore
-    || match.footballDraft || match.footballPublished || match.footballLineups
-    || (match.scoreA !== null && match.scoreA !== undefined))) return ok(refused('已经有比赛开台或录了分，不能再重抽'));
+  if (!adapter.meta.supportsRedraw && existingMatches.length) {
+    return ok(refused(adapter.meta.redrawRefuseMessage || '当前赛制不允许重抽，请核对现有签表或重建赛事'));
+  }
+  if (existingMatches.some(match => adapter.matchLifecycle.hasActivityOrDraft(match))) {
+    return ok(refused('已经有比赛开台或录了分，不能再重抽'));
+  }
 
   const teamIds = entries.map(entry => entry.teamId);
   const seeds = Array.isArray(payload.seedTeamIds) ? payload.seedTeamIds.filter(Boolean) : [];
@@ -1478,15 +1484,19 @@ async function listTeamMatches(payload = {}, ctx) {
   // 原来读本协会**历年全部**团队比赛再内存过滤，赛程页每打开一次就翻若干页 RPC。
   const rows = (await repo.teamMatches.listByEvent(event._id))
     .sort((a, b) => (Number(a.round) - Number(b.round)) || (Number(a.slot) - Number(b.slot)))
-    .map(match => matchView(match, teamName, {
-      canRecord: manage || match.recorderId === ctx.actorId || (strategy.sportFormat !== 'football11' && [match.teamA, match.teamB].some(
+    .map(match => {
+      const captain = [match.teamA, match.teamB].some(
         teamId => (teams.find(team => team._id === teamId) || {}).captainId === ctx.actorId
-      )),
-      canPublish: manage,
-      canSeePending: manage || match.recorderId === ctx.actorId || (strategy.sportFormat !== 'football11' && [match.teamA, match.teamB].some(
-        teamId => (teams.find(team => team._id === teamId) || {}).captainId === ctx.actorId
-      )),
-    }));
+      );
+      const isRecorder = match.recorderId === ctx.actorId;
+      return matchView(match, teamName, {
+        canRecord: strategy.adapter.permissions.canRecord({
+          manage, captain, isRecorder, supportsMatchData: strategy.supportsMatchData,
+        }),
+        canPublish: manage,
+        canSeePending: strategy.adapter.permissions.canSeePending({ manage, captain, isRecorder }),
+      });
+    });
 
   return ok({
     ok: true,
@@ -1972,15 +1982,16 @@ async function schedulePeople(ctx, match, query = {}) {
   // 原实现无条件读三份整表：目录、本协会全部会籍、本协会全部球队。
   // 其中「球队」只为取两支队的队长——点读两次即可；「会籍」只有非足球协会才用
   // （足球按账号口径判有效成员），足球路径整份读回来是纯浪费。
-  const isFootball = football.isFootball(ctx);
+  const adapter = getSportAdapterFor(ctx.association);
+  const useSchoolRoster = Boolean(adapter && adapter.meta.schedulePeopleSource === 'school');
   const [dir, teamA, teamB] = await Promise.all([
     buildDirectory(ctx, { page: query, userIds: [match.refereeId, match.recorderId].filter(Boolean) }),
     match.teamA ? repo.teams.getById(match.teamA) : null,
     match.teamB ? repo.teams.getById(match.teamB) : null,
   ]);
   const userById = new Map(dir.members.map(user => [user._id, user]));
-  const roles = isFootball ? [] : await repo.memberships.listByIds(dir.members.map(user => schoolMembershipKey(user._id, ctx)));
-  const activeIds = isFootball ? new Set(dir.activeMemberIds.filter(id => userById.get(id)?.primarySchoolId === ctx.schoolId)) : new Set(
+  const roles = useSchoolRoster ? [] : await repo.memberships.listByIds(dir.members.map(user => schoolMembershipKey(user._id, ctx)));
+  const activeIds = useSchoolRoster ? new Set(dir.activeMemberIds.filter(id => userById.get(id)?.primarySchoolId === ctx.schoolId)) : new Set(
     roles
       .filter(row => row.status === 'active'
         && row.schoolId === ctx.schoolId
@@ -2033,15 +2044,16 @@ async function getTeamMatchSchedule(payload = {}, ctx) {
   const teamName = new Map(teams.map(team => [team._id, team.name]));
   const people = await schedulePeople(ctx, match, payload);
 
+  const scheduleAdapter = getSportAdapterFor(ctx.association, event);
+  const eventActive = event.status !== TEAM_EVENT_STATUS.FINISHED && event.status !== TEAM_EVENT_STATUS.CANCELED;
   return ok({
     ok: true,
     match: matchView(match, teamName, { canRecord: true, canPublish: true, canSeePending: true }),
     ...people,
     // 已结束的赛事不再改赛程：改了也不会有比赛按新时间去打
-    canEdit: event.status !== TEAM_EVENT_STATUS.FINISHED
-      && event.status !== TEAM_EVENT_STATUS.CANCELED
-      && match.status !== TEAM_MATCH_STATUS.CANCELED
-      && (!football.isFootball(ctx) || match.status === TEAM_MATCH_STATUS.SCHEDULED),
+    canEdit: scheduleAdapter
+      ? scheduleAdapter.permissions.canEditSchedule({ manage: true, eventActive, match })
+      : (eventActive && match.status !== TEAM_MATCH_STATUS.CANCELED),
     message: '',
   });
 }
@@ -2340,9 +2352,14 @@ async function settleTeamEvent(payload = {}, ctx) {
       nextEvent: { ...event, revision: (Number(event.revision) || 0) + 1, updatedAt: ctx.now }, result: { placements: event.placements } }));
   }
 
+  const strategy = teamSportStrategyFor(ctx.association, event);
+  if (!strategy) return ok(refused('赛事运动规则与协会不符'));
+  const adapter = strategy.adapter;
+
   const matches = await repo.teamMatches.listByEvent(event._id);
   if (matches.length === 0) return ok(refused('还没有赛程，无法结算'));
-  if (football.isFootball(ctx) && matches.some(match => match.footballDraft)) return ok(refused('仍有足球报告待审核，请先审核后结算'));
+  const beforeSettle = adapter.matchLifecycle.validateBeforeSettle(matches);
+  if (!beforeSettle.ok) return ok(refused(beforeSettle.message));
   const pending = matches.filter(
     match => match.status !== TEAM_MATCH_STATUS.PUBLISHED && match.status !== TEAM_MATCH_STATUS.CANCELED
   );
@@ -2353,17 +2370,9 @@ async function settleTeamEvent(payload = {}, ctx) {
   const teams = await repo.teams.list();
   const teamName = new Map(teams.map(team => [team._id, team.name]));
 
-  const strategy = teamSportStrategyFor(ctx.association, event);
-  if (!strategy) return ok(refused('赛事运动规则与协会不符'));
-  if (strategy.sportFormat === 'football11' && payload.rankingDecisions !== undefined
-    && (!Array.isArray(payload.rankingDecisions) || payload.rankingDecisions.some(row => !row
-      || typeof row.tieKey !== 'string' || !Array.isArray(row.teamIds)
-      || typeof row.reason !== 'string' || !row.reason.trim() || row.reason.length > 500))) {
-    return ok(refused('抽签确认须填写有效的球队顺序与理由（不超过 500 字）'));
-  }
-  const rankingDecisions = strategy.sportFormat === 'football11' && Array.isArray(payload.rankingDecisions)
-    ? payload.rankingDecisions.map(row => ({ tieKey: row.tieKey, teamIds: row.teamIds,
-      reason: row.reason, decidedBy: ctx.actorId, decidedAt: new Date(ctx.now).toISOString() })) : event.rankingDecisions || [];
+  const decisionCheck = adapter.matchLifecycle.validateRankingDecisions(payload, event, ctx);
+  if (!decisionCheck.ok) return ok(refused(decisionCheck.message));
+  const rankingDecisions = decisionCheck.decisions;
   const table = strategy.computeTable({
     entries: entries.map(entry => ({ teamId: entry.teamId, teamName: teamName.get(entry.teamId) })),
     matches, rules: event.rules, rankingDecisions,
@@ -2378,15 +2387,12 @@ async function settleTeamEvent(payload = {}, ctx) {
       note: row.rank === 1 ? '冠军' : (row.rank === 2 ? '亚军' : ''),
     }));
   } else {
-    // 单败淘汰：先确认签表没有「该排还没排」的轮次。足球原先单独有这道检查，
-    // 篮球没有，结果管理员只打了半决赛就会看到「还没有产生可结算的名次」，
-    // 而不是「还有未生成的赛程」。两种运动共用同一把尺子。
     const remaining = planNextRound({ eventId: event._id, draw: event.draw, matches,
       bronzeMode: event.bronzeMode || EVENT_BRONZE_MODE.PLAYOFF,
       placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
       isFinal: match => isFinal(match) && Boolean(match.winner) });
     if (remaining.ok && remaining.rounds.length) return ok(refused('还有未生成的淘汰赛程，请先排下一轮'));
-    if (strategy.sportFormat === 'football11'
+    if (adapter.meta.requiresWinnerOnElimSettle
       && matches.some(m => m.status === 'canceled' || !m.winner)) {
       return ok(refused('淘汰赛必须有完整有效的晋级结果才能结算'));
     }
@@ -2394,17 +2400,7 @@ async function settleTeamEvent(payload = {}, ctx) {
       draw: event.draw, matches, table,
       placementMode: event.placementMode || EVENT_PLACEMENT_MODE.NONE,
     });
-    // 足球同轮淘汰球队共享名次，不能用稳定 ID 顺序代替抽签。
-    if (strategy.sportFormat === 'football11') {
-      const rankByRound = new Map();
-      placements = placements.map(row => {
-        if (row.note !== '淘汰') return row;
-        const lost = matches.find(m => m.stage !== 'bronze' && (m.winner === 'A' ? m.teamB : m.teamA) === row.teamId);
-        const round = lost && lost.round;
-        if (!rankByRound.has(round)) rankByRound.set(round, row.rank);
-        return { ...row, rank: rankByRound.get(round), note: '同轮淘汰（并列）' };
-      });
-    }
+    placements = adapter.standings.adjustEliminationPlacements(placements, matches);
   }
   if (placements.length === 0) return ok(refused('还没有产生可结算的名次'));
 
@@ -3242,7 +3238,7 @@ async function getMyTeamProfile(payload = {}, ctx) {
 
   return ok({
     ok: true,
-    sportFormat: 'basketball5',
+    sportFormat: (getSportAdapterFor(ctx.association)?.meta.sportFormat) || null,
     userId: targetId,
     name: nameOf(targetId),
     isSelf: targetId === ctx.actorId,
@@ -3696,10 +3692,13 @@ module.exports = {
   getTeamRecord,
 };
 
-// 足球复用协议和门面，独立校验比分/名单/统计；篮球仍执行原有实现。
-for (const [name, implementation] of Object.entries({ ...football, ...footballSchedule })) {
-  if (!Object.prototype.hasOwnProperty.call(module.exports, name)) continue;
+// 通过服务端运动插件注册表动态分派覆写动作（每次调用实时查注册表，兼容动态插件与测试切换）
+for (const name of Object.keys(module.exports)) {
   const original = module.exports[name];
-  module.exports[name] = (payload = {}, ctx) => football.isFootball(ctx)
-    ? implementation(payload, ctx) : original(payload, ctx);
+  if (typeof original !== 'function') continue;
+  module.exports[name] = (payload = {}, ctx) => {
+    const plugin = ctx && ctx.association ? getServerSportPluginFor(ctx.association) : null;
+    const override = plugin && plugin.actions && plugin.actions[name];
+    return typeof override === 'function' ? override(payload, ctx) : original(payload, ctx);
+  };
 }

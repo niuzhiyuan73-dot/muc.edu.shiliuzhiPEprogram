@@ -21,7 +21,7 @@ const validEvent = (ctx, event, match) => scoped(event, ctx)
 const canEdit = (ctx, match) => canManageAssociationSpace(ctx) || match.recorderId === ctx.actorId;
 const placementText = n => ({ 1: '冠军', 2: '亚军', 3: '季军' }[n] || (n ? `第 ${n} 名` : ''));
 const recordText = r => `${r.wins} 胜 ${r.draws} 平 ${r.losses} 负 · 点球 ${r.shootoutWins} 胜 ${r.shootoutLosses} 负`;
-const publicMatches = matches => matches.filter(m => m.status === 'published' && m.footballPublished);
+const publicMatches = matches => matches.filter(m => m.status === 'published' && m.sportPublished);
 /**
  * 出场覆盖：球队打了多少场、其中多少场有本人出场记录。
  *
@@ -40,7 +40,7 @@ const publicMatches = matches => matches.filter(m => m.status === 'published' &&
     if (!entry) continue;
     eligibleMatchCount += 1;
     const side = entry.teamId === match.teamA ? 'A' : 'B';
-    const sideReport = match.footballPublished.sides[side];
+    const sideReport = match.sportPublished.sides[side];
     if (sideReport.players.length) lineupRecordedMatches += 1;
     if (sideReport.players.some(p => p.userId === userId && p.appeared)) appearedMatches += 1;
   }
@@ -48,7 +48,7 @@ const publicMatches = matches => matches.filter(m => m.status === 'published' &&
 }
 
 function footballMatchView(match, editor) {
-  const report = editor && match.footballDraft ? match.footballDraft : match.footballPublished;
+  const report = editor && match.sportDraft ? match.sportDraft : match.sportPublished;
   const result = report && report.result;
   return { scoreText: result ? scoreText(result) : match.status === 'reviewing' ? '待审核' : '—',
     scoreA: result ? result.scoreA : null, scoreB: result ? result.scoreB : null,
@@ -58,8 +58,8 @@ function footballMatchView(match, editor) {
     regulationScore: result ? result.regulationScore : null,
     extraTimeScore: result ? result.extraTimeScore : null,
     shootoutScore: result ? result.shootoutScore : null,
-    reportPending: Boolean(editor && match.footballDraft),
-    statPending: Boolean(editor && match.footballDraft),
+    reportPending: Boolean(editor && match.sportDraft),
+    statPending: Boolean(editor && match.sportDraft),
     hasLineup: Boolean(report && ['A', 'B'].some(side => report.sides[side].players.length)),
     durationMinutes: match.durationMinutes || null };
 }
@@ -81,20 +81,20 @@ async function getTeamMatchStats(payload, ctx) {
   if (!target.ok) return ok(target);
   const { match, event, entries, teams } = target;
   const editor = canEdit(ctx, match);
-  if (!editor && !match.footballPublished) return ok(refused('这场还没发布，报告暂不可查看'));
-  const report = editor ? match.footballDraft || match.footballPublished : match.footballPublished;
+  if (!editor && !match.sportPublished) return ok(refused('这场还没发布，报告暂不可查看'));
+  const report = editor ? match.sportDraft || match.sportPublished : match.sportPublished;
   return ok({ ok: true, sportFormat: 'football11', matchId: match._id, eventId: event._id,
     revision: Number(match.revision) || 0, rules: event.rules, format: event.format,
     teamAName: teams[0]?.name || match.teamA, teamBName: teams[1]?.name || match.teamB,
     report: report ? clone(report) : null,
-    publishedReport: match.footballPublished ? clone(match.footballPublished) : null,
+    publishedReport: match.sportPublished ? clone(match.sportPublished) : null,
     rosters: { A: entries[0]?.roster || [], B: entries[1]?.roster || [] },
-    lineups: editor ? match.footballLineups || {} : {},
+    lineups: editor ? match.sportLineups || {} : {},
     canEdit: editor && event.status !== 'canceled' && match.status !== 'canceled',
-    canReview: canManageAssociationSpace(ctx) && Boolean(match.footballDraft),
-    pending: editor && Boolean(match.footballDraft), needReview: Boolean(match.footballPublished),
-    correctionReason: editor ? match.footballDraftReason || '' : '',
-    audit: canManageAssociationSpace(ctx) ? match.footballAudit || [] : [], message: '' });
+    canReview: canManageAssociationSpace(ctx) && Boolean(match.sportDraft),
+    pending: editor && Boolean(match.sportDraft), needReview: Boolean(match.sportPublished),
+    correctionReason: editor ? match.sportDraftReason || '' : '',
+    audit: canManageAssociationSpace(ctx) ? match.sportAudit || [] : [], message: '' });
 }
 
 /** 幂等回执随场次保存（最近 32 次），先查回执再比版本；任何拒绝都不写入。 */
@@ -104,7 +104,7 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
   const outside = await readTarget(payload, ctx);
   if (!outside.ok) return ok(outside);
   const needDownstream = Boolean(dependencies && payload.approve === true
-    && outside.match.footballPublished && outside.event.format === 'single_elim');
+    && outside.match.sportPublished && outside.event.format === 'single_elim');
   const related = needDownstream ? (await outside.repo.teamMatches.listByEvent(outside.event._id))
     .filter(m => m._id !== outside.match._id) : [];
   if (related.length > 55) return ok(refused('关联赛程超过单次处理容量，请分届办赛'));
@@ -119,7 +119,7 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
     const event = await tx.teamEvents.getById(match.eventId);
     if (!validEvent(fresh, event, match)) return refused('赛事运动规则与协会不符');
     const key = `${fresh.actorId}:${action}:${payload.requestId}`;
-    const previous = (match.footballRequests || []).find(r => r.key === key);
+    const previous = (match.sportRequests || []).find(r => r.key === key);
     if (previous) return previous.result;
     if (match.revision !== payload.expectRevision) return refused('这场比赛刚被改过，请刷新后重试');
     if (needDownstream && (event.revision || 0) !== basis) return refused('赛事刚被改过，请刷新后重试');
@@ -143,7 +143,7 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
     const revision = match.revision + 1;
     const result = { ok: true, revision, warnings: output.warnings || [], message: '', ...(output.result || {}) };
     const next = { ...match, ...output.patch, revision, updatedAt: fresh.now,
-      footballRequests: [...(match.footballRequests || []), { key, result }].slice(-32) };
+      sportRequests: [...(match.sportRequests || []), { key, result }].slice(-32) };
     // UTF-16 字符数保守限额；即便全部为三字节中文也留在云端单文档容量内。
     if (JSON.stringify(next).length > 300000) return refused('本场修订记录已达安全容量，请导出审计记录后由管理员处理');
     // operation 仅构建写计划，全部点读结束后才落库。
@@ -156,14 +156,14 @@ async function mutate(payload, ctx, action, operation, { dependencies = false } 
 }
 
 function audit(match, fresh, action, reason) {
-  return [...(match.footballAudit || []), { action, reason: reason || '', by: fresh.actorId,
+  return [...(match.sportAudit || []), { action, reason: reason || '', by: fresh.actorId,
     at: fresh.now, revision: match.revision + 1,
     // 不再嵌套整份旧报告：一份完整报告几十 KB，重发几次就把比赛文档顶到
     // 300KB 上限并锁死后续更正。审计只需保留「上一版是什么结果」。
-    previous: action === 'publish' && match.footballPublished
-      ? { revision: match.footballPublishedRevision,
-        publishedAt: match.footballPublished.publishedAt,
-        result: match.footballPublished.result || null }
+    previous: action === 'publish' && match.sportPublished
+      ? { revision: match.sportPublishedRevision,
+        publishedAt: match.sportPublished.publishedAt,
+        result: match.sportPublished.result || null }
       : null }];
 }
 
@@ -173,13 +173,13 @@ async function recordTeamMatch(payload, ctx) {
     if (!['scheduled', 'running', 'finished'].includes(event.status)) return refused('赛事当前不可录分');
     const reason = typeof payload.reason === 'string' ? payload.reason.trim() : '';
     if (reason.length > 500) return refused('更正理由不超过 500 字');
-    if (match.footballPublished && !reason) return refused('更正已发布报告必须填写理由');
+    if (match.sportPublished && !reason) return refused('更正已发布报告必须填写理由');
     const normalized = normalizeFootballReport(payload.report, { rules: event.rules, format: event.format, rosters });
     if (!normalized.ok) return normalized;
     return { ok: true, warnings: normalized.warnings, patch: {
-      footballDraft: normalized.value, footballDraftReason: reason,
-      status: match.footballPublished ? 'published' : 'reviewing', recordedBy: fresh.actorId, recordedAt: fresh.now,
-      footballAudit: audit(match, fresh, 'submit', reason),
+      sportDraft: normalized.value, sportDraftReason: reason,
+      status: match.sportPublished ? 'published' : 'reviewing', recordedBy: fresh.actorId, recordedAt: fresh.now,
+      sportAudit: audit(match, fresh, 'submit', reason),
     }, eventPatch: event.status === 'scheduled' ? { status: 'running' } : {} };
   });
 }
@@ -187,20 +187,20 @@ async function recordTeamMatch(payload, ctx) {
 async function publishTeamMatch(payload, ctx) {
   return mutate(payload, ctx, 'publish', async ({ fresh, match, event, rosters, downstream }) => {
     if (!canManageAssociationSpace(fresh)) return refused('只有协会负责人及以上可以审核发布');
-    if (!match.footballDraft) return refused('没有待审核的足球报告');
-    if (payload.approve !== true) return { ok: true, patch: { footballDraft: null, footballDraftReason: '',
-      status: match.footballPublished ? 'published' : 'scheduled', footballAudit: audit(match, fresh, 'reject', payload.reason) } };
-    const normalized = normalizeFootballReport(match.footballDraft, { rules: event.rules, format: event.format, rosters });
+    if (!match.sportDraft) return refused('没有待审核的足球报告');
+    if (payload.approve !== true) return { ok: true, patch: { sportDraft: null, sportDraftReason: '',
+      status: match.sportPublished ? 'published' : 'scheduled', sportAudit: audit(match, fresh, 'reject', payload.reason) } };
+    const normalized = normalizeFootballReport(match.sportDraft, { rules: event.rules, format: event.format, rosters });
     if (!normalized.ok) return normalized;
     const report = normalized.value; const result = report.result;
     if (result.kind === 'interrupted') return refused('中断报告不能作为最终成绩发布；请依据裁判结论补录完赛或弃权判定');
     const downstreamWrites = [];
-    if (match.footballPublished && match.winner !== result.winner && event.format === 'single_elim') {
+    if (match.sportPublished && match.winner !== result.winner && event.format === 'single_elim') {
       const affected = downstream.filter(m => Number(m.round) > Number(match.round)
         && [m.teamA, m.teamB].some(id => id === match.teamA || id === match.teamB));
       for (const doc of affected) {
-        if (doc.status !== 'scheduled' || doc.footballDraft || doc.footballPublished || doc.scoreA != null
-          || doc.lineups || doc.footballLineups || (doc.matchTime && Date.parse(doc.matchTime) <= Date.parse(fresh.now))) {
+        if (doc.status !== 'scheduled' || doc.sportDraft || doc.sportPublished || doc.scoreA != null
+          || doc.lineups || doc.sportLineups || (doc.matchTime && Date.parse(doc.matchTime) <= Date.parse(fresh.now))) {
           return refused('下游比赛已有名单、结果或已到开赛时间，请先处理依赖后再改判');
         }
         const swap = id => id === match.teamA ? match.teamB : id === match.teamB ? match.teamA : id;
@@ -211,11 +211,11 @@ async function publishTeamMatch(payload, ctx) {
       }
     }
     return { ok: true, downstreamWrites, warnings: report.warnings,
-      patch: { footballPublished: report, footballDraft: null, footballDraftReason: '',
-        footballPublishedRevision: match.revision + 1,
+      patch: { sportPublished: report, sportDraft: null, sportDraftReason: '',
+        sportPublishedRevision: match.revision + 1,
         scoreA: result.scoreA, scoreB: result.scoreB, winner: result.winner, forfeit: result.forfeit,
         overtime: result.extraTimeCompleted, status: 'published', publishedBy: fresh.actorId, publishedAt: fresh.now,
-        footballAudit: audit(match, fresh, 'publish', match.footballDraftReason) },
+        sportAudit: audit(match, fresh, 'publish', match.sportDraftReason) },
       eventPatch: { status: 'running', placements: [], rankingDecisions: [], finishedAt: null },
       result: { status: 'published', updatedDownstream: downstreamWrites.length } };
   }, { dependencies: true });
@@ -233,7 +233,7 @@ async function getTeamMatchLineup(payload, ctx) {
   const { match, event, teams, entries } = target;
   const manage = canManageAssociationSpace(ctx); const editor = canEdit(ctx, match);
   if (!manage && !teams.some(t => t?.captainId === ctx.actorId) && !editor) return ok(refused('只有参赛队队长、录入人或协会负责人可以查看未发布名单'));
-  const report = editor ? match.footballDraft || match.footballPublished : match.footballPublished;
+  const report = editor ? match.sportDraft || match.sportPublished : match.sportPublished;
   // rules 兜底：本服务其它 8 处都写成 `event.rules && event.rules.x`，只有这里直接解引用。
   // 新建赛事必经 normalizeRules（rules 必填），但历史文档或控制台手工改过的事件可能没有
   // 这个字段——那时整条「查看名单」会 500，而不是少一个上限值（2026-10-28 审计 2 B-4）。
@@ -243,8 +243,8 @@ async function getTeamMatchLineup(payload, ctx) {
     teamAName: teams[0]?.name || match.teamA, teamBName: teams[1]?.name || match.teamB,
     eventId: event._id,
     sides: ['A', 'B'].map((side, i) => ({ side, teamName: teams[i]?.name || '',
-      editable: !match.footballDraft && !match.footballPublished && (manage || teams[i]?.captainId === ctx.actorId),
-      players: entries[i]?.roster || [], lineup: report?.sides[side] || match.footballLineups?.[side] || null })) });
+      editable: !match.sportDraft && !match.sportPublished && (manage || teams[i]?.captainId === ctx.actorId),
+      players: entries[i]?.roster || [], lineup: report?.sides[side] || match.sportLineups?.[side] || null })) });
 }
 
 async function saveTeamMatchLineup(payload, ctx) {
@@ -252,11 +252,11 @@ async function saveTeamMatchLineup(payload, ctx) {
     const side = payload.side;
     if (!['A', 'B'].includes(side)) return refused('缺少出场方 A/B');
     if (!canManageAssociationSpace(fresh) && teams[side]?.captainId !== fresh.actorId) return refused('只能定自己队的单场名单');
-    if (match.footballDraft || match.footballPublished) return refused('已有赛后报告，名单须随报告更正并审核');
+    if (match.sportDraft || match.sportPublished) return refused('已有赛后报告，名单须随报告更正并审核');
     const { normalizeSide } = require('../../shared/utils/football-report');
     const normalized = normalizeSide(payload.lineup, rosters[side], event.rules, false);
     if (!normalized.ok) return normalized;
-    return { ok: true, patch: { footballLineups: { ...match.footballLineups, [side]: normalized.value } } };
+    return { ok: true, patch: { sportLineups: { ...match.sportLineups, [side]: normalized.value } } };
   });
 }
 
@@ -265,7 +265,7 @@ function aggregate(matches, userId) {
   for (const match of publicMatches(matches)) {
     for (const side of ['A', 'B']) {
       const teamId = side === 'A' ? match.teamA : match.teamB;
-      for (const row of match.footballPublished.sides[side].players) {
+      for (const row of match.sportPublished.sides[side].players) {
         if (userId && row.userId !== userId) continue;
         let acc = map.get(row.userId);
         if (!acc) {
@@ -301,8 +301,8 @@ async function getTeamEventPlayerStats(payload, ctx) {
   const players = aggregate(matches);
   const order = field => players.filter(p => p[field] !== null)
     .sort((a, b) => b[field] - a[field] || compareCode(a.userId, b.userId));
-  const completeCount = matches.filter(m => ['A', 'B'].every(s => m.footballPublished.sides[s].coverage.goals === 'full'
-    && m.footballPublished.sides[s].coverage.ownGoals === 'full')).length;
+  const completeCount = matches.filter(m => ['A', 'B'].every(s => m.sportPublished.sides[s].coverage.goals === 'full'
+    && m.sportPublished.sides[s].coverage.ownGoals === 'full')).length;
   return ok({ ok: true, sportFormat: 'football11', players: order('goals'), scorers: order('goals'), assists: order('assists'),
     matchCount: matches.length, completeCount, coverageText: `已发布 ${matches.length} 场，进球归属完整 ${completeCount} 场；榜单仅含已录入统计，不自动评奖。` });
 }
@@ -313,7 +313,7 @@ function teamRecord(matches, teamId) {
     const a = m.teamA === teamId; const mine = a ? m.scoreA : m.scoreB; const other = a ? m.scoreB : m.scoreA;
     record.games += 1; record.goalsFor += mine; record.goalsAgainst += other;
     record[mine === other ? 'draws' : mine > other ? 'wins' : 'losses'] += 1;
-    if (m.footballPublished.result.shootoutScore) record[(m.winner === 'A') === a ? 'shootoutWins' : 'shootoutLosses'] += 1;
+    if (m.sportPublished.result.shootoutScore) record[(m.winner === 'A') === a ? 'shootoutWins' : 'shootoutLosses'] += 1;
   }
   return { ...record, recordText: recordText(record), winRateText: record.games ? `${Math.round(record.wins / record.games * 100)}%` : '—' };
 }
@@ -359,9 +359,9 @@ async function getTeamRecord(payload, ctx) {
     return { matchId: m._id, opponentName: opponent ? opponent.name : '',
       eventName: (eventById.get(m.eventId) || {}).name || '',
       matchTimeText: m.matchTime ? new Date(Date.parse(m.matchTime) + 8 * 3600000).toISOString().slice(5, 16).replace('T', ' ') : '',
-      scoreText: a ? scoreText(m.footballPublished.result) : scoreText({ ...m.footballPublished.result,
-        scoreA: m.scoreB, scoreB: m.scoreA, shootoutScore: m.footballPublished.result.shootoutScore
-          ? { A: m.footballPublished.result.shootoutScore.B, B: m.footballPublished.result.shootoutScore.A } : null }),
+      scoreText: a ? scoreText(m.sportPublished.result) : scoreText({ ...m.sportPublished.result,
+        scoreA: m.scoreB, scoreB: m.scoreA, shootoutScore: m.sportPublished.result.shootoutScore
+          ? { A: m.sportPublished.result.shootoutScore.B, B: m.sportPublished.result.shootoutScore.A } : null }),
       resultLabel: mine === other ? '平' : mine > other ? '胜' : '负' };
   });
   return ok({ ok: true, sportFormat: 'football11', team: { teamId: team._id, name: team.name, statusLabel: TEAM_STATUS_LABEL[team.status] },

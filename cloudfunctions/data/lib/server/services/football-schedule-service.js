@@ -87,7 +87,7 @@ async function change(payload, ctx, roundMode) {
   }
   const requestKey = `${ctx.actorId}:${roundMode ? 'shift' : 'schedule'}:${payload.requestId}`;
   // 幂等回执先于冲突检查，重试不会把整轮再次顺延。
-  const existing = (config?.footballScheduleRequests || []).find(r => r.key === requestKey);
+  const existing = (config?.sportScheduleRequests || []).find(r => r.key === requestKey);
   if (existing) return ok(existing.result);
   if (roundMode && (!Number.isInteger(payload.expectRevision) || payload.expectRevision !== event.revision)) return ok(fail('缺少赛事版本或赛程已变动，请刷新后重试'));
   if (!writes.length) return ok(fail('这一轮没有可顺延的未开赛场次'));
@@ -103,9 +103,9 @@ async function change(payload, ctx, roundMode) {
     if (!canReadAssociationSpace(fresh) || !canManageAssociationSpace(fresh)) return fail('当前已无排期权限');
     const tx = root.forScope(fresh);
     const currentConfig = await tx.schoolAssociations.getById(configId);
-    const retry = (currentConfig?.footballScheduleRequests || []).find(r => r.key === requestKey);
+    const retry = (currentConfig?.sportScheduleRequests || []).find(r => r.key === requestKey);
     if (retry) return retry.result;
-    if (!currentConfig || (currentConfig.footballScheduleRevision || 0) !== (config?.footballScheduleRevision || 0)) return fail('赛程刚被改过，请刷新后重试');
+    if (!currentConfig || (currentConfig.sportScheduleRevision || 0) !== (config?.sportScheduleRevision || 0)) return fail('赛程刚被改过，请刷新后重试');
     const currentEvent = await tx.teamEvents.getById(event._id);
     if (!currentEvent || currentEvent.revision !== event.revision || ['finished', 'canceled'].includes(currentEvent.status)) return fail('赛事刚被改过或已结束，请刷新');
     for (const doc of writes) {
@@ -130,8 +130,8 @@ async function change(payload, ctx, roundMode) {
     for (const doc of writes) await tx.teamMatches.set(doc._id, doc);
     await tx.teamEvents.set(event._id, { ...currentEvent, revision: currentEvent.revision + 1, updatedAt: fresh.now });
     await tx.schoolAssociations.set(configId, { ...currentConfig,
-      footballScheduleRevision: (currentConfig.footballScheduleRevision || 0) + 1,
-      footballScheduleRequests: [...(currentConfig.footballScheduleRequests || []), { key: requestKey, result }].slice(-32) });
+      sportScheduleRevision: (currentConfig.sportScheduleRevision || 0) + 1,
+      sportScheduleRequests: [...(currentConfig.sportScheduleRequests || []), { key: requestKey, result }].slice(-32) });
     return result;
   }));
 }

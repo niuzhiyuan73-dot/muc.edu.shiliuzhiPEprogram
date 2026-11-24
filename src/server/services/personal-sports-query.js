@@ -78,14 +78,14 @@ function queryPlan(source, auth, query = {}) {
       time = fallback('$hubMatch.publishedAt', '$hubMatch.matchTime'); id = '$hubMatch._id';
     } else {
       key = 'teamMatches';
-      stages.push(['match', { ...scope, status: 'published', $or: [{ 'footballPublished.sides.A.players.userId': uid }, { 'footballPublished.sides.B.players.userId': uid }] }]);
+      stages.push(['match', { ...scope, status: 'published', $or: [{ 'sportPublished.sides.A.players.userId': uid }, { 'sportPublished.sides.B.players.userId': uid }] }]);
       addEvent('teamEvents', 'eventId', ['scheduled', 'running', 'finished']);
       time = fallback('$publishedAt', '$matchTime');
     }
   } else if (['teamOfficial', 'reviewReport'].includes(source)) {
     key = 'teamMatches';
     stages.push(['match', source === 'reviewReport' ? { schoolId: auth.schoolId, association: { $in: auth.managedAssociations || [] },
-      $or: [{ status: 'reviewing' }, { status: 'published', footballDraft: { $ne: null, $exists: true } }] }
+      $or: [{ status: 'reviewing' }, { status: 'published', sportDraft: { $ne: null, $exists: true } }] }
       : { ...scope, $or: [{ refereeId: uid }, { recorderId: uid }], status: { $in: ['scheduled', 'live'] } }]);
     addEvent('teamEvents', 'eventId', source === 'reviewReport' ? ['scheduled', 'running', 'finished'] : ['scheduled', 'running']);
     time = source === 'reviewReport' ? fallback('$recordedAt', '$updatedAt') : '$matchTime';

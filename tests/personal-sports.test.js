@@ -223,7 +223,7 @@ test('云数据库聚合契约：每个来源先限定学校/本人或授权，�
 });
 
 test('已结束赛事的足球报告更正仍可审核；普通会员和已撤权管理员不获得审核待办', async () => {
-  const f = fixture({ teamEvents: [teamEvent('finished')], teamMatches: [teamMatch('correction', { status: 'published', footballDraft: { secret: 'draft' }, recordedAt: AT })],
+  const f = fixture({ teamEvents: [teamEvent('finished')], teamMatches: [teamMatch('correction', { status: 'published', sportDraft: { secret: 'draft' }, recordedAt: AT })],
     schoolRoles: [{ _id: schoolRoleKey('u', 'muc'), schoolId: 'muc', userId: 'u', role: 'admin', status: 'active' }] });
   assert.equal((await f.call({ section: 'tasks' })).items[0].state, '待审核报告');
   assert.equal((await f.call({ section: 'tasks' }, 'v')).items.length, 0);

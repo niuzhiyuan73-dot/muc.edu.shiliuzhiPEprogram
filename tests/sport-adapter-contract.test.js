@@ -8,7 +8,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const ROOT = path.join(__dirname, '..');
-const { validateSportAdapter } = require('../src/shared/sports/contract.js');
+const { validateSportAdapter, createSportAdapter } = require('../src/shared/sports/contract.js');
 const {
   getSportAdapter,
   getSportAdapterFor,
@@ -73,7 +73,6 @@ describe('P-02 共享 SportAdapter 公共契约与隔离守卫', () => {
     assert.equal(fb.permissions.canSeePending({ manage: false, captain: true, isRecorder: false }), false);
 
     // 首发与排期差异
-    assert.equal(fb.permissions.canSetLineup({ active: true, manage: false, captain: true, match: { footballDraft: { ok: true } } }), false);
     assert.equal(fb.permissions.canSetLineup({ active: true, manage: false, captain: true, match: { sportDraft: { ok: true } } }), false);
     assert.equal(fb.permissions.canEditSchedule({ manage: true, eventActive: true, match: { status: 'reviewing' } }), false);
     assert.equal(bk.permissions.canEditSchedule({ manage: true, eventActive: true, match: { status: 'reviewing' } }), true);
@@ -142,6 +141,8 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
         requiresWinnerOnElimSettle: false,
         sharedEliminationRank: false,
         supportsRankingDecisions: false,
+        strictEntryRosterCheck: false,
+        schedulePeopleSource: 'membership',
       }),
       rules: Object.freeze({
         defaultPresetKey: 'fivb-bo5',
@@ -206,6 +207,71 @@ describe('P-02 服务端插件注册表与三层隔离守卫', () => {
       unregisterServerSportPlugin('volleyball6_test');
       unregisterSportAdapter('volleyball6_test');
       unregisterAssociationPlugin('vb_p02_test');
+    }
+  });
+});
+
+describe('P-03 内核去硬编码与全库 sport* 字段统一守卫', () => {
+  test('createSportAdapter 为可选钩子提供默认空实现并通过契约校验', () => {
+    const minimal = createSportAdapter({
+      meta: {
+        sportFormat: 'minimal_sport',
+        sportKey: 'minimal',
+        supportsLiveScore: false,
+        supportsMatchData: true,
+        supportsRedraw: true,
+        allowsDraw: false,
+        defaultMatchTimeFromEvent: true,
+      },
+      rules: {
+        defaultPresetKey: 'default',
+        defaultRules: () => ({}),
+        normalizeRules: input => input,
+        formatRules: () => '默认规则',
+      },
+      standings: {
+        computeTable: () => [],
+      },
+      view: {
+        eventFormMode: 'minimal',
+      },
+    });
+    assert.equal(validateSportAdapter(minimal).ok, true);
+    assert.equal(minimal.matchLifecycle.validateBeforeSettle([]).ok, true);
+    assert.deepEqual(minimal.matchLifecycle.decorateMatchView({}, {}), {});
+    assert.deepEqual(minimal.standings.adjustEliminationPlacements([{ rank: 1 }], []), [{ rank: 1 }]);
+  });
+
+  test('team-event-service.js 已彻底消除运动硬编码与旧足球模块直连', () => {
+    const content = fs.readFileSync(path.join(ROOT, 'src', 'server', 'services', 'team-event-service.js'), 'utf8');
+    for (const forbidden of [
+      'football11', 'basketball5', 'footballDraft', 'footballPublished',
+      'footballLineups', 'football-match-service', 'football-schedule-service', 'football-report',
+    ]) {
+      assert.equal(content.includes(forbidden), false, `team-event-service.js 不得再包含 ${forbidden}`);
+    }
+  });
+
+  test('src/ 与 config/db-indexes.json 中已无旧 football* 单场字段残留', () => {
+    const legacyFields = [
+      'footballDraft', 'footballPublished', 'footballLineups',
+      'footballAudit', 'footballRequests', 'footballScheduleRevision', 'footballScheduleRequests',
+    ];
+    const walk = (dir) => {
+      const out = [];
+      for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+        const full = path.join(dir, entry.name);
+        if (entry.isDirectory()) out.push(...walk(full));
+        else if (entry.name.endsWith('.js')) out.push(full);
+      }
+      return out;
+    };
+    const targets = [...walk(path.join(ROOT, 'src')), path.join(ROOT, 'config', 'db-indexes.json')];
+    for (const file of targets) {
+      const text = fs.readFileSync(file, 'utf8');
+      for (const field of legacyFields) {
+        assert.equal(text.includes(field), false, `${path.relative(ROOT, file)} 仍残留旧字段 ${field}`);
+      }
     }
   });
 });

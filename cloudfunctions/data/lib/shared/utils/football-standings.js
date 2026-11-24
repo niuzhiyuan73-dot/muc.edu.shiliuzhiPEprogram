@@ -71,7 +71,7 @@ function computeFootballTable({ entries = [], matches = [], rules = defaultRules
   // 决定绑定所有正式结果与版本，比赛被更正/重发后旧抽签记录不能继续生效。
   const basis = finals.map(match => [
     match._id || '', match.teamA, match.teamB, match.scoreA, match.scoreB,
-    match.footballPublishedRevision || match.revision || 0, match.publishedAt || '',
+    match.sportPublishedRevision || match.revision || 0, match.publishedAt || '',
   ]).sort((a, b) => compareId(JSON.stringify(a), JSON.stringify(b)));
   let start = 0;
   while (start < list.length) {
