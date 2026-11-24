@@ -35,7 +35,7 @@ const {
   TEAM_STATUS, TEAM_STATUS_LABEL, TEAM_TYPE, TEAM_TYPE_LABEL,
   TEAM_MEMBER_STATUS, TEAM_MEMBER_STATUS_LABEL,
 } = require('../../shared/utils/constants.js');
-const { sportTypeOf, allAssociations, SPORT_TYPE } = require('../../shared/utils/associations.js');
+const { sportTypeOf, sportKeyOf, allAssociations, SPORT_TYPE } = require('../../shared/utils/associations.js');
 const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
 const { compareCode } = require('../../shared/utils/text-order.js');
 
@@ -140,12 +140,11 @@ function collegeIdOfTeamId(dir, teamId, ctx) {
 function virtualCollegeTeam(ctx, dir, collegeId, memberCount = 0) {
   const name = collegeTeamNameOf(dir, collegeId);
   if (!name) return null;
-  const strategy = teamSportStrategyFor(ctx.association);
   return {
     _id: collegeTeamKey(collegeId, ctx),
     schoolId: ctx.schoolId,
     association: ctx.association,
-    sport: strategy && strategy.sportFormat === 'football11' ? 'football' : 'basketball',
+    sport: sportKeyOf(ctx.association) || 'basketball',
     name,
     college: dir.collegeNameById(collegeId),
     collegeId,
@@ -192,7 +191,7 @@ function teamView(team, { dir, actorId, manage, membership, memberCount }) {
     name: team.name,
     // 队名首字做占位「队徽」：在服务端算好，模板不写下标取值
     initial: String(team.name || '?').slice(0, 1),
-    sport: team.sport || (teamSportStrategyFor(team.association)?.sportFormat === 'football11' ? 'football' : 'basketball'),
+    sport: team.sport || sportKeyOf(team.association) || 'basketball',
     college: team.college || '',
     collegeId: team.collegeId || '',
     type: collegeTeam ? TEAM_TYPE.COLLEGE : TEAM_TYPE.FREE,
@@ -432,7 +431,7 @@ async function createTeamApplication(payload = {}, ctx) {
     const now = fresh.now;
     await tx.teams.set(teamId, {
       _id: teamId, schoolId: fresh.schoolId, association: fresh.association,
-      sport: teamSportStrategyFor(fresh.association)?.sportFormat === 'football11' ? 'football' : 'basketball',
+      sport: sportKeyOf(fresh.association) || 'basketball',
       name: name.value, college,
       captainId: fresh.actorId, status: TEAM_STATUS.PENDING,
       memberCount: 1, revision: 1, requestId: token,
@@ -710,7 +709,7 @@ async function ensureCollegeTeam(ctx, collegeId, dir) {
     const now = fresh.now;
     const doc = {
       _id: teamId, schoolId: fresh.schoolId, association: fresh.association,
-      sport: teamSportStrategyFor(fresh.association)?.sportFormat === 'football11' ? 'football' : 'basketball',
+      sport: sportKeyOf(fresh.association) || 'basketball',
       name,
       college: dir.collegeNameById(collegeId),
       collegeId,

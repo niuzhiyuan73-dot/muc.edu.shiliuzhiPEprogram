@@ -1,4 +1,4 @@
-<view class="page-container my-sports-page {{themeClass}}">
+<view class="page-container my-sports-page {{themeClass}}" style="{{themeStyle}}">
   <view class="sports-heading"><view class="sports-title">我的体育</view><view class="experience-caption">赛程、待办与经验证的运动记录</view></view>
   <view class="sports-tabs"><button wx:for="{{tabs}}" wx:key="id" class="sports-tab {{tab === item.id ? 'is-current' : ''}}" data-tab="{{item.id}}" bindtap="onTab">{{item.label}}</button></view>
   <scroll-view scroll-x class="sports-projects"><button wx:for="{{projects}}" wx:key="id" class="sports-project {{project === item.id ? 'is-current' : ''}}" data-project="{{item.id}}" bindtap="onProject">{{item.label}}</button></scroll-view>

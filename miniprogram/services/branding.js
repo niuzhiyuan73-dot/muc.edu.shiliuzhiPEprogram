@@ -15,7 +15,9 @@
  * ============================================================
  */
 
-const { getAssociation: lookup, isKnownAssociation } = require('../shared/utils/associations.js');
+const {
+  getAssociation: lookup, isKnownAssociation, themeVarsOf, buildThemeVars,
+} = require('../shared/utils/associations.js');
 const scope = require('./association-scope.js');
 
 /**
@@ -123,6 +125,28 @@ function currentThemeClass() {
   return themeClassOf(scope.getAssociation());
 }
 
+/**
+ * 协会 id → 页面容器内联 CSS 变量串（新协会无需手改 app.wxss）。
+ * 未知 / 空 id 回退中性品牌变量串。
+ *
+ * @param {string} id
+ * @returns {string}
+ */
+function themeStyleOf(id) {
+  if (!id || !isKnownAssociation(id)) return buildThemeVars(NEUTRAL_BRAND.theme);
+  return themeVarsOf(id) || buildThemeVars(NEUTRAL_BRAND.theme);
+}
+
+/**
+ * 当前全局协会对应的内联主题变量串，供宿主页面写进根容器 `style="{{themeStyle}}"`。
+ * 与 currentThemeClass() 同时设置：class 覆盖 app.wxss 已登记的协会，
+ * 内联变量让**动态注册、app.wxss 尚无对应类**的新协会也能立即拿到主题色。
+ * CSS 变量沿节点继承，根容器一份即可覆盖页面内全部面板组件。
+ */
+function currentThemeStyle() {
+  return themeStyleOf(scope.getAssociation());
+}
+
 module.exports = {
   NEUTRAL_BRAND,
   brandOf,
@@ -131,4 +155,6 @@ module.exports = {
   resetBranding,
   themeClassOf,
   currentThemeClass,
+  themeStyleOf,
+  currentThemeStyle,
 };

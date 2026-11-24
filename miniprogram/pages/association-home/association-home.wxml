@@ -3,7 +3,7 @@
   顶部是当前协会的名头 + 「协会空间 / 排行榜 / 比赛 / 赛事」四个页签，
   下面按页签挂载对应的面板组件。各面板各自取数，互不干扰。
 -->
-<view class="page-container {{themeClass}}">
+<view class="page-container {{themeClass}}" style="{{themeStyle}}">
 
   <!-- 当前协会的名头。工作台只服务一个协会，页面内不再提供切换（切换回「协会」页签） -->
   <!-- 名头：渐变圆底 + 运动线条图标（缺省退回文字徽标） -->

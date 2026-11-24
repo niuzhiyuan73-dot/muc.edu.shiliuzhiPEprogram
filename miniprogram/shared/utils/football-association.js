@@ -8,6 +8,7 @@ function createFootballAssociation() {
     name: '中央民族大学足球协会',
     shortName: '民大足球',
     sportName: '足球',
+    sportKey: 'football',
     logoGlyph: '足',
     logoIcon: '/assets/assoc/fb.png',
     theme: { primary: '#0D6B45', primaryDark: '#08492F', primaryLight: '#E7F3EC', accent: '#D4AF37' },

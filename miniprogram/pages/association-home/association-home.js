@@ -25,7 +25,7 @@
 const {
   getAssociation, isKnownAssociation, workbenchTabsOf, sportTypeOf, SPORT_TYPE,
 } = require('../../shared/utils/associations.js');
-const { applyBranding } = require('../../services/branding.js');
+const { applyBranding, themeStyleOf } = require('../../services/branding.js');
 const scope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { isMockNow } = require('../../services/runtime-mode.js');
@@ -47,6 +47,8 @@ Page({
   data: {
     /** 当前协会的主题类，挂在页面根节点上 */
     themeClass: '',
+    /** 根容器内联主题变量：动态注册、app.wxss 无对应类的协会也能立即拿到主题色 */
+    themeStyle: '',
     /** 当前协会 id 与显示名（如「民大匹克球」/「北航匹克球」） */
     associationId: '',
     associationName: '',
@@ -96,6 +98,7 @@ Page({
       associationGlyph: meta.glyph,
       associationIcon: meta.icon,
       themeClass: `assoc-${id}`,
+      themeStyle: themeStyleOf(id),
       // 团队运动没有个人赛事，赛事页签改指向「团队赛事」
       isTeamSport: sportTypeOf(id) === SPORT_TYPE.TEAM,
       // 名头副标题跟着页签走：团队运动包含“我的球队”成绩页签，
