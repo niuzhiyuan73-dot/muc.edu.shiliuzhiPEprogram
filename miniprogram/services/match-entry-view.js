@@ -27,6 +27,8 @@ const {
   validateMatchScore,
 } = require('../shared/utils/match-format.js');
 const { getAssociation } = require('../shared/utils/associations.js');
+const { getScoringAdapter } = require('../shared/sports/racket/registry.js');
+const { SET_GAMES_LABELS } = require('../shared/sports/racket/tennis.js');
 const { normalizeScores } = require('../shared/services/match-record.js');
 const { toDate } = require('../shared/utils/format.js');
 
@@ -41,9 +43,6 @@ const GAME_POINTS_LABELS = GAME_POINTS_OPTIONS.map((value) => `${value} 分制`)
 
 /** 局制选项，picker 直接吃 */
 const BEST_OF_LABELS = BEST_OF_OPTIONS.map((value) => BEST_OF_LABEL[value]);
-
-/** 每盘局数的选项文案（网球）。4 局是短盘，界面上要说清，否则看不出区别 */
-const SET_GAMES_LABELS = { 6: '6 局（标准盘）', 4: '4 局（短盘）' };
 
 /** 兜底规则：注册表取不到时按匹克球口径，与改造前完全一致 */
 function fallbackRules() {
@@ -85,36 +84,7 @@ function rulesOf(associationId) {
  */
 function formatOptionsOf(associationId) {
   const rules = rulesOf(associationId);
-  const scoring = rules.scoring === 'tennis' ? 'tennis' : 'point';
-  const bestOfOptions = (rules.bestOfOptions || []).slice();
-  const defaultFormat = { ...(rules.defaultFormat || {}) };
-
-  if (scoring === 'tennis') {
-    const setGamesOptions = (rules.setGamesOptions || []).slice();
-    return {
-      scoring,
-      defaultFormat,
-      bestOfOptions,
-      bestOfLabels: bestOfOptions.map((value) => TENNIS_BEST_OF_LABEL[value]),
-      gamePointsOptions: [],
-      gamePointsLabels: [],
-      setGamesOptions,
-      setGamesLabels: setGamesOptions.map((value) => SET_GAMES_LABELS[value] || `${value} 局`),
-      noAd: defaultFormat.noAd === true,
-    };
-  }
-
-  return {
-    scoring,
-    defaultFormat,
-    bestOfOptions,
-    bestOfLabels: bestOfOptions.map((value) => BEST_OF_LABEL[value]),
-    gamePointsOptions: (rules.gamePointsOptions || GAME_POINTS_OPTIONS).slice(),
-    gamePointsLabels: (rules.gamePointsOptions || GAME_POINTS_OPTIONS).map((value) => `${value} 分制`),
-    setGamesOptions: [],
-    setGamesLabels: [],
-    noAd: false,
-  };
+  return getScoringAdapter(rules.scoring).buildFormatOptions(rules);
 }
 
 /**
@@ -133,9 +103,9 @@ function formatOfForm(form) {
   return formatFieldsOf(form);
 }
 
-/** 比分单元的叫法：网球是「盘」，其余是「局」 */
+/** 比分单元的叫法：由 ScoringAdapter 声明（网球为「盘」，其余为「局」） */
 function scoreUnitLabelOf(form) {
-  return scoringOf(form) === 'tennis' ? '盘' : '局';
+  return getScoringAdapter(scoringOf(form)).scoreUnit;
 }
 
 /** 把 (赛制对象) 或 (分制, 局制) 两种老调用方式统一成赛制对象 */
@@ -191,19 +161,7 @@ function scheduledForm(record) {
   const bestOf = Number(record && record.bestOf) || DEFAULT_FORMAT.bestOf;
   // 赛制整块照抄：网球记录没有 gamePoints，硬套默认值会把 6 局盘当成 11 分制
   const format = formatFieldsOf(
-    scoringOf(record) === 'tennis'
-      ? {
-          scoring: 'tennis',
-          bestOf,
-          setGames: Number(record.setGames) || 6,
-          tiebreakAt: Number(record.tiebreakAt) || Number(record.setGames) || 6,
-          tiebreakPoints: Number(record.tiebreakPoints) || 7,
-          noAd: record.noAd === true,
-        }
-      : {
-          gamePoints: Number(record && record.gamePoints) || DEFAULT_FORMAT.gamePoints,
-          bestOf,
-        }
+    getScoringAdapter(scoringOf(record)).scheduledFormatPatch(record, bestOf)
   );
   // matchTime 可能是 Date（mock 抽签直接塞 event.startTime），也可能是
   // ISO 字符串（云库往返后）。统一先转 Date 再格式化——不能对 Date 直接

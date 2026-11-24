@@ -99,6 +99,12 @@ function validateSportAdapter(adapter) {
   if (!isFn(view.recordPageUrl) || !isFn(view.liveScorePageUrl) || !Array.isArray(view.statColumns)) {
     return { ok: false, message: 'view 缺少 recordPageUrl / liveScorePageUrl / statColumns' };
   }
+  if (view.profileStatColumns !== undefined) {
+    if (!Array.isArray(view.profileStatColumns)
+      || view.profileStatColumns.some(col => !col || !isNonEmptyString(col.key) || !isNonEmptyString(col.label))) {
+      return { ok: false, message: 'view.profileStatColumns 必须为包含 key 与 label 的数组' };
+    }
+  }
 
   return { ok: true, message: '' };
 }
@@ -159,12 +165,14 @@ function createSportAdapter(spec) {
     adjustEliminationPlacements: placements => placements,
     ...(spec.standings || {}),
   });
+  const specView = spec.view || {};
   const view = Object.freeze({
     recordHintText: '',
     recordPageUrl: () => '',
     liveScorePageUrl: () => '',
     statColumns: Object.freeze([]),
-    ...(spec.view || {}),
+    profileStatColumns: specView.profileStatColumns || specView.statColumns || Object.freeze([]),
+    ...specView,
   });
   const adapter = Object.freeze({ meta, rules, permissions, matchLifecycle, standings, view });
   const check = validateSportAdapter(adapter);

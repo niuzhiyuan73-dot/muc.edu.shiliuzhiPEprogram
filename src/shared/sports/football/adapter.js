@@ -140,6 +140,16 @@ const footballAdapter = Object.freeze({
       Object.freeze({ key: 'yellowCards', label: '黄牌' }),
       Object.freeze({ key: 'dismissals', label: '红牌' }),
     ]),
+    profileStatColumns: Object.freeze([
+      Object.freeze({ key: 'goals', label: '进球' }),
+      Object.freeze({ key: 'assists', label: '助攻' }),
+      Object.freeze({ key: 'ownGoals', label: '乌龙' }),
+      Object.freeze({ key: 'yellowCards', label: '黄牌' }),
+      Object.freeze({ key: 'secondYellow', label: '第二黄罚下' }),
+      Object.freeze({ key: 'directRed', label: '直接红牌' }),
+      Object.freeze({ key: 'dismissals', label: '罚下合计' }),
+      Object.freeze({ key: 'fouls', label: '犯规' }),
+    ]),
   }),
 });
 

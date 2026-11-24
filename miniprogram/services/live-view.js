@@ -17,6 +17,8 @@
  * ============================================================
  */
 
+const { getScoringAdapter } = require('../shared/sports/racket/registry.js');
+
 /**
  * 把一条实时视图整形成行上要显示的字段。没有实时态返回 null。
  *
@@ -26,33 +28,14 @@
 function describeLive(live) {
   if (!live) return null;
   const finished = Boolean(live.finished);
-  const isTennis = live.scoring === 'tennis';
+  const display = getScoringAdapter(live.scoring).describeLive(live);
 
-  // 网球是三层显示：盘分（大比分）+ 本盘局分 + 本局分（15/30/40/AD）。
-  // 其余项目只有两层，把盘分留空，页面就不会多出一行。
   return {
     matchId: live.matchId,
-    /** 当前局比分，如「11 : 9」；网球为「30 : 15」 */
-    scoreText: isTennis
-      ? `${live.pointTextA} : ${live.pointTextB}`
-      : `${live.pointsA} : ${live.pointsB}`,
+    ...display,
     /** 大比分（已结束的局数），如「1 : 0」；网球为本盘局分「4 : 3」 */
     gamesText: `${live.gamesA} : ${live.gamesB}`,
-    /** 网球才有的盘分「1 : 0」；其余项目为空串 */
-    setsText: isTennis ? `${live.setsA} : ${live.setsB}` : '',
-    /** 比分牌左右两块大数字用的文案（网球是 15/30/40/AD） */
-    pointsTextA: isTennis ? live.pointTextA : String(live.pointsA),
-    pointsTextB: isTennis ? live.pointTextB : String(live.pointsB),
     gameIndex: live.gameIndex,
-    /** 网球当前是第几盘（0 起）；其余项目恒 0 */
-    setIndex: isTennis ? Number(live.setIndex || 0) : 0,
-    /** 「第 2 局」/ 网球「第 2 盘」。下标自 0 起，展示要 +1 */
-    gameIndexText: isTennis
-      ? `第 ${Number(live.setIndex || 0) + 1} 盘`
-      : `第 ${Number(live.gameIndex || 0) + 1} 局`,
-    /** 抢七提示：网球进入抢七时页面要标出来，否则「7 : 5」会被读成局分 */
-    tiebreakText: isTennis && live.inTiebreak ? '抢七' : '',
-    scoring: isTennis ? 'tennis' : 'point',
     /** 'A' | 'B' | ''，供查看端高亮领先方 */
     leading: live.leading || '',
     finished,

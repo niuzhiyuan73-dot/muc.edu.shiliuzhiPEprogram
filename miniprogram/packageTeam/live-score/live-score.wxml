@@ -34,7 +34,7 @@
         bindtap="onScoreTap"
       >
         <text class="team-name">{{labelA}}</text>
-        <text class="points {{view.scoring === 'tennis' ? 'points-text' : ''}}">{{view.pointsTextA}}</text>
+        <text class="points {{view.usePointTextClass ? 'points-text' : ''}}">{{view.pointsTextA}}</text>
         <text class="tap-hint">判 A 得分</text>
       </view>
       <view
@@ -43,7 +43,7 @@
         bindtap="onScoreTap"
       >
         <text class="team-name">{{labelB}}</text>
-        <text class="points {{view.scoring === 'tennis' ? 'points-text' : ''}}">{{view.pointsTextB}}</text>
+        <text class="points {{view.usePointTextClass ? 'points-text' : ''}}">{{view.pointsTextB}}</text>
         <text class="tap-hint">判 B 得分</text>
       </view>
     </view>

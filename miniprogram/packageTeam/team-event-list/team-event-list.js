@@ -18,7 +18,7 @@ const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
 const { RULE_PRESETS, DEFAULT_PRESET_KEY } = require('../../shared/utils/basketball-rules.js');
-const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
+const { getSportAdapterFor } = require('../../shared/sports/registry.js');
 const { CUP_MODE } = require('../../shared/utils/constants.js');
 
 /** 首版支持的赛制：与 team-event-service 的 FORMATS 保持一致 */
@@ -81,7 +81,7 @@ Page({
     this.scope = { schoolId, association };
     const cupMode = query.cupMode === CUP_MODE.COLLEGE ? CUP_MODE.COLLEGE : '';
     this.setData({ themeClass: currentThemeClass(),
-      isFootball: teamSportStrategyFor(association)?.sportFormat === 'football11',
+      isFootball: getSportAdapterFor(association)?.view.eventFormMode === 'football',
       cupMode,
       isCollegeCup: cupMode === CUP_MODE.COLLEGE });
     // create=1：从杯赛页「发起学院赛」直接落在建赛面板上，少点一次

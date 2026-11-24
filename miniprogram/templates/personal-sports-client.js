@@ -1,6 +1,7 @@
 const identity = require('../services/school-identity');
 const association = require('../services/association-scope');
 const { isKnownAssociation } = require('../shared/utils/associations');
+const { getSportAdapter } = require('../shared/sports/registry.js');
 function loadPersonalSports(schoolId, payload) {
   return identity.forSchoolIdentity({ schoolId, association: association.getAssociation() }).getMySportsDashboard(payload);
 }
@@ -90,7 +91,8 @@ function openSportsTarget(target) {
     college_event: `/packageCollege/college-event-detail/college-event-detail?eventId=${id}`,
     college_entry: `/packageCollege/college-entry/college-entry?eventId=${id}&collegeId=${encodeURIComponent(target.collegeId || '')}`,
     team_event: `/packageTeam/team-event-detail/team-event-detail?eventId=${id}`,
-    football_match: `/packageTeam/football-match/football-match?matchId=${id}`,
+    football_match: (getSportAdapter(target.sportFormat || 'football11') || getSportAdapter('football11'))
+      .view.recordPageUrl(target.id || ''),
     personal_match: `/packageMember/my-sports/my-sports?tab=schedule&matchId=${id}&association=${encodeURIComponent(target.association || '')}`,
     confirm_score: `/packageMember/my-sports/my-sports?tab=tasks&matchId=${id}&association=${encodeURIComponent(target.association || '')}`,
     meet_detail: `/packageMeet/meet-detail/meet-detail?meetId=${encodeURIComponent(target.meetId || '')}`,

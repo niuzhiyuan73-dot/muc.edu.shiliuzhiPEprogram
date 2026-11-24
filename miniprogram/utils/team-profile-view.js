@@ -1,15 +1,11 @@
 /** 独立成绩页与协会内“我的球队”页签共用展示形状，数值仍由后端公开快照计算。 */
-const FOOTBALL_FIELDS = [
-  ['goals', '进球'], ['assists', '助攻'], ['ownGoals', '乌龙'], ['yellowCards', '黄牌'],
-  ['secondYellow', '第二黄罚下'], ['directRed', '直接红牌'], ['dismissals', '罚下合计'], ['fouls', '犯规'],
-];
-const BASKETBALL_FIELDS = [
-  ['points', '得分'], ['rebounds', '篮板'], ['assists', '助攻'], ['steals', '抢断'],
-  ['blocks', '盖帽'], ['turnovers', '失误'], ['fouls', '犯规'],
-];
+const { getSportAdapter } = require('../shared/sports/registry.js');
+
 function teamProfileView(profile) {
-  const isFootball = profile.sportFormat === 'football11';
-  const definitions = isFootball ? FOOTBALL_FIELDS : BASKETBALL_FIELDS;
+  const adapter = getSportAdapter(profile && profile.sportFormat) || getSportAdapter('basketball5');
+  const isFootball = Boolean(adapter && adapter.view.eventFormMode === 'football');
+  const columns = (adapter && (adapter.view.profileStatColumns || adapter.view.statColumns)) || [];
+  const definitions = columns.map(col => [col.key, col.label]);
   const totals = profile.totals || {};
   const cellsOf = source => definitions.map(([field, label]) => {
     const total = source[field]; const matches = source[`${field}RecordedMatches`];

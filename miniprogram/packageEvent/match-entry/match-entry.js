@@ -42,6 +42,7 @@ const {
 } = require('../../services/match-entry-view.js');
 
 const { MATCH_STATUS } = require('../../shared/utils/constants');
+const { getScoringAdapter } = require('../../shared/sports/racket/registry.js');
 const { currentThemeClass } = require('../../services/branding.js');
 
 /** 把 Date 变成 picker 要的 2026-05-01 */
@@ -220,8 +221,8 @@ Page({
       this.setData({ loading: false, error: '', auth, scheduled: Boolean(this.matchId), seasonStart,
         members: context.members.map(m => ({ id: m.userId, name: m.nickName || m.userId, realName: m.realName })),
         formatOptions: this.formatOptions,
-        isTennis: this.formatOptions.scoring === 'tennis',
-        scoreUnit: this.formatOptions.scoring === 'tennis' ? '盘' : '局',
+        isTennis: getScoringAdapter(this.formatOptions.scoring).isThreeLayer,
+        scoreUnit: getScoringAdapter(this.formatOptions.scoring).scoreUnit,
         gamePointsLabels: this.formatOptions.gamePointsLabels,
         bestOfLabels: this.formatOptions.bestOfLabels,
         setGamesLabels: this.formatOptions.setGamesLabels,
@@ -289,7 +290,7 @@ Page({
       .join('、');
 
     const options = this.formatOptions || formatOptionsOf('');
-    const isTennis = form.scoring === 'tennis';
+    const scoringAdapter = getScoringAdapter(form.scoring);
     // picker 要的是下标，不是值。取不到时退回 0——只有签表记录的赛制
     // 不在本协会选项里才会发生，而那种情况下 picker 本来就是只读的。
     const indexOf = (list, value) => {
@@ -302,7 +303,7 @@ Page({
       teamARows: rowsOf(form.teamA, true),
       teamBRows: rowsOf(form.teamB, false),
       scoreRows: toScoreRows(form.scoreA, form.scoreB),
-      scoreUnit: isTennis ? '盘' : '局',
+      scoreUnit: scoringAdapter.scoreUnit,
       gamePointsIndex: indexOf(options.gamePointsOptions, form.gamePoints),
       bestOfIndex: indexOf(options.bestOfOptions, form.bestOf),
       setGamesIndex: indexOf(options.setGamesOptions, form.setGames),

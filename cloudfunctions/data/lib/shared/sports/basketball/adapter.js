@@ -47,6 +47,15 @@ const basketballAdapter = createSportAdapter({
       Object.freeze({ key: 'points', label: '得分' }),
       Object.freeze({ key: 'fouls', label: '犯规' }),
     ]),
+    profileStatColumns: Object.freeze([
+      Object.freeze({ key: 'points', label: '得分' }),
+      Object.freeze({ key: 'rebounds', label: '篮板' }),
+      Object.freeze({ key: 'assists', label: '助攻' }),
+      Object.freeze({ key: 'steals', label: '抢断' }),
+      Object.freeze({ key: 'blocks', label: '盖帽' }),
+      Object.freeze({ key: 'turnovers', label: '失误' }),
+      Object.freeze({ key: 'fouls', label: '犯规' }),
+    ]),
   },
 });
 

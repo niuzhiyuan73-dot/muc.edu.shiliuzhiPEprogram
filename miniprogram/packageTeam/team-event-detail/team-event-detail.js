@@ -22,6 +22,7 @@ const { withDetailExperience } = require('../../templates/detail-experience');
 const space = require('../../services/association-space.js');
 const { resolveRouteId } = require('../../utils/route-query.js');
 const { watchLiveScores } = require('../../services/live-watch.js');
+const { getSportAdapter, getSportAdapterFor } = require('../../shared/sports/registry.js');
 const statsDraft = require('../services/stats-draft.js');
 
 /** 统计指标：顺序即页面上的列顺序，label 给人看，max 只作提示 */
@@ -210,7 +211,10 @@ Page(withDetailExperience({
   onOpenLiveScore(event) {
     if (this.data.event && this.data.event.supportsLiveScore === false) return;
     const { matchid } = event.currentTarget.dataset;
-    wx.navigateTo({ url: `/packageTeam/team-live-score/team-live-score?matchId=${encodeURIComponent(matchid)}` });
+    const adapter = getSportAdapter(this.data.event?.sportFormat) || getSportAdapterFor(this.scope?.association);
+    const url = adapter && adapter.view.liveScorePageUrl(matchid);
+    if (!url) return;
+    wx.navigateTo({ url });
   },
 
   /** 取详情。所有动作做完都回到这里，页面状态永远只有一个来源 */
@@ -268,11 +272,12 @@ Page(withDetailExperience({
         bucket.canShift = event.canManage === true && ['scheduled', 'running'].includes(event.status)
           && bucket.matches.some(row => row.status === 'scheduled' && row.matchTime);
       });
+      const eventAdapter = getSportAdapter(event.sportFormat) || getSportAdapterFor(this.scope?.association);
       this.setData({
         loading: false,
         event,
         supportsMatchData: event.supportsMatchData !== false,
-        isFootball: event.sportFormat === 'football11',
+        isFootball: Boolean(eventAdapter && eventAdapter.view.eventFormMode === 'football'),
         entries: result.entries || [],
         submitCandidates: result.submitCandidates || [],
         // 报名面板的身份文案由服务端给（学院负责人 / 校管代报 / 普通会员），模板不判权
@@ -604,8 +609,11 @@ Page(withDetailExperience({
   },
   onOpenFootball(event) {
     const { matchid, lineup } = event.currentTarget.dataset;
+    const adapter = getSportAdapter(this.data.event?.sportFormat) || getSportAdapterFor(this.scope?.association);
+    const url = adapter && adapter.view.recordPageUrl(matchid, { lineup: Boolean(lineup) });
+    if (!url) return undefined;
     this.footballVisited = true;
-    return wx.navigateTo({ url: `/packageTeam/football-match/football-match?matchId=${encodeURIComponent(matchid)}${lineup ? '&lineup=1' : ''}` });
+    return wx.navigateTo({ url });
   },
 
   /* ---------------- 个人统计 ---------------- */

@@ -17,6 +17,7 @@ const associationScope = require('../../services/association-scope.js');
 const schoolSession = require('../../services/school-session.js');
 const { currentThemeClass } = require('../../services/branding.js');
 const { LEGACY_SCHOOL_ID } = require('../../shared/utils/school.js');
+const { getSportAdapter } = require('../../shared/sports/registry.js');
 const { teamSportStrategyFor } = require('../../shared/utils/team-sport-rules.js');
 const { safeRouteId } = require('../../utils/route-query.js');
 
@@ -33,6 +34,7 @@ Page({
     pendingCount: 0,
     /** 战绩（getTeamRecord）：总胜负 + 历届 + 近期；归档后照样能看 */
     record: null,
+    recordHintText: '',
     recordSupported: true,
     /** 战绩单独失败不影响球员名单，所以错误只落在这一块 */
     recordError: '',
@@ -106,22 +108,26 @@ Page({
    */
   async loadRecord(epoch = this.loadEpoch) {
     if (teamSportStrategyFor(this.scope?.association)?.supportsMatchData === false) {
-      this.setData({ recordSupported: false, record: null, recordError: '' });
+      this.setData({ recordSupported: false, record: null, recordHintText: '', recordError: '' });
       return;
     }
     try {
       const result = await space.forScope(this.scope).getTeamRecord({ teamId: this.data.teamId });
       if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       if (!result || result.ok !== true) {
-        this.setData({ record: null, recordError: (result && result.message) || '战绩加载失败' });
+        this.setData({ record: null, recordHintText: '', recordError: (result && result.message) || '战绩加载失败' });
         return undefined;
       }
-      this.setData({ record: result, recordError: '' });
+      this.setData({
+        record: result,
+        recordHintText: getSportAdapter(result.sportFormat)?.view.recordHintText || '',
+        recordError: '',
+      });
       return undefined;
     } catch (err) {
       if (this.unloaded || epoch !== this.loadEpoch) return undefined;
       console.error('[team-detail] 战绩加载失败', err);
-      this.setData({ record: null, recordError: '战绩加载失败，请稍后重试' });
+      this.setData({ record: null, recordHintText: '', recordError: '战绩加载失败，请稍后重试' });
       return undefined;
     }
   },

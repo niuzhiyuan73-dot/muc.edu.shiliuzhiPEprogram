@@ -118,7 +118,7 @@
       <view wx:if="{{recordError}}" class="hint">{{recordError}}</view>
       <view wx:elif="{{!record}}" class="hint">加载中…</view>
       <block wx:else>
-        <view wx:if="{{record.sportFormat === 'football11'}}" class="hint-inline">{{record.overall.recordText}} · 点球胜负单列，正式平局不计为胜。</view>
+        <view wx:if="{{recordHintText}}" class="hint-inline">{{record.overall.recordText}} · {{recordHintText}}</view>
         <view class="record-summary">
           <view class="record-cell">
             <view class="record-value">{{record.overall.games}}</view>
