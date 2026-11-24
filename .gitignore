@@ -80,3 +80,6 @@ miniprogram/config.local.js
 
 # 本地临时产物：配色 / 布局预览页与测试日志，跑一次就能重来
 /state/
+
+# T-06 真云校准探针：只在本地测试环境使用，含环境 ID 探测逻辑，不入库
+/tools/cloud-calibration.cjs
